@@ -1,16 +1,26 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Trash2, Edit2, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Eye, EyeOff, Loader2, Trophy, Settings } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { haptic } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
 
 interface AdminPanelProps {
   onBack: () => void;
 }
 
-type Tab = "quizzes" | "banners";
+type Tab = "quizzes" | "banners" | "seasons";
+
+interface LeaderboardConfig {
+  season_duration_days: number;
+  cup_thresholds: {
+    gold: number;
+    silver: number;
+    bronze: number;
+  };
+}
 
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
   const [activeTab, setActiveTab] = useState<Tab>("quizzes");
@@ -39,6 +49,35 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
         .order("display_order", { ascending: true });
       if (error) throw error;
       return data || [];
+    },
+  });
+
+  // Fetch leaderboard config
+  const { data: leaderboardConfig, isLoading: configLoading } = useQuery({
+    queryKey: ["admin", "leaderboard_config"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("*")
+        .eq("key", "leaderboard_config")
+        .single();
+      if (error) throw error;
+      return data?.value as unknown as LeaderboardConfig;
+    },
+  });
+
+  // Update leaderboard config
+  const updateConfig = useMutation({
+    mutationFn: async (config: LeaderboardConfig) => {
+      const { error } = await supabase
+        .from("app_settings")
+        .update({ value: JSON.parse(JSON.stringify(config)) })
+        .eq("key", "leaderboard_config");
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "leaderboard_config"] });
+      toast({ title: "Настройки сохранены" });
     },
   });
 
@@ -105,6 +144,24 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     onBack();
   };
 
+  const handleSaveConfig = (field: keyof LeaderboardConfig | string, value: number) => {
+    if (!leaderboardConfig) return;
+    
+    let newConfig = { ...leaderboardConfig };
+    
+    if (field === "season_duration_days") {
+      newConfig.season_duration_days = value;
+    } else if (field.startsWith("cup_")) {
+      const cupType = field.replace("cup_", "") as keyof typeof newConfig.cup_thresholds;
+      newConfig.cup_thresholds = {
+        ...newConfig.cup_thresholds,
+        [cupType]: value,
+      };
+    }
+    
+    updateConfig.mutate(newConfig);
+  };
+
   return (
     <motion.div
       className="min-h-screen flex flex-col p-5 safe-bottom"
@@ -123,9 +180,9 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
         <button
-          className={`flex-1 py-2.5 rounded-xl font-medium transition-colors ${
+          className={`flex-1 py-2.5 rounded-xl font-medium transition-colors whitespace-nowrap px-3 ${
             activeTab === "quizzes"
               ? "bg-primary text-primary-foreground"
               : "bg-secondary text-foreground"
@@ -138,7 +195,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
           Quizzes ({quizzes.length})
         </button>
         <button
-          className={`flex-1 py-2.5 rounded-xl font-medium transition-colors ${
+          className={`flex-1 py-2.5 rounded-xl font-medium transition-colors whitespace-nowrap px-3 ${
             activeTab === "banners"
               ? "bg-primary text-primary-foreground"
               : "bg-secondary text-foreground"
@@ -150,10 +207,24 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
         >
           Banners ({banners.length})
         </button>
+        <button
+          className={`flex-1 py-2.5 rounded-xl font-medium transition-colors whitespace-nowrap px-3 flex items-center justify-center gap-1 ${
+            activeTab === "seasons"
+              ? "bg-primary text-primary-foreground"
+              : "bg-secondary text-foreground"
+          }`}
+          onClick={() => {
+            haptic.selection();
+            setActiveTab("seasons");
+          }}
+        >
+          <Trophy className="w-4 h-4" />
+          Seasons
+        </button>
       </div>
 
       {/* Content */}
-      <div className="flex-1 space-y-3">
+      <div className="flex-1 space-y-3 overflow-y-auto">
         {activeTab === "quizzes" && (
           <>
             {quizzesLoading ? (
@@ -298,22 +369,116 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
             )}
           </>
         )}
+
+        {activeTab === "seasons" && (
+          <>
+            {configLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 text-primary animate-spin" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Season Duration */}
+                <div className="tg-section p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Settings className="w-5 h-5 text-primary" />
+                    <h3 className="font-semibold text-foreground">Настройки сезона</h3>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground mb-2 block">
+                        Длительность сезона (дней)
+                      </label>
+                      <Input
+                        type="number"
+                        value={leaderboardConfig?.season_duration_days ?? 30}
+                        onChange={(e) => handleSaveConfig("season_duration_days", parseInt(e.target.value) || 30)}
+                        className="bg-secondary border-0"
+                        min={1}
+                        max={365}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cup Thresholds */}
+                <div className="tg-section p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Trophy className="w-5 h-5 text-yellow-500" />
+                    <h3 className="font-semibold text-foreground">Пороги для кубков</h3>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                        <span className="text-lg">🥇</span> Золото (минимум очков)
+                      </label>
+                      <Input
+                        type="number"
+                        value={leaderboardConfig?.cup_thresholds?.gold ?? 1000}
+                        onChange={(e) => handleSaveConfig("cup_gold", parseInt(e.target.value) || 1000)}
+                        className="bg-secondary border-0"
+                        min={0}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                        <span className="text-lg">🥈</span> Серебро (минимум очков)
+                      </label>
+                      <Input
+                        type="number"
+                        value={leaderboardConfig?.cup_thresholds?.silver ?? 500}
+                        onChange={(e) => handleSaveConfig("cup_silver", parseInt(e.target.value) || 500)}
+                        className="bg-secondary border-0"
+                        min={0}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
+                        <span className="text-lg">🥉</span> Бронза (минимум очков)
+                      </label>
+                      <Input
+                        type="number"
+                        value={leaderboardConfig?.cup_thresholds?.bronze ?? 100}
+                        onChange={(e) => handleSaveConfig("cup_bronze", parseInt(e.target.value) || 100)}
+                        className="bg-secondary border-0"
+                        min={0}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Info */}
+                <div className="tg-section p-4 bg-primary/5">
+                  <p className="text-sm text-muted-foreground">
+                    💡 Пользователи получают кубки в конце сезона на основе набранных очков. Изменения применяются к следующему сезону.
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Add Button */}
-      <button
-        className="tg-button mt-4 flex items-center justify-center gap-2"
-        onClick={() => {
-          haptic.impact('medium');
-          toast({
-            title: "Coming soon",
-            description: `Create ${activeTab === "quizzes" ? "quiz" : "banner"} form will be added`,
-          });
-        }}
-      >
-        <Plus className="w-5 h-5" />
-        Add {activeTab === "quizzes" ? "Quiz" : "Banner"}
-      </button>
+      {activeTab !== "seasons" && (
+        <button
+          className="tg-button mt-4 flex items-center justify-center gap-2"
+          onClick={() => {
+            haptic.impact('medium');
+            toast({
+              title: "Coming soon",
+              description: `Create ${activeTab === "quizzes" ? "quiz" : "banner"} form will be added`,
+            });
+          }}
+        >
+          <Plus className="w-5 h-5" />
+          Add {activeTab === "quizzes" ? "Quiz" : "Banner"}
+        </button>
+      )}
     </motion.div>
   );
 };

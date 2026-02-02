@@ -99,7 +99,7 @@ export const BannerCarousel = ({ banners }: BannerCarouselProps) => {
       {/* Banner Container */}
       <motion.div
         className="relative overflow-hidden rounded-2xl cursor-pointer"
-        style={{ aspectRatio: "2 / 1" }}
+        style={{ aspectRatio: "16 / 7" }}
         onClick={handleBannerClick}
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
