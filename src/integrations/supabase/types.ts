@@ -53,11 +53,41 @@ export type Database = {
         }
         Relationships: []
       }
+      favorites: {
+        Row: {
+          created_at: string
+          id: string
+          quiz_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          quiz_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          quiz_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "favorites_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
           first_name: string | null
+          has_telegram_premium: boolean | null
           id: string
           last_name: string | null
           telegram_id: number | null
@@ -68,6 +98,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           first_name?: string | null
+          has_telegram_premium?: boolean | null
           id: string
           last_name?: string | null
           telegram_id?: number | null
@@ -78,6 +109,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           first_name?: string | null
+          has_telegram_premium?: boolean | null
           id?: string
           last_name?: string | null
           telegram_id?: number | null
@@ -120,6 +152,38 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "questions_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_ratings: {
+        Row: {
+          created_at: string
+          id: string
+          quiz_id: string
+          rating: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          quiz_id: string
+          rating: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          quiz_id?: string
+          rating?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_ratings_quiz_id_fkey"
             columns: ["quiz_id"]
             isOneToOne: false
             referencedRelation: "quizzes"
@@ -179,6 +243,8 @@ export type Database = {
           is_published: boolean
           participant_count: number
           question_count: number
+          rating: number | null
+          rating_count: number | null
           title: string
           updated_at: string
         }
@@ -192,6 +258,8 @@ export type Database = {
           is_published?: boolean
           participant_count?: number
           question_count?: number
+          rating?: number | null
+          rating_count?: number | null
           title: string
           updated_at?: string
         }
@@ -205,6 +273,8 @@ export type Database = {
           is_published?: boolean
           participant_count?: number
           question_count?: number
+          rating?: number | null
+          rating_count?: number | null
           title?: string
           updated_at?: string
         }

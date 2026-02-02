@@ -12,6 +12,8 @@ export interface Quiz {
   duration_seconds: number;
   is_published: boolean;
   created_at: string;
+  rating: number;
+  rating_count: number;
 }
 
 export interface QuestionOption {

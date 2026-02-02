@@ -7,9 +7,17 @@ interface QuizShowcaseProps {
   quizzes: Quiz[];
   isLoading: boolean;
   onQuizSelect: (quizId: string) => void;
+  favoriteIds?: Set<string>;
+  onToggleFavorite?: (quizId: string) => void;
 }
 
-export const QuizShowcase = ({ quizzes, isLoading, onQuizSelect }: QuizShowcaseProps) => {
+export const QuizShowcase = ({ 
+  quizzes, 
+  isLoading, 
+  onQuizSelect,
+  favoriteIds = new Set(),
+  onToggleFavorite,
+}: QuizShowcaseProps) => {
   if (isLoading) {
     return (
       <div className="flex justify-center py-8">
@@ -19,11 +27,7 @@ export const QuizShowcase = ({ quizzes, isLoading, onQuizSelect }: QuizShowcaseP
   }
 
   if (quizzes.length === 0) {
-    return (
-      <div className="tg-section p-6 text-center">
-        <p className="text-muted-foreground">No quizzes available yet</p>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -43,7 +47,12 @@ export const QuizShowcase = ({ quizzes, isLoading, onQuizSelect }: QuizShowcaseP
             participant_count={quiz.participant_count}
             question_count={quiz.question_count}
             duration_seconds={quiz.duration_seconds}
+            rating={(quiz as any).rating}
+            rating_count={(quiz as any).rating_count}
+            isFavorite={favoriteIds.has(quiz.id)}
+            showFavoriteButton={!!onToggleFavorite}
             onClick={() => onQuizSelect(quiz.id)}
+            onToggleFavorite={() => onToggleFavorite?.(quiz.id)}
           />
         </motion.div>
       ))}
