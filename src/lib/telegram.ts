@@ -9,16 +9,20 @@ declare global {
   }
 }
 
+interface TelegramUser {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  is_premium?: boolean;
+  language_code?: string;
+}
+
 interface TelegramWebApp {
   initData: string;
   initDataUnsafe: {
-    user?: {
-      id: number;
-      first_name: string;
-      last_name?: string;
-      username?: string;
-      photo_url?: string;
-    };
+    user?: TelegramUser;
     start_param?: string;
   };
   version: string;
@@ -91,9 +95,23 @@ export const isTelegramWebApp = (): boolean => {
 };
 
 // Get current user
-export const getTelegramUser = () => {
+export const getTelegramUser = (): TelegramUser | null => {
   const tg = getTelegram();
   return tg?.initDataUnsafe?.user || null;
+};
+
+// Get user data for profile sync
+export const getTelegramUserData = () => {
+  const user = getTelegramUser();
+  if (!user) return null;
+  
+  return {
+    telegram_id: user.id,
+    username: user.username || null,
+    first_name: user.first_name,
+    last_name: user.last_name || null,
+    has_telegram_premium: user.is_premium || false,
+  };
 };
 
 // Haptic feedback
