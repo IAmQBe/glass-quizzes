@@ -1,21 +1,31 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Question } from "@/types/quiz";
 import { haptic } from "@/lib/telegram";
+import { sampleQuestions } from "@/data/quizData";
 
 interface QuizScreenProps {
-  questions: Question[];
+  questions?: { id: number; text: string; options: string[] }[];
   currentQuestion: number;
   onAnswer: (answerIndex: number) => void;
 }
 
 export const QuizScreen = ({ questions, currentQuestion, onAnswer }: QuizScreenProps) => {
-  const question = questions[currentQuestion];
-  const progress = ((currentQuestion + 1) / questions.length) * 100;
+  // Use sample questions if none provided
+  const quizQuestions = questions || sampleQuestions.map(q => ({
+    id: q.id,
+    text: q.text,
+    options: q.options,
+  }));
+
+  const question = quizQuestions[currentQuestion];
+  const progress = ((currentQuestion + 1) / quizQuestions.length) * 100;
 
   const handleAnswer = (index: number) => {
     haptic.impact('light');
     onAnswer(index);
   };
+
+  if (!question) return null;
 
   return (
     <motion.div
@@ -36,7 +46,7 @@ export const QuizScreen = ({ questions, currentQuestion, onAnswer }: QuizScreenP
         </div>
       </div>
       <div className="text-center text-sm text-muted-foreground mb-6">
-        {currentQuestion + 1} of {questions.length}
+        {currentQuestion + 1} of {quizQuestions.length}
       </div>
 
       {/* Question */}
