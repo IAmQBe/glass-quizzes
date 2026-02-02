@@ -1,15 +1,18 @@
 import { motion } from "framer-motion";
 import { UserStats } from "@/types/quiz";
-import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Lock } from "lucide-react";
+import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Lock, Settings } from "lucide-react";
 import { haptic, getTelegramUser } from "@/lib/telegram";
+import { useIsAdmin } from "@/hooks/useAuth";
 
 interface ProfileScreenProps {
   stats: UserStats;
   onBack: () => void;
+  onOpenAdmin?: () => void;
 }
 
-export const ProfileScreen = ({ stats, onBack }: ProfileScreenProps) => {
+export const ProfileScreen = ({ stats, onBack, onOpenAdmin }: ProfileScreenProps) => {
   const user = getTelegramUser();
+  const { data: isAdmin } = useIsAdmin();
 
   const handleBack = () => {
     haptic.selection();
@@ -69,6 +72,11 @@ export const ProfileScreen = ({ stats, onBack }: ProfileScreenProps) => {
         {user?.username && (
           <p className="text-sm text-muted-foreground">@{user.username}</p>
         )}
+        {isAdmin && (
+          <span className="mt-2 text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
+            Admin
+          </span>
+        )}
       </motion.div>
 
       {/* Stats Grid */}
@@ -93,30 +101,55 @@ export const ProfileScreen = ({ stats, onBack }: ProfileScreenProps) => {
         ))}
       </motion.div>
 
+      {/* Admin Section */}
+      {isAdmin && onOpenAdmin && (
+        <motion.div
+          className="tg-section mb-4"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3 }}
+        >
+          <button
+            className="tg-cell w-full justify-between"
+            onClick={() => {
+              haptic.impact('medium');
+              onOpenAdmin();
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <Settings className="w-5 h-5 text-primary" />
+              <span className="text-foreground font-medium">Admin Panel</span>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </motion.div>
+      )}
+
       {/* Pro Section */}
       <motion.div
-        className="tg-section"
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.35 }}
       >
-        <div className="tg-header flex items-center gap-2">
-          <Lock className="w-3 h-3" />
-          Pro Features
-        </div>
-        
-        {proFeatures.map((feature, index) => (
-          <div key={feature.name}>
-            <button 
-              className="tg-cell w-full justify-between"
-              onClick={() => haptic.selection()}
-            >
-              <span className="text-foreground">{feature.name}</span>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
-            {index < proFeatures.length - 1 && <div className="tg-separator" />}
+        <div className="tg-section">
+          <div className="tg-header flex items-center gap-2">
+            <Lock className="w-3 h-3" />
+            Pro Features
           </div>
-        ))}
+          
+          {proFeatures.map((feature, index) => (
+            <div key={feature.name}>
+              <button 
+                className="tg-cell w-full justify-between"
+                onClick={() => haptic.selection()}
+              >
+                <span className="text-foreground">{feature.name}</span>
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+              </button>
+              {index < proFeatures.length - 1 && <div className="tg-separator" />}
+            </div>
+          ))}
+        </div>
       </motion.div>
 
       {/* Unlock Button */}
