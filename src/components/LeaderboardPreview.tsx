@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { Trophy, Star, Crown, Medal } from "lucide-react";
+import { Trophy, Crown, Medal } from "lucide-react";
+import { PopcornIcon } from "./icons/PopcornIcon";
 
 interface LeaderEntry {
   rank: number;
@@ -61,7 +62,7 @@ export const LeaderboardPreview = ({ entries, onViewAll }: LeaderboardPreviewPro
               <div className="flex items-center gap-1">
                 <span className="font-medium text-foreground">{entry.username}</span>
                 {entry.hasPremium && (
-                  <Star className="w-3.5 h-3.5 text-primary fill-primary" />
+                  <PopcornIcon className="w-3.5 h-3.5 text-amber-500" />
                 )}
               </div>
             </div>
