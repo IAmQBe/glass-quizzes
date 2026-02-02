@@ -1,9 +1,7 @@
 import { motion } from "framer-motion";
-import { GlassCard } from "@/components/GlassCard";
-import { GlassButton } from "@/components/GlassButton";
 import { Friend, QuizResult } from "@/types/quiz";
 import { UserPlus, Share2, ArrowLeft, Clock } from "lucide-react";
-import { QuizScreen } from "@/hooks/useQuiz";
+import { haptic, challengeFriend } from "@/lib/telegram";
 
 interface CompareScreenProps {
   userResult: QuizResult;
@@ -24,28 +22,37 @@ export const CompareScreen = ({
   const userWins = hasCompleted && friend?.score !== undefined && userResult.score > friend.score;
   const friendWins = hasCompleted && friend?.score !== undefined && friend.score > userResult.score;
 
+  const handleInvite = () => {
+    haptic.impact('medium');
+    challengeFriend();
+    onInvite();
+  };
+
+  const handleBack = () => {
+    haptic.selection();
+    onBack();
+  };
+
   return (
     <motion.div
-      className="min-h-screen flex flex-col p-6"
+      className="min-h-screen flex flex-col p-5 safe-bottom"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
       {/* Header */}
       <motion.div
-        className="flex items-center mb-8"
-        initial={{ y: -20, opacity: 0 }}
+        className="flex items-center mb-6"
+        initial={{ y: -15, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
       >
-        <GlassButton
-          variant="secondary"
-          size="sm"
-          className="p-2"
-          onClick={onBack}
+        <button
+          className="p-2 -ml-2 text-primary"
+          onClick={handleBack}
         >
-          <ArrowLeft className="w-5 h-5" />
-        </GlassButton>
-        <h1 className="flex-1 text-center text-lg font-semibold text-foreground pr-10">
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <h1 className="flex-1 text-center text-lg font-semibold text-foreground pr-8">
           Compare Results
         </h1>
       </motion.div>
@@ -53,110 +60,99 @@ export const CompareScreen = ({
       {/* Comparison Cards */}
       <div className="flex-1 flex flex-col justify-center">
         <motion.div
-          className="flex gap-4 mb-8"
-          initial={{ y: 30, opacity: 0 }}
+          className="flex gap-3 mb-6"
+          initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
+          transition={{ delay: 0.15 }}
         >
           {/* Your Card */}
-          <GlassCard 
-            variant="compare" 
-            winner={hasCompleted ? userWins : undefined}
-            className="text-center"
-          >
-            <div className="w-16 h-16 mx-auto mb-3 rounded-full glass-card flex items-center justify-center">
+          <div className={`tg-section flex-1 p-4 text-center ${userWins ? 'ring-2 ring-green-500' : ''}`}>
+            <div className="tg-avatar w-14 h-14 mx-auto mb-3">
               <span className="text-2xl">👤</span>
             </div>
-            <p className="text-sm text-muted-foreground mb-2">You</p>
+            <p className="text-sm text-muted-foreground mb-1">You</p>
             <p className="text-3xl font-bold text-foreground mb-1">{userResult.score}</p>
             <p className="text-xs text-muted-foreground">Top {userResult.percentile}%</p>
-          </GlassCard>
+          </div>
 
-          {/* VS Indicator */}
-          <div className="flex items-center justify-center">
-            <div className="w-10 h-10 rounded-full glass-card flex items-center justify-center">
+          {/* VS */}
+          <div className="flex items-center justify-center px-1">
+            <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
               <span className="text-xs font-bold text-muted-foreground">VS</span>
             </div>
           </div>
 
           {/* Friend Card */}
-          <GlassCard 
-            variant="compare" 
-            winner={hasCompleted ? friendWins : undefined}
-            className="text-center"
-          >
+          <div className={`tg-section flex-1 p-4 text-center ${friendWins ? 'ring-2 ring-green-500' : ''} ${!hasCompleted ? 'opacity-60' : ''}`}>
             {hasCompleted && friend ? (
               <>
-                <div className="w-16 h-16 mx-auto mb-3 rounded-full glass-card flex items-center justify-center">
+                <div className="tg-avatar w-14 h-14 mx-auto mb-3">
                   <span className="text-2xl">🎯</span>
                 </div>
-                <p className="text-sm text-muted-foreground mb-2">{friend.name}</p>
+                <p className="text-sm text-muted-foreground mb-1">{friend.name}</p>
                 <p className="text-3xl font-bold text-foreground mb-1">{friend.score}</p>
                 <p className="text-xs text-muted-foreground">
                   {friend.score !== undefined && friend.score > userResult.score 
-                    ? `+${friend.score - userResult.score} ahead` 
+                    ? `+${friend.score - userResult.score}` 
                     : friend.score !== undefined && friend.score < userResult.score
-                    ? `-${userResult.score - friend.score} behind`
-                    : "Tied!"
+                    ? `-${userResult.score - friend.score}`
+                    : "Tied"
                   }
                 </p>
               </>
             ) : (
               <>
-                <div className="w-16 h-16 mx-auto mb-3 rounded-full glass-card flex items-center justify-center border-2 border-dashed border-muted">
-                  <Clock className="w-6 h-6 text-muted-foreground" />
+                <div className="w-14 h-14 mx-auto mb-3 rounded-full border-2 border-dashed border-muted flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-muted-foreground" />
                 </div>
-                <p className="text-sm text-muted-foreground mb-2">Waiting...</p>
-                <p className="text-lg font-medium text-muted-foreground mb-1">—</p>
+                <p className="text-sm text-muted-foreground mb-1">Waiting...</p>
+                <p className="text-3xl font-bold text-muted-foreground mb-1">—</p>
                 <p className="text-xs text-muted-foreground">Not completed</p>
               </>
             )}
-          </GlassCard>
+          </div>
         </motion.div>
 
-        {/* Status Message */}
+        {/* Status */}
         {!hasCompleted && (
           <motion.div
             className="text-center mb-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.3 }}
           >
-            <GlassCard className="p-4 inline-block">
-              <p className="text-sm text-muted-foreground">
-                Challenge isn't complete until your friend takes the test
-              </p>
-            </GlassCard>
+            <p className="text-sm text-muted-foreground px-4">
+              Challenge isn't complete until your friend takes the test
+            </p>
           </motion.div>
         )}
 
-        {/* Actions */}
+        {/* Action */}
         <motion.div
-          className="space-y-3 max-w-sm mx-auto w-full"
-          initial={{ y: 30, opacity: 0 }}
+          className="max-w-sm mx-auto w-full"
+          initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.5 }}
+          transition={{ delay: 0.4 }}
         >
           {hasCompleted ? (
-            <GlassButton
-              variant="primary"
-              size="lg"
-              className="w-full flex items-center justify-center gap-2"
-              onClick={onPostComparison}
+            <button
+              className="tg-button flex items-center justify-center gap-2"
+              onClick={() => {
+                haptic.notification('success');
+                onPostComparison();
+              }}
             >
               <Share2 className="w-5 h-5" />
               Post comparison
-            </GlassButton>
+            </button>
           ) : (
-            <GlassButton
-              variant="primary"
-              size="lg"
-              className="w-full flex items-center justify-center gap-2"
-              onClick={onInvite}
+            <button
+              className="tg-button flex items-center justify-center gap-2"
+              onClick={handleInvite}
             >
               <UserPlus className="w-5 h-5" />
               Invite friend
-            </GlassButton>
+            </button>
           )}
         </motion.div>
       </div>

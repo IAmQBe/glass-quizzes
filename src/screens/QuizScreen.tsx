@@ -1,7 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { GlassCard } from "@/components/GlassCard";
-import { ProgressBar } from "@/components/ProgressBar";
 import { Question } from "@/types/quiz";
+import { haptic } from "@/lib/telegram";
 
 interface QuizScreenProps {
   questions: Question[];
@@ -11,57 +10,66 @@ interface QuizScreenProps {
 
 export const QuizScreen = ({ questions, currentQuestion, onAnswer }: QuizScreenProps) => {
   const question = questions[currentQuestion];
+  const progress = ((currentQuestion + 1) / questions.length) * 100;
+
+  const handleAnswer = (index: number) => {
+    haptic.impact('light');
+    onAnswer(index);
+  };
 
   return (
     <motion.div
-      className="min-h-screen flex flex-col p-6"
+      className="min-h-screen flex flex-col p-5 safe-bottom"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
       {/* Progress */}
       <div className="mb-2">
-        <ProgressBar current={currentQuestion + 1} total={questions.length} />
+        <div className="tg-progress">
+          <motion.div
+            className="tg-progress-fill"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+          />
+        </div>
       </div>
-      <div className="text-center text-sm text-muted-foreground mb-8">
-        {currentQuestion + 1} / {questions.length}
+      <div className="text-center text-sm text-muted-foreground mb-6">
+        {currentQuestion + 1} of {questions.length}
       </div>
 
       {/* Question */}
       <AnimatePresence mode="wait">
         <motion.div
           key={question.id}
-          initial={{ x: 50, opacity: 0 }}
+          className="flex-1 flex flex-col"
+          initial={{ x: 40, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
-          exit={{ x: -50, opacity: 0 }}
-          transition={{ duration: 0.3 }}
-          className="flex-1 flex flex-col justify-center"
+          exit={{ x: -40, opacity: 0 }}
+          transition={{ duration: 0.25 }}
         >
           <motion.h2
             className="text-xl font-semibold text-center text-foreground mb-8 px-2"
-            initial={{ y: 20, opacity: 0 }}
+            initial={{ y: 15, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.1 }}
           >
             {question.text}
           </motion.h2>
 
-          <div className="space-y-3">
+          <div className="space-y-3 flex-1">
             {question.options.map((option, index) => (
-              <motion.div
+              <motion.button
                 key={index}
-                initial={{ y: 20, opacity: 0 }}
+                className="tg-option w-full text-left"
+                initial={{ y: 15, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.15 + index * 0.05 }}
+                transition={{ delay: 0.12 + index * 0.04 }}
+                onClick={() => handleAnswer(index)}
               >
-                <GlassCard
-                  variant="option"
-                  onClick={() => onAnswer(index)}
-                  className="text-center"
-                >
-                  <span className="text-foreground font-medium">{option}</span>
-                </GlassCard>
-              </motion.div>
+                <span className="text-foreground font-medium">{option}</span>
+              </motion.button>
             ))}
           </div>
         </motion.div>

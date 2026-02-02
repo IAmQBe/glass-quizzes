@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useQuiz } from "@/hooks/useQuiz";
 import { WelcomeScreen } from "@/screens/WelcomeScreen";
@@ -7,6 +8,7 @@ import { CompareScreen } from "@/screens/CompareScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
 import { toast } from "@/hooks/use-toast";
 import { UserStats } from "@/types/quiz";
+import { initTelegramApp, backButton, isTelegramWebApp } from "@/lib/telegram";
 
 const Index = () => {
   const {
@@ -20,6 +22,32 @@ const Index = () => {
     restartQuiz,
   } = useQuiz();
 
+  // Initialize Telegram WebApp
+  useEffect(() => {
+    initTelegramApp();
+  }, []);
+
+  // Handle Telegram back button
+  useEffect(() => {
+    if (!isTelegramWebApp()) return;
+
+    if (currentScreen === "result" || currentScreen === "compare" || currentScreen === "profile") {
+      backButton.show(() => {
+        if (currentScreen === "compare" || currentScreen === "profile") {
+          goToScreen("result");
+        } else if (currentScreen === "result") {
+          goToScreen("welcome");
+        }
+      });
+    } else {
+      backButton.hide();
+    }
+
+    return () => {
+      backButton.hide();
+    };
+  }, [currentScreen, goToScreen]);
+
   // Mock user stats
   const userStats: UserStats = {
     bestScore: result?.score ?? 0,
@@ -29,11 +57,12 @@ const Index = () => {
   };
 
   const handleShare = () => {
-    // In a real Telegram Mini App, this would use Telegram's share API
-    toast({
-      title: "Sharing...",
-      description: "Opening Telegram share dialog",
-    });
+    if (!isTelegramWebApp()) {
+      toast({
+        title: "Share",
+        description: "Opens Telegram share dialog in the app",
+      });
+    }
   };
 
   const handleChallenge = () => {
@@ -41,10 +70,12 @@ const Index = () => {
   };
 
   const handleInvite = () => {
-    toast({
-      title: "Invite sent!",
-      description: "Your friend will receive the challenge",
-    });
+    if (!isTelegramWebApp()) {
+      toast({
+        title: "Invite sent!",
+        description: "Your friend will receive the challenge",
+      });
+    }
   };
 
   const handlePostComparison = () => {
@@ -56,19 +87,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background overflow-hidden">
-      {/* Ambient Background Glow */}
-      <div 
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          background: `
-            radial-gradient(ellipse 80% 50% at 50% -20%, hsl(195 100% 50% / 0.08) 0%, transparent 50%),
-            radial-gradient(ellipse 60% 40% at 100% 100%, hsl(250 60% 55% / 0.06) 0%, transparent 50%),
-            radial-gradient(ellipse 60% 40% at 0% 100%, hsl(195 100% 50% / 0.04) 0%, transparent 50%)
-          `,
-        }}
-      />
-      
-      <div className="relative z-10 max-w-md mx-auto">
+      <div className="max-w-md mx-auto">
         <AnimatePresence mode="wait">
           {currentScreen === "welcome" && (
             <WelcomeScreen key="welcome" onStart={startQuiz} />
