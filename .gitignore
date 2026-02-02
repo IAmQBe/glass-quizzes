@@ -22,3 +22,22 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Backups (keep .gitkeep)
+/backups/*
+!/backups/.gitkeep
+
+# Database
+*.sql
+*.sql.gz
+
+# Server build
+/server/dist
+
+# Supabase local
+.supabase
