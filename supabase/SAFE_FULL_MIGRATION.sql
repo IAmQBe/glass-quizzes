@@ -651,7 +651,11 @@ BEGIN
 END;
 $$;
 
--- Squad functions
+-- Squad functions (drop first to allow return type changes)
+DROP FUNCTION IF EXISTS public.can_change_squad(UUID);
+DROP FUNCTION IF EXISTS public.join_squad(UUID, UUID);
+DROP FUNCTION IF EXISTS public.leave_squad(UUID);
+
 CREATE OR REPLACE FUNCTION public.can_change_squad(p_user_id UUID)
 RETURNS BOOLEAN AS $$
 DECLARE
@@ -700,7 +704,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Squad leaderboard
+-- Squad leaderboard (drop first)
+DROP FUNCTION IF EXISTS public.get_squad_leaderboard(INT);
 CREATE OR REPLACE FUNCTION public.get_squad_leaderboard(p_limit INT DEFAULT 10)
 RETURNS TABLE (
     id UUID,
@@ -750,7 +755,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Creators leaderboard
+-- Creators leaderboard (drop first)
+DROP FUNCTION IF EXISTS get_leaderboard_by_popcorns(INT);
 CREATE OR REPLACE FUNCTION get_leaderboard_by_popcorns(limit_count INT DEFAULT 100)
 RETURNS TABLE (
   user_id UUID,
@@ -806,7 +812,8 @@ RETURNS TABLE (
   LIMIT limit_count;
 $$ LANGUAGE sql STABLE;
 
--- Score leaderboard
+-- Score leaderboard (drop first)
+DROP FUNCTION IF EXISTS get_leaderboard_by_score(INT);
 CREATE OR REPLACE FUNCTION get_leaderboard_by_score(limit_count INT DEFAULT 100)
 RETURNS TABLE (
   user_id UUID,
@@ -835,7 +842,8 @@ RETURNS TABLE (
   LIMIT limit_count;
 $$ LANGUAGE sql STABLE;
 
--- Tests leaderboard
+-- Tests leaderboard (drop first)
+DROP FUNCTION IF EXISTS get_leaderboard_by_tests(INT);
 CREATE OR REPLACE FUNCTION get_leaderboard_by_tests(limit_count INT DEFAULT 100)
 RETURNS TABLE (
   user_id UUID,
@@ -861,7 +869,8 @@ RETURNS TABLE (
   LIMIT limit_count;
 $$ LANGUAGE sql STABLE;
 
--- Challenges leaderboard
+-- Challenges leaderboard (drop first)
+DROP FUNCTION IF EXISTS get_leaderboard_by_challenges(INT);
 CREATE OR REPLACE FUNCTION get_leaderboard_by_challenges(limit_count INT DEFAULT 100)
 RETURNS TABLE (
   user_id UUID,
@@ -888,7 +897,15 @@ RETURNS TABLE (
   LIMIT limit_count;
 $$ LANGUAGE sql STABLE;
 
--- Analytics functions
+-- Analytics functions (drop first)
+DROP FUNCTION IF EXISTS get_dau(DATE);
+DROP FUNCTION IF EXISTS get_wau(DATE);
+DROP FUNCTION IF EXISTS get_mau(DATE);
+DROP FUNCTION IF EXISTS get_total_shares();
+DROP FUNCTION IF EXISTS get_quiz_funnel();
+DROP FUNCTION IF EXISTS get_avg_completion_time();
+DROP FUNCTION IF EXISTS get_top_quizzes_by_completions(INT);
+
 CREATE OR REPLACE FUNCTION get_dau(p_date DATE DEFAULT CURRENT_DATE)
 RETURNS BIGINT AS $$
   SELECT COUNT(DISTINCT user_id)::BIGINT
