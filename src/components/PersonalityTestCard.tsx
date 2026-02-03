@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Users, HelpCircle, Sparkles, Check } from "lucide-react";
+import { Users, HelpCircle, Sparkles, Check, Award } from "lucide-react";
 import { haptic, getTelegram } from "@/lib/telegram";
 import { PopcornIcon } from "./icons/PopcornIcon";
 import { BookmarkIcon } from "./icons/BookmarkIcon";
@@ -159,10 +159,9 @@ export const PersonalityTestCard = ({
               {formatCount(participant_count)}
             </span>
           </div>
-          <div className="bg-purple-500/80 backdrop-blur-sm rounded-full px-2 py-1">
-            <span className="text-xs text-white font-medium">
-              {result_count} результ.
-            </span>
+          <div className="bg-purple-500/80 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
+            <Award className="w-3 h-3 text-white" />
+            <span className="text-xs text-white font-medium">{result_count}</span>
           </div>
         </div>
       </div>

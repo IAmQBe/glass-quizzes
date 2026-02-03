@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Users, Play, ExternalLink, Sparkles } from "lucide-react";
+import { ArrowLeft, Users, ExternalLink, Sparkles, HelpCircle, Award } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { haptic, getTelegram } from "@/lib/telegram";
@@ -58,6 +58,16 @@ export const PersonalityTestPreviewScreen = ({
     }
   };
 
+  const handleLike = () => {
+    haptic.impact('light');
+    onToggleLike?.();
+  };
+
+  const handleSave = () => {
+    haptic.impact('light');
+    onToggleSave?.();
+  };
+
   return (
     <motion.div
       className="min-h-screen flex flex-col bg-background safe-bottom"
@@ -86,20 +96,66 @@ export const PersonalityTestPreviewScreen = ({
 
       {/* Content */}
       <div className="flex-1 p-5 space-y-5 pb-32">
-        {/* Image */}
-        {test.image_url && (
-          <motion.div
-            className="relative rounded-2xl overflow-hidden aspect-video bg-purple-500/10"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-          >
+        {/* Image with overlays */}
+        <motion.div
+          className="relative rounded-2xl overflow-hidden aspect-video bg-purple-500/10"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+        >
+          {test.image_url ? (
             <img
               src={test.image_url}
               alt={test.title}
               className="w-full h-full object-cover"
             />
-          </motion.div>
-        )}
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-500/20 to-pink-500/20">
+              <Sparkles className="w-16 h-16 text-purple-500/30" />
+            </div>
+          )}
+
+          {/* Top badges */}
+          <div className="absolute top-3 left-3 flex gap-2">
+            <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-white" />
+              <span className="text-xs text-white font-medium">{test.participant_count}</span>
+            </div>
+            <div className="bg-purple-500/90 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
+              <Award className="w-3.5 h-3.5 text-white" />
+              <span className="text-xs text-white font-medium">{test.result_count}</span>
+            </div>
+          </div>
+
+          {/* Top right - Like button */}
+          <button
+            onClick={handleLike}
+            className={`absolute top-3 right-3 w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
+              isLiked ? "bg-amber-500 text-white" : "bg-black/40 text-white"
+            }`}
+          >
+            <PopcornIcon className="w-5 h-5" />
+          </button>
+
+          {/* Bottom right - Save button */}
+          <button
+            onClick={handleSave}
+            className={`absolute bottom-3 right-3 w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
+              isSaved ? "bg-purple-500 text-white" : "bg-black/40 text-white"
+            }`}
+          >
+            <BookmarkIcon className="w-5 h-5" filled={isSaved} />
+          </button>
+
+          {/* Bottom left - Stats */}
+          <div className="absolute bottom-3 left-3 flex gap-2">
+            {test.like_count > 0 && (
+              <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
+                <PopcornIcon className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-xs text-white font-medium">{test.like_count}</span>
+              </div>
+            )}
+          </div>
+        </motion.div>
 
         {/* Title & Description */}
         <motion.div
@@ -125,7 +181,7 @@ export const PersonalityTestPreviewScreen = ({
               {test.creator.avatar_url ? (
                 <img src={test.creator.avatar_url} alt="" className="w-full h-full object-cover" />
               ) : (
-                <span className="text-lg">🎭</span>
+                <Sparkles className="w-5 h-5 text-purple-500" />
               )}
             </div>
             <div className="flex-1">
@@ -146,60 +202,21 @@ export const PersonalityTestPreviewScreen = ({
           </motion.div>
         )}
 
-        {/* Stats */}
+        {/* Stats row */}
         <motion.div
-          className="grid grid-cols-4 gap-2"
+          className="flex items-center gap-4 text-sm text-muted-foreground"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.15 }}
         >
-          <div className="tg-section p-3 text-center">
-            <p className="text-lg font-bold text-foreground">{test.question_count}</p>
-            <p className="text-xs text-muted-foreground">вопросов</p>
+          <div className="flex items-center gap-1.5">
+            <HelpCircle className="w-4 h-4" />
+            <span>{test.question_count} вопросов</span>
           </div>
-          <div className="tg-section p-3 text-center">
-            <p className="text-lg font-bold text-purple-500">{test.result_count}</p>
-            <p className="text-xs text-muted-foreground">результ.</p>
+          <div className="flex items-center gap-1.5">
+            <Award className="w-4 h-4 text-purple-500" />
+            <span>{test.result_count} результатов</span>
           </div>
-          <div className="tg-section p-3 text-center">
-            <p className="text-lg font-bold text-foreground">{test.participant_count.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">участий</p>
-          </div>
-          <div className="tg-section p-3 text-center">
-            <p className="text-lg font-bold text-orange-500">{test.like_count}</p>
-            <p className="text-xs text-muted-foreground">🍿</p>
-          </div>
-        </motion.div>
-
-        {/* Actions */}
-        <motion.div
-          className="flex gap-3"
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-        >
-          <button
-            onClick={() => {
-              haptic.impact('light');
-              onToggleLike?.();
-            }}
-            className={`flex-1 tg-button-secondary flex items-center justify-center gap-2 ${isLiked ? 'text-orange-500' : ''
-              }`}
-          >
-            <PopcornIcon className={`w-5 h-5 ${isLiked ? 'fill-orange-500' : ''}`} />
-            {test.like_count}
-          </button>
-          <button
-            onClick={() => {
-              haptic.impact('light');
-              onToggleSave?.();
-            }}
-            className={`flex-1 tg-button-secondary flex items-center justify-center gap-2 ${isSaved ? 'text-purple-500' : ''
-              }`}
-          >
-            <BookmarkIcon className={`w-5 h-5 ${isSaved ? 'fill-purple-500' : ''}`} />
-            {test.save_count}
-          </button>
         </motion.div>
 
         {/* What you'll get */}
@@ -207,7 +224,7 @@ export const PersonalityTestPreviewScreen = ({
           className="tg-section p-4"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.25 }}
+          transition={{ delay: 0.2 }}
         >
           <h3 className="font-medium text-foreground mb-2">Что тебя ждёт:</h3>
           <ul className="space-y-2 text-sm text-muted-foreground">
@@ -237,7 +254,7 @@ export const PersonalityTestPreviewScreen = ({
           className="w-full flex items-center justify-center gap-2 text-lg py-4 rounded-2xl font-semibold bg-purple-500 text-white"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3 }}
+          transition={{ delay: 0.25 }}
           whileTap={{ scale: 0.98 }}
         >
           <Sparkles className="w-5 h-5" />

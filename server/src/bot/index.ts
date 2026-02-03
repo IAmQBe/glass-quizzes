@@ -229,11 +229,29 @@ bot.on('my_chat_member', async (ctx) => {
             '• Все лайки (попкорны) участников суммируются\n' +
             '• Команда появится в общем рейтинге\n' +
             '• Создатели контента могут указывать вашу команду\n\n' +
-            '_Открой Quipo → Профиль → Выбрать сквад_',
+            '_Открой Quipo → на главной нажми "Вступить" в блоке Попкорн-команды_',
             { parse_mode: 'Markdown' }
           );
         } catch (e) {
           console.log('Could not send activation message to user:', e);
+        }
+
+        // Try to get and save chat avatar
+        try {
+          const chat = await ctx.api.getChat(chatId);
+          if ('photo' in chat && chat.photo) {
+            const file = await ctx.api.getFile(chat.photo.big_file_id);
+            const avatarUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+            
+            await supabase
+              .from('squads')
+              .update({ avatar_url: avatarUrl })
+              .eq('telegram_chat_id', chatId);
+            
+            console.log(`🍿 Squad avatar saved for: ${chatTitle}`);
+          }
+        } catch (e) {
+          console.log('Could not get chat avatar:', e);
         }
       }
     }

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Clock, Users, Play, ExternalLink } from "lucide-react";
+import { ArrowLeft, Clock, Users, Play, ExternalLink, HelpCircle } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { haptic, getTelegram } from "@/lib/telegram";
@@ -58,6 +58,16 @@ export const QuizPreviewScreen = ({
     }
   };
 
+  const handleLike = () => {
+    haptic.impact('light');
+    onToggleLike?.();
+  };
+
+  const handleSave = () => {
+    haptic.impact('light');
+    onToggleSave?.();
+  };
+
   const formatDuration = (seconds: number) => {
     if (seconds < 60) return `${seconds} сек`;
     const minutes = Math.floor(seconds / 60);
@@ -89,20 +99,72 @@ export const QuizPreviewScreen = ({
 
       {/* Content */}
       <div className="flex-1 p-5 space-y-5 pb-32">
-        {/* Image */}
-        {quiz.image_url && (
-          <motion.div
-            className="relative rounded-2xl overflow-hidden aspect-video bg-secondary"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-          >
+        {/* Image with overlays */}
+        <motion.div
+          className="relative rounded-2xl overflow-hidden aspect-video bg-secondary"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+        >
+          {quiz.image_url ? (
             <img
               src={quiz.image_url}
               alt={quiz.title}
               className="w-full h-full object-cover"
             />
-          </motion.div>
-        )}
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-accent/20">
+              <HelpCircle className="w-16 h-16 text-muted-foreground/30" />
+            </div>
+          )}
+
+          {/* Top badges */}
+          <div className="absolute top-3 left-3 flex gap-2">
+            <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-white" />
+              <span className="text-xs text-white font-medium">{quiz.participant_count}</span>
+            </div>
+            <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-white" />
+              <span className="text-xs text-white font-medium">{formatDuration(quiz.duration_seconds)}</span>
+            </div>
+          </div>
+
+          {/* Top right - Like button */}
+          <button
+            onClick={handleLike}
+            className={`absolute top-3 right-3 w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
+              isLiked ? "bg-amber-500 text-white" : "bg-black/40 text-white"
+            }`}
+          >
+            <PopcornIcon className="w-5 h-5" />
+          </button>
+
+          {/* Bottom right - Save button */}
+          <button
+            onClick={handleSave}
+            className={`absolute bottom-3 right-3 w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
+              isSaved ? "bg-primary text-white" : "bg-black/40 text-white"
+            }`}
+          >
+            <BookmarkIcon className="w-5 h-5" filled={isSaved} />
+          </button>
+
+          {/* Bottom left - Stats */}
+          <div className="absolute bottom-3 left-3 flex gap-2">
+            {quiz.like_count > 0 && (
+              <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
+                <PopcornIcon className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-xs text-white font-medium">{quiz.like_count}</span>
+              </div>
+            )}
+            {quiz.save_count > 0 && (
+              <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
+                <BookmarkIcon className="w-3.5 h-3.5 text-white" />
+                <span className="text-xs text-white font-medium">{quiz.save_count}</span>
+              </div>
+            )}
+          </div>
+        </motion.div>
 
         {/* Title & Description */}
         <motion.div
@@ -128,7 +190,7 @@ export const QuizPreviewScreen = ({
               {quiz.creator.avatar_url ? (
                 <img src={quiz.creator.avatar_url} alt="" className="w-full h-full object-cover" />
               ) : (
-                <span className="text-lg">🧠</span>
+                <HelpCircle className="w-5 h-5 text-primary" />
               )}
             </div>
             <div className="flex-1">
@@ -149,60 +211,25 @@ export const QuizPreviewScreen = ({
           </motion.div>
         )}
 
-        {/* Stats */}
+        {/* Stats row */}
         <motion.div
-          className="grid grid-cols-4 gap-2"
+          className="flex items-center gap-4 text-sm text-muted-foreground"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.15 }}
         >
-          <div className="tg-section p-3 text-center">
-            <p className="text-lg font-bold text-foreground">{quiz.question_count}</p>
-            <p className="text-xs text-muted-foreground">вопросов</p>
+          <div className="flex items-center gap-1.5">
+            <HelpCircle className="w-4 h-4" />
+            <span>{quiz.question_count} вопросов</span>
           </div>
-          <div className="tg-section p-3 text-center">
-            <p className="text-lg font-bold text-foreground">{formatDuration(quiz.duration_seconds)}</p>
-            <p className="text-xs text-muted-foreground">время</p>
+          <div className="flex items-center gap-1.5">
+            <Clock className="w-4 h-4" />
+            <span>{formatDuration(quiz.duration_seconds)}</span>
           </div>
-          <div className="tg-section p-3 text-center">
-            <p className="text-lg font-bold text-foreground">{quiz.participant_count.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">участий</p>
+          <div className="flex items-center gap-1.5">
+            <Users className="w-4 h-4" />
+            <span>{quiz.participant_count}</span>
           </div>
-          <div className="tg-section p-3 text-center">
-            <p className="text-lg font-bold text-orange-500">{quiz.like_count}</p>
-            <p className="text-xs text-muted-foreground">🍿</p>
-          </div>
-        </motion.div>
-
-        {/* Actions */}
-        <motion.div
-          className="flex gap-3"
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-        >
-          <button
-            onClick={() => {
-              haptic.impact('light');
-              onToggleLike?.();
-            }}
-            className={`flex-1 tg-button-secondary flex items-center justify-center gap-2 ${isLiked ? 'text-orange-500' : ''
-              }`}
-          >
-            <PopcornIcon className={`w-5 h-5 ${isLiked ? 'fill-orange-500' : ''}`} />
-            {quiz.like_count}
-          </button>
-          <button
-            onClick={() => {
-              haptic.impact('light');
-              onToggleSave?.();
-            }}
-            className={`flex-1 tg-button-secondary flex items-center justify-center gap-2 ${isSaved ? 'text-primary' : ''
-              }`}
-          >
-            <BookmarkIcon className={`w-5 h-5 ${isSaved ? 'fill-primary' : ''}`} />
-            {quiz.save_count}
-          </button>
         </motion.div>
       </div>
 
@@ -216,7 +243,7 @@ export const QuizPreviewScreen = ({
           className="tg-button w-full flex items-center justify-center gap-2 text-lg py-4"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.25 }}
+          transition={{ delay: 0.2 }}
           whileTap={{ scale: 0.98 }}
         >
           <Play className="w-5 h-5" />
