@@ -4,9 +4,11 @@ import { BannerCarousel } from "@/components/BannerCarousel";
 import { QuizShowcase } from "@/components/QuizShowcase";
 import { BottomNav } from "@/components/BottomNav";
 import { LeaderboardPreview } from "@/components/LeaderboardPreview";
+import { OnboardingCarousel } from "@/components/OnboardingCarousel";
 import { useBanners } from "@/hooks/useBanners";
 import { usePublishedQuizzes, useQuizWithQuestions } from "@/hooks/useQuizzes";
 import { useFavoriteIds, useToggleFavorite } from "@/hooks/useFavorites";
+import { useLikeIds, useToggleLike } from "@/hooks/useLikes";
 import { QuizScreen } from "@/screens/QuizScreen";
 import { ResultScreen } from "@/screens/ResultScreen";
 import { CompareScreen } from "@/screens/CompareScreen";
@@ -18,13 +20,16 @@ import { toast } from "@/hooks/use-toast";
 import { UserStats, QuizResult } from "@/types/quiz";
 import { initTelegramApp, backButton, isTelegramWebApp, shareResult, getTelegramUserData } from "@/lib/telegram";
 import { calculateResult } from "@/data/quizData";
-import { TrendingUp, Sparkles, Search, SlidersHorizontal } from "lucide-react";
+import { TrendingUp, Sparkles, Search, X } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
+import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Input } from "@/components/ui/input";
 import { haptic } from "@/lib/telegram";
 
 type AppScreen = "home" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create";
 type TabId = "home" | "leaderboard" | "create" | "profile";
+type QuizTab = "trending" | "all";
+type SortType = "popular" | "saves" | "newest";
 
 // Mock leaderboard data
 const mockLeaderboard = [
@@ -38,8 +43,10 @@ const mockLeaderboard = [
 const Index = () => {
   const { data: banners = [], isLoading: bannersLoading } = useBanners();
   const { data: quizzes = [], isLoading: quizzesLoading } = usePublishedQuizzes();
-  const { data: favoriteIds = new Set() } = useFavoriteIds();
-  const toggleFavorite = useToggleFavorite();
+  const { data: saveIds = new Set() } = useFavoriteIds();
+  const { data: likeIds = new Set() } = useLikeIds();
+  const toggleSave = useToggleFavorite();
+  const toggleLike = useToggleLike();
   
   const [currentScreen, setCurrentScreen] = useState<AppScreen>("home");
   const [activeTab, setActiveTab] = useState<TabId>("home");
@@ -47,10 +54,29 @@ const Index = () => {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
+  
+  // New state
+  const [quizTab, setQuizTab] = useState<QuizTab>("trending");
+  const [sortBy, setSortBy] = useState<SortType>("popular");
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<"rating" | "participants" | "newest">("rating");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const { data: quizData } = useQuizWithQuestions(selectedQuizId);
+
+  // Check onboarding status
+  useEffect(() => {
+    const onboardingCompleted = localStorage.getItem("onboarding_completed");
+    if (!onboardingCompleted) {
+      setShowOnboarding(true);
+    }
+  }, []);
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem("onboarding_completed", "true");
+    setShowOnboarding(false);
+    haptic.notification('success');
+  };
 
   // Initialize Telegram WebApp and sync user data
   useEffect(() => {
@@ -60,7 +86,6 @@ const Index = () => {
     const userData = getTelegramUserData();
     if (userData) {
       console.log("Telegram user data:", userData);
-      // TODO: Sync with database when authenticated
     }
   }, []);
 
@@ -156,9 +181,14 @@ const Index = () => {
     setCurrentScreen("quiz");
   };
 
-  const handleToggleFavorite = (quizId: string) => {
-    const isFavorite = favoriteIds.has(quizId);
-    toggleFavorite.mutate({ quizId, isFavorite });
+  const handleToggleSave = (quizId: string) => {
+    const isSaved = saveIds.has(quizId);
+    toggleSave.mutate({ quizId, isFavorite: isSaved });
+  };
+
+  const handleToggleLike = (quizId: string) => {
+    const isLiked = likeIds.has(quizId);
+    toggleLike.mutate({ quizId, isLiked });
   };
 
   const userStats: UserStats = {
@@ -176,10 +206,10 @@ const Index = () => {
 
   const sortedQuizzes = [...filteredQuizzes].sort((a, b) => {
     switch (sortBy) {
-      case "rating":
-        return (b.rating ?? 0) - (a.rating ?? 0);
-      case "participants":
-        return b.participant_count - a.participant_count;
+      case "popular":
+        return ((b as any).like_count ?? 0) - ((a as any).like_count ?? 0);
+      case "saves":
+        return ((b as any).save_count ?? 0) - ((a as any).save_count ?? 0);
       case "newest":
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       default:
@@ -187,10 +217,10 @@ const Index = () => {
     }
   });
 
-  // Sort quizzes by rating for "trending" section
+  // Trending: top by likes
   const trendingQuizzes = [...quizzes]
-    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
-    .slice(0, 3);
+    .sort((a, b) => ((b as any).like_count ?? 0) - ((a as any).like_count ?? 0))
+    .slice(0, 10);
 
   // Map quiz data questions to the format expected by QuizScreen
   const mappedQuestions = quizData?.questions?.map((q, i) => ({
@@ -200,6 +230,12 @@ const Index = () => {
   })) || [];
 
   const showBottomNav = ["home", "leaderboard", "profile"].includes(currentScreen);
+  const displayQuizzes = quizTab === "trending" ? trendingQuizzes : sortedQuizzes;
+
+  // Show onboarding
+  if (showOnboarding) {
+    return <OnboardingCarousel onComplete={handleOnboardingComplete} />;
+  }
 
   return (
     <div className="min-h-screen bg-background overflow-hidden">
@@ -240,56 +276,11 @@ const Index = () => {
                 )}
               </motion.div>
 
-              {/* Search and Filter */}
+              {/* Leaderboard Preview */}
               <motion.div
-                className="flex gap-2"
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.12 }}
-              >
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Поиск квизов..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 bg-secondary border-0"
-                  />
-                </div>
-              </motion.div>
-
-              {/* Sort chips */}
-              <motion.div
-                className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1"
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.14 }}
-              >
-                {(["rating", "participants", "newest"] as const).map((sort) => (
-                  <button
-                    key={sort}
-                    onClick={() => {
-                      haptic.selection();
-                      setSortBy(sort);
-                    }}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                      sortBy === sort
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-muted-foreground"
-                    }`}
-                  >
-                    {sort === "rating" && "🍿 По рейтингу"}
-                    {sort === "participants" && "👥 По участникам"}
-                    {sort === "newest" && "✨ Новые"}
-                  </button>
-                ))}
-              </motion.div>
-
-              {/* Leaderboard Preview - Clickbait */}
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.16 }}
               >
                 <LeaderboardPreview
                   entries={mockLeaderboard}
@@ -301,34 +292,126 @@ const Index = () => {
                 />
               </motion.div>
 
-              {/* Trending Section */}
-              {trendingQuizzes.length > 0 && !searchQuery && (
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.18 }}
+              {/* Tabs: Trending / All */}
+              <motion.div
+                className="flex gap-2"
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.14 }}
+              >
+                <button
+                  className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${
+                    quizTab === "trending"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-foreground"
+                  }`}
+                  onClick={() => {
+                    haptic.selection();
+                    setQuizTab("trending");
+                  }}
                 >
-                  <div className="flex items-center gap-2 mb-3">
-                    <TrendingUp className="w-5 h-5 text-primary" />
-                    <h2 className="text-lg font-semibold text-foreground">Trending</h2>
+                  <TrendingUp className="w-4 h-4" />
+                  Trending
+                </button>
+                <button
+                  className={`flex-1 py-2.5 rounded-xl font-medium transition-colors ${
+                    quizTab === "all"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-foreground"
+                  }`}
+                  onClick={() => {
+                    haptic.selection();
+                    setQuizTab("all");
+                  }}
+                >
+                  Все квизы
+                </button>
+              </motion.div>
+
+              {/* Sort chips + Search button (only for All tab) */}
+              {quizTab === "all" && (
+                <motion.div
+                  className="space-y-3"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  {/* Search bar (expandable) */}
+                  <AnimatePresence>
+                    {searchOpen && (
+                      <motion.div
+                        className="flex gap-2"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                      >
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                          <Input
+                            placeholder="Поиск квизов..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-9 bg-secondary border-0"
+                            autoFocus
+                          />
+                        </div>
+                        <button
+                          className="p-2.5 bg-secondary rounded-lg"
+                          onClick={() => {
+                            setSearchOpen(false);
+                            setSearchQuery("");
+                          }}
+                        >
+                          <X className="w-4 h-4 text-foreground" />
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Sort chips */}
+                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                    {(["popular", "saves", "newest"] as const).map((sort) => (
+                      <button
+                        key={sort}
+                        onClick={() => {
+                          haptic.selection();
+                          setSortBy(sort);
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
+                          sortBy === sort
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-secondary text-muted-foreground"
+                        }`}
+                      >
+                        {sort === "popular" && <><PopcornIcon className="w-3 h-3" /> Лайки</>}
+                        {sort === "saves" && <><BookmarkIcon className="w-3 h-3" /> Saves</>}
+                        {sort === "newest" && "✨ Новые"}
+                      </button>
+                    ))}
+                    
+                    {/* Search button */}
+                    {!searchOpen && (
+                      <button
+                        onClick={() => {
+                          haptic.selection();
+                          setSearchOpen(true);
+                        }}
+                        className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-secondary text-muted-foreground flex items-center gap-1"
+                      >
+                        <Search className="w-3 h-3" />
+                        Поиск
+                      </button>
+                    )}
                   </div>
-                  <QuizShowcase
-                    quizzes={trendingQuizzes}
-                    isLoading={quizzesLoading}
-                    onQuizSelect={handleQuizSelect}
-                    favoriteIds={favoriteIds}
-                    onToggleFavorite={handleToggleFavorite}
-                  />
                 </motion.div>
               )}
 
-              {/* All/Filtered Quizzes */}
+              {/* Quizzes List */}
               <motion.div
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.2 }}
+                transition={{ delay: 0.16 }}
               >
-                {!quizzesLoading && sortedQuizzes.length === 0 ? (
+                {!quizzesLoading && displayQuizzes.length === 0 ? (
                   <div className="tg-section p-6 text-center">
                     <Sparkles className="w-10 h-10 text-primary mx-auto mb-3" />
                     <h3 className="font-semibold text-foreground mb-2">
@@ -355,18 +438,15 @@ const Index = () => {
                     )}
                   </div>
                 ) : (
-                  <>
-                    <h2 className="text-lg font-semibold text-foreground mb-3">
-                      {searchQuery ? `Результаты: ${sortedQuizzes.length}` : "Все квизы"}
-                    </h2>
-                    <QuizShowcase
-                      quizzes={searchQuery ? sortedQuizzes : sortedQuizzes.slice(trendingQuizzes.length)}
-                      isLoading={quizzesLoading}
-                      onQuizSelect={handleQuizSelect}
-                      favoriteIds={favoriteIds}
-                      onToggleFavorite={handleToggleFavorite}
-                    />
-                  </>
+                  <QuizShowcase
+                    quizzes={displayQuizzes}
+                    isLoading={quizzesLoading}
+                    onQuizSelect={handleQuizSelect}
+                    likeIds={likeIds}
+                    saveIds={saveIds}
+                    onToggleLike={handleToggleLike}
+                    onToggleSave={handleToggleSave}
+                  />
                 )}
               </motion.div>
             </motion.div>

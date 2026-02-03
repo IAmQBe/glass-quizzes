@@ -7,16 +7,20 @@ interface QuizShowcaseProps {
   quizzes: Quiz[];
   isLoading: boolean;
   onQuizSelect: (quizId: string) => void;
-  favoriteIds?: Set<string>;
-  onToggleFavorite?: (quizId: string) => void;
+  likeIds?: Set<string>;
+  saveIds?: Set<string>;
+  onToggleLike?: (quizId: string) => void;
+  onToggleSave?: (quizId: string) => void;
 }
 
 export const QuizShowcase = ({ 
   quizzes, 
   isLoading, 
   onQuizSelect,
-  favoriteIds = new Set(),
-  onToggleFavorite,
+  likeIds = new Set(),
+  saveIds = new Set(),
+  onToggleLike,
+  onToggleSave,
 }: QuizShowcaseProps) => {
   if (isLoading) {
     return (
@@ -47,12 +51,13 @@ export const QuizShowcase = ({
             participant_count={quiz.participant_count}
             question_count={quiz.question_count}
             duration_seconds={quiz.duration_seconds}
-            rating={(quiz as any).rating}
-            rating_count={(quiz as any).rating_count}
-            isFavorite={favoriteIds.has(quiz.id)}
-            showFavoriteButton={!!onToggleFavorite}
+            like_count={(quiz as any).like_count ?? 0}
+            save_count={(quiz as any).save_count ?? 0}
+            isLiked={likeIds.has(quiz.id)}
+            isSaved={saveIds.has(quiz.id)}
             onClick={() => onQuizSelect(quiz.id)}
-            onToggleFavorite={() => onToggleFavorite?.(quiz.id)}
+            onToggleLike={onToggleLike ? () => onToggleLike(quiz.id) : undefined}
+            onToggleSave={onToggleSave ? () => onToggleSave(quiz.id) : undefined}
           />
         </motion.div>
       ))}

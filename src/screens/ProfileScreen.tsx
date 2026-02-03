@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { UserStats } from "@/types/quiz";
-import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Lock, Settings, Heart, Clock } from "lucide-react";
+import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock } from "lucide-react";
 import { haptic, getTelegramUser } from "@/lib/telegram";
 import { useIsAdmin } from "@/hooks/useAuth";
-import { useMyQuizzes, Quiz } from "@/hooks/useQuizzes";
+import { useMyQuizzes } from "@/hooks/useQuizzes";
 import { useFavorites } from "@/hooks/useFavorites";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
+import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Loader2 } from "lucide-react";
 
 interface ProfileScreenProps {
@@ -17,7 +18,7 @@ interface ProfileScreenProps {
 }
 
 type FilterType = "date" | "popularity";
-type TabType = "my" | "favorites";
+type TabType = "my" | "saved";
 
 export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: ProfileScreenProps) => {
   const user = getTelegramUser();
@@ -48,7 +49,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
-  const favoriteQuizzes = favorites
+  const savedQuizzes = favorites
     .map((f) => f.quizzes)
     .filter((q): q is NonNullable<typeof q> => q !== null);
 
@@ -141,7 +142,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
           </motion.div>
         )}
 
-        {/* Tabs: My Quizzes / Favorites */}
+        {/* Tabs: My Quizzes / Saved */}
         <motion.div
           className="flex gap-2"
           initial={{ y: 20, opacity: 0 }}
@@ -160,21 +161,21 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
             }}
           >
             <Target className="w-4 h-4" />
-            My Quizzes ({myQuizzes.length})
+            Мои ({myQuizzes.length})
           </button>
           <button
             className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${
-              activeTab === "favorites"
+              activeTab === "saved"
                 ? "bg-primary text-primary-foreground"
                 : "bg-secondary text-foreground"
             }`}
             onClick={() => {
               haptic.selection();
-              setActiveTab("favorites");
+              setActiveTab("saved");
             }}
           >
-            <Heart className="w-4 h-4" />
-            Favorites ({favorites.length})
+            <BookmarkIcon className="w-4 h-4" />
+            Saved ({favorites.length})
           </button>
         </motion.div>
 
@@ -231,7 +232,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
                 </div>
               ) : sortedMyQuizzes.length === 0 ? (
                 <div className="tg-section p-6 text-center">
-                  <p className="text-muted-foreground">You haven't created any quizzes yet</p>
+                  <p className="text-muted-foreground">Ты ещё не создал ни одного квиза</p>
                 </div>
               ) : (
                 sortedMyQuizzes.map((quiz) => (
@@ -245,18 +246,18 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
             </>
           )}
 
-          {activeTab === "favorites" && (
+          {activeTab === "saved" && (
             <>
               {favoritesLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 text-primary animate-spin" />
                 </div>
-              ) : favoriteQuizzes.length === 0 ? (
+              ) : savedQuizzes.length === 0 ? (
                 <div className="tg-section p-6 text-center">
-                  <p className="text-muted-foreground">No favorite quizzes yet</p>
+                  <p className="text-muted-foreground">Нет сохранённых квизов</p>
                 </div>
               ) : (
-                favoriteQuizzes.map((quiz: any) => (
+                savedQuizzes.map((quiz: any) => (
                   <QuizListItem
                     key={quiz.id}
                     quiz={quiz}
@@ -282,18 +283,22 @@ const QuizListItem = ({ quiz, onClick }: { quiz: any; onClick: () => void }) => 
     }}
   >
     <div className="flex items-center gap-3">
-      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-        <span className="text-xl">📝</span>
+      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden">
+        {quiz.image_url ? (
+          <img src={quiz.image_url} alt={quiz.title} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-xl">📝</span>
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <h3 className="font-medium text-foreground line-clamp-1">{quiz.title}</h3>
         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-          <span>{quiz.question_count} questions</span>
-          <span>{quiz.participant_count} plays</span>
-          {quiz.rating > 0 && (
+          <span>{quiz.question_count} вопросов</span>
+          <span>{quiz.participant_count} участий</span>
+          {(quiz.like_count ?? 0) > 0 && (
             <span className="flex items-center gap-1">
-              <PopcornIcon className="w-3 h-3 text-yellow-500" />
-              {Number(quiz.rating).toFixed(1)}
+              <PopcornIcon className="w-3 h-3 text-amber-500" />
+              {quiz.like_count}
             </span>
           )}
         </div>
