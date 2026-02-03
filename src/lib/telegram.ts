@@ -131,14 +131,27 @@ export const haptic = {
   },
 };
 
-// Share result to chat
+// Share quiz result to chat
+export const shareQuizResult = (
+  quizId: string,
+  quizTitle: string,
+  score: number,
+  totalQuestions: number,
+  verdict?: string
+) => {
+  const tg = getTelegram();
+  if (tg) {
+    // Format: quiz_result:quizId:score:total:title - bot will parse this
+    const shareQuery = `quiz_result:${quizId}:${score}:${totalQuestions}:${encodeURIComponent(quizTitle)}`;
+    tg.switchInlineQuery(shareQuery, ['users', 'groups', 'channels']);
+  }
+};
+
+// Legacy share (keep for backward compatibility)
 export const shareResult = (score: number, percentile: number, verdict: string) => {
   const tg = getTelegram();
   if (tg) {
-    // Use switchInlineQuery for sharing
     const shareText = `🧠 My score: ${score}/100 (Top ${percentile}%)\n${verdict}\n\nCan you beat me?`;
-
-    // Try to share via inline mode or open a share link
     tg.switchInlineQuery(shareText, ['users', 'groups', 'channels']);
   }
 };

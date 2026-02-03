@@ -134,7 +134,7 @@ const Index = () => {
         referrer: document.referrer || null,
       });
 
-      // 5. Handle deep link start_param
+      // 5. Handle deep link start_param (delay to allow data to load)
       const tg = getTelegram();
       const startParam = tg?.initDataUnsafe?.start_param;
       if (startParam) {
@@ -149,17 +149,20 @@ const Index = () => {
           const id = parts[0];
           const source = parts[2] || 'deeplink';
 
-          // Check if it's a personality test
-          if (source.includes('test') || source === 'result_share') {
-            console.log("Opening personality test:", id);
-            setSelectedTestId(id);
-            setCurrentScreen("personality_test");
-          } else {
-            // Assume it's a quiz
-            console.log("Opening quiz:", id);
-            setSelectedQuizId(id);
-            setCurrentScreen("quiz");
-          }
+          // Delay screen change to allow React to render first
+          setTimeout(() => {
+            // Check if it's a personality test
+            if (source.includes('test') || source === 'result_share') {
+              console.log("Opening personality test:", id);
+              setSelectedTestId(id);
+              setCurrentScreen("personality_test");
+            } else {
+              // Assume it's a quiz
+              console.log("Opening quiz:", id);
+              setSelectedQuizId(id);
+              setCurrentScreen("quiz");
+            }
+          }, 100);
         }
       }
     };
@@ -734,6 +737,8 @@ const Index = () => {
             <ResultScreen
               key="result"
               result={result}
+              quizId={selectedQuizId || undefined}
+              quizTitle={quizData?.title}
               onShare={handleShare}
               onChallenge={handleChallenge}
               onRestart={handleRestart}

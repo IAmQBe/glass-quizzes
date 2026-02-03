@@ -2,10 +2,12 @@ import { motion } from "framer-motion";
 import { QuizResult } from "@/types/quiz";
 import { Share2, Users, RotateCcw, User, Trophy, Home } from "lucide-react";
 import { QuizScreen as QuizScreenType } from "@/hooks/useQuiz";
-import { haptic, shareResult } from "@/lib/telegram";
+import { haptic, shareQuizResult, shareResult } from "@/lib/telegram";
 
 interface ResultScreenProps {
   result: QuizResult;
+  quizId?: string;
+  quizTitle?: string;
   onShare: () => void;
   onChallenge: () => void;
   onRestart: () => void;
@@ -13,10 +15,17 @@ interface ResultScreenProps {
   onHome?: () => void;
 }
 
-export const ResultScreen = ({ result, onShare, onChallenge, onRestart, onNavigate, onHome }: ResultScreenProps) => {
+export const ResultScreen = ({ result, quizId, quizTitle, onShare, onChallenge, onRestart, onNavigate, onHome }: ResultScreenProps) => {
   const handleShare = () => {
     haptic.notification('success');
-    shareResult(result.score, result.percentile, result.verdict);
+    
+    // Use new quiz result share if we have quiz info
+    if (quizId && quizTitle) {
+      shareQuizResult(quizId, quizTitle, result.score, result.maxScore);
+    } else {
+      // Legacy fallback
+      shareResult(result.score, result.percentile, result.verdict);
+    }
     onShare();
   };
 

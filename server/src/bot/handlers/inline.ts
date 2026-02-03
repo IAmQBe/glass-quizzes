@@ -206,6 +206,88 @@ export async function handleInlineQuery(ctx: Context) {
   try {
     const results: InlineQueryResultArticle[] = [];
 
+    // Check for quiz result share format: quiz_result:quizId:score:total:title
+    if (rawQuery.startsWith('quiz_result:')) {
+      const parts = rawQuery.split(':');
+      if (parts.length >= 5) {
+        const quizId = parts[1];
+        const score = parseInt(parts[2], 10);
+        const total = parseInt(parts[3], 10);
+        const quizTitle = decodeURIComponent(parts.slice(4).join(':'));
+
+        // Fetch quiz data
+        const { data: quiz } = await supabase
+          .from('quizzes')
+          .select('*')
+          .eq('id', quizId)
+          .single();
+
+        if (quiz) {
+          const startParam = buildStartParam({
+            questId: quizId,
+            refUserId: userId,
+            source: 'quiz_result_share',
+          });
+
+          const safeQuizId = quizId.replace(/-/g, '');
+          const percentage = Math.round((score / total) * 100);
+          const resultImage = quiz.image_url;
+
+          if (isValidImageUrl(resultImage)) {
+            const photoResult: InlineQueryResultPhoto = {
+              type: 'photo',
+              id: `qr${safeQuizId.slice(0, 20)}${userId}${Date.now()}`,
+              photo_url: resultImage!,
+              thumbnail_url: resultImage!,
+              title: `🧠 ${quizTitle}: ${score}/${total}`,
+              description: `${percentage}% правильных • Сможешь лучше?`,
+              caption: `🧠 *${quizTitle}*\n\n✅ Мой результат: *${score}/${total}* (${percentage}%)\n\nСможешь лучше? Попробуй 👇`,
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    {
+                      text: '🎯 Пройти квиз',
+                      url: `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`,
+                    },
+                  ],
+                ],
+              },
+            };
+            results.push(photoResult as any);
+          } else {
+            results.push({
+              type: 'article',
+              id: `qa${safeQuizId.slice(0, 20)}${userId}${Date.now()}`,
+              title: `🧠 ${quizTitle}: ${score}/${total}`,
+              description: `${percentage}% правильных • Сможешь лучше?`,
+              thumbnail_url: 'https://via.placeholder.com/100x100.png?text=Quiz',
+              input_message_content: {
+                message_text:
+                  `🧠 *${quizTitle}*\n\n` +
+                  `✅ Мой результат: *${score}/${total}* (${percentage}%)\n\n` +
+                  `Сможешь лучше? Попробуй 👇`,
+                parse_mode: 'Markdown',
+              },
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    {
+                      text: '🎯 Пройти квиз',
+                      url: `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`,
+                    },
+                  ],
+                ],
+              },
+            });
+          }
+        }
+      }
+
+      await ctx.answerInlineQuery(results, { cache_time: 0, is_personal: true });
+      return;
+    }
+
     // Check for test result share format: test_result:testId:resultTitle
     if (rawQuery.startsWith('test_result:')) {
       const parts = rawQuery.split(':');
@@ -235,10 +317,12 @@ export async function handleInlineQuery(ctx: Context) {
           const shortDesc = resultDesc.split('.')[0];
 
           // Use photo result if we have a valid image URL
+          // Note: Telegram requires ID to be alphanumeric only (no dashes), max 64 chars
+          const safeTestId = testId.replace(/-/g, '');
           if (isValidImageUrl(resultImage)) {
             const photoResult: InlineQueryResultPhoto = {
               type: 'photo',
-              id: `result_photo_${testId}_${userId}_${Date.now()}`,
+              id: `rp${safeTestId.slice(0, 20)}${userId}${Date.now()}`,
               photo_url: resultImage!,
               thumbnail_url: resultImage!,
               title: `🎭 Я — ${resultTitle}`,
@@ -261,7 +345,7 @@ export async function handleInlineQuery(ctx: Context) {
             // Fallback to article if no valid image
             results.push({
               type: 'article',
-              id: `result_share_${testId}_${userId}_${Date.now()}`,
+              id: `rs${safeTestId.slice(0, 20)}${userId}${Date.now()}`,
               title: `🎭 Я — ${resultTitle}`,
               description: `${test.title} • Пройди и узнай кто ты!`,
               thumbnail_url: 'https://via.placeholder.com/100x100.png?text=Result',

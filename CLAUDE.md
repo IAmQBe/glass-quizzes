@@ -21,7 +21,7 @@
                          ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    FRONTEND (Vite + React)                      │
-│                    https://quipobot.netlify.app                 │
+│                    https://endearing-taiyaki-03c7aa.netlify.app │
 ├─────────────────────────────────────────────────────────────────┤
 │  Entry: src/main.tsx → App.tsx → pages/Index.tsx                │
 │                                                                 │
@@ -522,6 +522,10 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2026-02-03 | Inline cache_time=0 | Отключили кэширование inline results для персонализации (refUserId) | inline.ts |
 | 2026-02-03 | Уникальные inline result IDs | Добавили userId в ID inline результатов для избежания конфликтов | inline.ts |
 | 2026-02-03 | Bot auto-start | startBot() вызывается автоматически при запуске bot/index.ts | server/bot/index.ts |
+| 2026-02-03 | MINI_APP_URL fix | Исправлен URL в .env (quipobot.netlify.app → endearing-taiyaki-03c7aa.netlify.app) | .env |
+| 2026-02-03 | Inline result ID без дефисов | Telegram требует alphanumeric ID, убраны дефисы из UUID | inline.ts |
+| 2026-02-03 | Quiz result sharing | shareQuizResult() для шаринга результатов квизов с картинкой | telegram.ts, ResultScreen |
+| 2026-02-03 | quiz_result: inline query | Обработка результатов квизов в inline mode (quiz_result:id:score:total:title) | inline.ts |
 
 ## TODO / Backlog
 
