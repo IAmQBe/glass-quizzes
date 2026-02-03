@@ -56,7 +56,7 @@ export const LiveQuizScreen = ({ liveQuizId, onBack }: LiveQuizScreenProps) => {
     const id = `${reaction.id}-${Date.now()}`;
     const x = Math.random() * 80 + 10; // 10-90% of screen width
     setReactions((prev) => [...prev, { id, emoji: reaction.emoji, x }]);
-    
+
     // Remove after animation
     setTimeout(() => {
       setReactions((prev) => prev.filter((r) => r.id !== id));
@@ -119,10 +119,10 @@ export const LiveQuizScreen = ({ liveQuizId, onBack }: LiveQuizScreenProps) => {
 
   const handleAnswer = (answerIndex: number) => {
     if (selectedAnswer !== null) return;
-    
+
     haptic.impact('medium');
     setSelectedAnswer(answerIndex);
-    
+
     // TODO: Submit answer with timing
     // const timeMs = answerStartTime ? Date.now() - answerStartTime : 0;
     // const isCorrect = answerIndex === currentQuestionData?.correct_answer;
@@ -284,13 +284,12 @@ export const LiveQuizScreen = ({ liveQuizId, onBack }: LiveQuizScreenProps) => {
                 {currentQuestionData.options.map((option, index) => (
                   <motion.button
                     key={index}
-                    className={`w-full p-4 rounded-xl text-left transition-colors ${
-                      selectedAnswer === index
+                    className={`w-full p-4 rounded-xl text-left transition-colors ${selectedAnswer === index
                         ? index === currentQuestionData.correct_answer
                           ? "bg-green-500 text-white"
                           : "bg-red-500 text-white"
                         : "bg-secondary text-foreground hover:bg-secondary/80"
-                    }`}
+                      }`}
                     onClick={() => handleAnswer(index)}
                     disabled={selectedAnswer !== null || isHost}
                     whileTap={{ scale: 0.98 }}
@@ -363,9 +362,8 @@ export const LiveQuizScreen = ({ liveQuizId, onBack }: LiveQuizScreenProps) => {
               {participants.slice(0, 3).map((p: any, i: number) => (
                 <div
                   key={p.id}
-                  className={`flex items-center justify-between p-3 rounded-xl ${
-                    i === 0 ? "bg-yellow-500/10" : i === 1 ? "bg-secondary" : "bg-amber-600/10"
-                  }`}
+                  className={`flex items-center justify-between p-3 rounded-xl ${i === 0 ? "bg-yellow-500/10" : i === 1 ? "bg-secondary" : "bg-amber-600/10"
+                    }`}
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">{i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}</span>

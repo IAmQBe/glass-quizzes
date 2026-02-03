@@ -20,7 +20,7 @@ export const SquadListScreen = ({ onBack, onSquadSelect, onCreateSquad }: SquadL
   const filteredSquads = useMemo(() => {
     if (!searchQuery.trim()) return squads;
     const query = searchQuery.toLowerCase();
-    return squads.filter(s => 
+    return squads.filter(s =>
       s.title.toLowerCase().includes(query) ||
       s.username?.toLowerCase().includes(query)
     );
@@ -173,8 +173,8 @@ export const SquadListScreen = ({ onBack, onSquadSelect, onCreateSquad }: SquadL
                 {searchQuery ? "Ничего не найдено" : "Пока нет команд"}
               </h3>
               <p className="text-sm text-muted-foreground">
-                {searchQuery 
-                  ? "Попробуй другой запрос" 
+                {searchQuery
+                  ? "Попробуй другой запрос"
                   : "Стань первым — создай свою команду!"
                 }
               </p>
@@ -191,9 +191,8 @@ export const SquadListScreen = ({ onBack, onSquadSelect, onCreateSquad }: SquadL
                     haptic.impact('light');
                     onSquadSelect(squad);
                   }}
-                  className={`tg-section p-4 w-full flex items-center gap-3 text-left ${
-                    mySquad?.id === squad.id ? 'ring-2 ring-primary/30' : ''
-                  }`}
+                  className={`tg-section p-4 w-full flex items-center gap-3 text-left ${mySquad?.id === squad.id ? 'ring-2 ring-primary/30' : ''
+                    }`}
                 >
                   {/* Rank */}
                   <div className="w-6 text-center text-sm font-medium text-muted-foreground">

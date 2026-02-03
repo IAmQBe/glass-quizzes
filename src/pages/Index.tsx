@@ -900,7 +900,7 @@ const Index = () => {
               key="result"
               result={result}
               quizId={selectedQuizId || undefined}
-              quizTitle={quizData?.title}
+              quizTitle={quizData?.quiz?.title}
               onShare={handleShare}
               onChallenge={handleChallenge}
               onRestart={handleRestart}

@@ -59,14 +59,14 @@ export const WelcomeScreen = ({ onStart }: WelcomeScreenProps) => {
               </div>
               <span className="text-xs text-muted-foreground">questions</span>
             </div>
-            
+
             <div className="flex flex-col items-center gap-2">
               <div className="tg-avatar w-12 h-12">
                 <Clock className="w-5 h-5 text-primary" />
               </div>
               <span className="text-xs text-muted-foreground">60 sec</span>
             </div>
-            
+
             <div className="flex flex-col items-center gap-2">
               <div className="tg-avatar w-12 h-12">
                 <Users className="w-5 h-5 text-primary" />

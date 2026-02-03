@@ -25,10 +25,10 @@ export const SquadScreen = ({ squad, onBack, onQuizSelect, onTestSelect }: Squad
   const handleOpenChannel = () => {
     haptic.impact('light');
     const tg = getTelegram();
-    const url = squad.username 
+    const url = squad.username
       ? `https://t.me/${squad.username}`
       : squad.invite_link;
-    
+
     if (url) {
       if (tg?.openTelegramLink) {
         tg.openTelegramLink(url);
@@ -46,10 +46,10 @@ export const SquadScreen = ({ squad, onBack, onQuizSelect, onTestSelect }: Squad
 
     if (!canChange) {
       const nextDate = canChangeData?.nextChangeAt;
-      const daysLeft = nextDate 
+      const daysLeft = nextDate
         ? Math.ceil((nextDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
         : 7;
-      toast({ 
+      toast({
         title: "Подожди немного",
         description: `Менять команду можно раз в неделю. Осталось ${daysLeft} дней.`
       });
@@ -61,12 +61,12 @@ export const SquadScreen = ({ squad, onBack, onQuizSelect, onTestSelect }: Squad
 
     try {
       await joinSquad.mutateAsync(squad.id);
-      toast({ 
+      toast({
         title: "Добро пожаловать! 🍿",
         description: `Ты теперь в команде "${squad.title}"`
       });
     } catch (error: any) {
-      toast({ 
+      toast({
         title: "Ошибка",
         description: error.message || "Не удалось вступить в команду"
       });
@@ -119,8 +119,8 @@ export const SquadScreen = ({ squad, onBack, onQuizSelect, onTestSelect }: Squad
             className="w-24 h-24 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center mb-4 shadow-lg"
           >
             {squad.avatar_url ? (
-              <img 
-                src={squad.avatar_url} 
+              <img
+                src={squad.avatar_url}
                 alt={squad.title}
                 className="w-full h-full rounded-2xl object-cover"
               />
@@ -131,7 +131,7 @@ export const SquadScreen = ({ squad, onBack, onQuizSelect, onTestSelect }: Squad
 
           {/* Title */}
           <h2 className="text-2xl font-bold text-foreground mb-1">{squad.title}</h2>
-          
+
           {/* Username */}
           {squad.username && (
             <button
@@ -188,9 +188,8 @@ export const SquadScreen = ({ squad, onBack, onQuizSelect, onTestSelect }: Squad
             <button
               onClick={handleJoin}
               disabled={isJoining || !canChange}
-              className={`tg-button w-full flex items-center justify-center gap-2 ${
-                !canChange ? 'opacity-50' : ''
-              }`}
+              className={`tg-button w-full flex items-center justify-center gap-2 ${!canChange ? 'opacity-50' : ''
+                }`}
             >
               {isJoining ? (
                 <>Вступаем...</>

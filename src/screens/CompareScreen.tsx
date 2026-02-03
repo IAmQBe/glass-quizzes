@@ -11,12 +11,12 @@ interface CompareScreenProps {
   onBack: () => void;
 }
 
-export const CompareScreen = ({ 
-  userResult, 
-  friend, 
-  onInvite, 
-  onPostComparison, 
-  onBack 
+export const CompareScreen = ({
+  userResult,
+  friend,
+  onInvite,
+  onPostComparison,
+  onBack
 }: CompareScreenProps) => {
   const hasCompleted = friend?.hasCompleted ?? false;
   const userWins = hasCompleted && friend?.score !== undefined && userResult.score > friend.score;
@@ -92,11 +92,11 @@ export const CompareScreen = ({
                 <p className="text-sm text-muted-foreground mb-1">{friend.name}</p>
                 <p className="text-3xl font-bold text-foreground mb-1">{friend.score}</p>
                 <p className="text-xs text-muted-foreground">
-                  {friend.score !== undefined && friend.score > userResult.score 
-                    ? `+${friend.score - userResult.score}` 
+                  {friend.score !== undefined && friend.score > userResult.score
+                    ? `+${friend.score - userResult.score}`
                     : friend.score !== undefined && friend.score < userResult.score
-                    ? `-${userResult.score - friend.score}`
-                    : "Tied"
+                      ? `-${userResult.score - friend.score}`
+                      : "Tied"
                   }
                 </p>
               </>
