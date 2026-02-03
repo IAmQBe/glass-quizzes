@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trophy, Star, Crown, Medal, ArrowLeft, Swords, BookOpen, Award } from "lucide-react";
+import { Trophy, Star, Crown, Medal, ArrowLeft, Swords, BookOpen } from "lucide-react";
 import { haptic } from "@/lib/telegram";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
+import { toast } from "@/hooks/use-toast";
 
 type SortCategory = "trophies" | "challenges" | "quizzes" | "popcorns";
 
 interface LeaderEntry {
+  id: string;
   rank: number;
   username: string;
   score: number;
@@ -23,30 +25,30 @@ interface LeaderboardScreenProps {
 
 // Mock data - will be replaced with real data from backend
 const mockLeaderboard: LeaderEntry[] = [
-  { rank: 1, username: "BrainMaster", score: 9847, hasPremium: true, quizzesTaken: 156, challengeWins: 89, popcorns: 0, isCreator: false },
-  { rank: 2, username: "QuizKing", score: 9234, hasPremium: true, quizzesTaken: 142, challengeWins: 76, popcorns: 0, isCreator: false },
-  { rank: 3, username: "MindPro", score: 8956, hasPremium: false, quizzesTaken: 138, challengeWins: 72, popcorns: 0, isCreator: false },
-  { rank: 4, username: "TestGenius", score: 8721, hasPremium: true, quizzesTaken: 129, challengeWins: 65, popcorns: 0, isCreator: false },
-  { rank: 5, username: "SmartPlayer", score: 8543, hasPremium: false, quizzesTaken: 124, challengeWins: 58, popcorns: 0, isCreator: false },
-  { rank: 6, username: "QuizWizard", score: 8234, hasPremium: false, quizzesTaken: 118, challengeWins: 52, popcorns: 3240, isCreator: true },
-  { rank: 7, username: "BrainStorm", score: 7965, hasPremium: true, quizzesTaken: 112, challengeWins: 48, popcorns: 2890, isCreator: true },
-  { rank: 8, username: "MindMaster", score: 7654, hasPremium: false, quizzesTaken: 105, challengeWins: 41, popcorns: 0, isCreator: false },
-  { rank: 9, username: "TestPro", score: 7432, hasPremium: false, quizzesTaken: 98, challengeWins: 35, popcorns: 1560, isCreator: true },
-  { rank: 10, username: "QuizChamp", score: 7123, hasPremium: true, quizzesTaken: 94, challengeWins: 29, popcorns: 0, isCreator: false },
+  { id: "1", rank: 1, username: "BrainMaster", score: 9847, hasPremium: true, quizzesTaken: 156, challengeWins: 89, popcorns: 0, isCreator: false },
+  { id: "2", rank: 2, username: "QuizKing", score: 9234, hasPremium: true, quizzesTaken: 142, challengeWins: 76, popcorns: 0, isCreator: false },
+  { id: "3", rank: 3, username: "MindPro", score: 8956, hasPremium: false, quizzesTaken: 138, challengeWins: 72, popcorns: 0, isCreator: false },
+  { id: "4", rank: 4, username: "TestGenius", score: 8721, hasPremium: true, quizzesTaken: 129, challengeWins: 65, popcorns: 0, isCreator: false },
+  { id: "5", rank: 5, username: "SmartPlayer", score: 8543, hasPremium: false, quizzesTaken: 124, challengeWins: 58, popcorns: 0, isCreator: false },
+  { id: "6", rank: 6, username: "QuizWizard", score: 8234, hasPremium: false, quizzesTaken: 118, challengeWins: 52, popcorns: 3240, isCreator: true },
+  { id: "7", rank: 7, username: "BrainStorm", score: 7965, hasPremium: true, quizzesTaken: 112, challengeWins: 48, popcorns: 2890, isCreator: true },
+  { id: "8", rank: 8, username: "MindMaster", score: 7654, hasPremium: false, quizzesTaken: 105, challengeWins: 41, popcorns: 0, isCreator: false },
+  { id: "9", rank: 9, username: "TestPro", score: 7432, hasPremium: false, quizzesTaken: 98, challengeWins: 35, popcorns: 1560, isCreator: true },
+  { id: "10", rank: 10, username: "QuizChamp", score: 7123, hasPremium: true, quizzesTaken: 94, challengeWins: 29, popcorns: 0, isCreator: false },
 ];
 
 // Creator leaderboard mock data
 const mockCreatorLeaderboard: LeaderEntry[] = [
-  { rank: 1, username: "QuizMaster", score: 0, hasPremium: true, quizzesTaken: 45, challengeWins: 0, popcorns: 15420, isCreator: true },
-  { rank: 2, username: "BrainGenius", score: 0, hasPremium: true, quizzesTaken: 32, challengeWins: 0, popcorns: 12890, isCreator: true },
-  { rank: 3, username: "TestPro", score: 0, hasPremium: false, quizzesTaken: 28, challengeWins: 0, popcorns: 9540, isCreator: true },
-  { rank: 4, username: "MindExplorer", score: 0, hasPremium: true, quizzesTaken: 21, challengeWins: 0, popcorns: 8720, isCreator: true },
-  { rank: 5, username: "QuizNinja", score: 0, hasPremium: false, quizzesTaken: 19, challengeWins: 0, popcorns: 7650, isCreator: true },
-  { rank: 6, username: "BrainStorm", score: 0, hasPremium: false, quizzesTaken: 15, challengeWins: 0, popcorns: 6340, isCreator: true },
-  { rank: 7, username: "QuizWizard", score: 0, hasPremium: true, quizzesTaken: 12, challengeWins: 0, popcorns: 5890, isCreator: true },
-  { rank: 8, username: "TestKing", score: 0, hasPremium: false, quizzesTaken: 9, challengeWins: 0, popcorns: 4520, isCreator: true },
-  { rank: 9, username: "MindMaker", score: 0, hasPremium: false, quizzesTaken: 7, challengeWins: 0, popcorns: 3210, isCreator: true },
-  { rank: 10, username: "QuizPro", score: 0, hasPremium: true, quizzesTaken: 5, challengeWins: 0, popcorns: 2150, isCreator: true },
+  { id: "c1", rank: 1, username: "QuizMaster", score: 0, hasPremium: true, quizzesTaken: 45, challengeWins: 0, popcorns: 15420, isCreator: true },
+  { id: "c2", rank: 2, username: "BrainGenius", score: 0, hasPremium: true, quizzesTaken: 32, challengeWins: 0, popcorns: 12890, isCreator: true },
+  { id: "c3", rank: 3, username: "TestPro", score: 0, hasPremium: false, quizzesTaken: 28, challengeWins: 0, popcorns: 9540, isCreator: true },
+  { id: "c4", rank: 4, username: "MindExplorer", score: 0, hasPremium: true, quizzesTaken: 21, challengeWins: 0, popcorns: 8720, isCreator: true },
+  { id: "c5", rank: 5, username: "QuizNinja", score: 0, hasPremium: false, quizzesTaken: 19, challengeWins: 0, popcorns: 7650, isCreator: true },
+  { id: "c6", rank: 6, username: "BrainStorm", score: 0, hasPremium: false, quizzesTaken: 15, challengeWins: 0, popcorns: 6340, isCreator: true },
+  { id: "c7", rank: 7, username: "QuizWizard", score: 0, hasPremium: true, quizzesTaken: 12, challengeWins: 0, popcorns: 5890, isCreator: true },
+  { id: "c8", rank: 8, username: "TestKing", score: 0, hasPremium: false, quizzesTaken: 9, challengeWins: 0, popcorns: 4520, isCreator: true },
+  { id: "c9", rank: 9, username: "MindMaker", score: 0, hasPremium: false, quizzesTaken: 7, challengeWins: 0, popcorns: 3210, isCreator: true },
+  { id: "c10", rank: 10, username: "QuizPro", score: 0, hasPremium: true, quizzesTaken: 5, challengeWins: 0, popcorns: 2150, isCreator: true },
 ];
 
 const categories: { id: SortCategory; label: string; icon: React.ReactNode }[] = [
@@ -58,6 +60,7 @@ const categories: { id: SortCategory; label: string; icon: React.ReactNode }[] =
 
 export const LeaderboardScreen = ({ onBack }: LeaderboardScreenProps) => {
   const [sortBy, setSortBy] = useState<SortCategory>("trophies");
+  const [challengedUsers, setChallengedUsers] = useState<Set<string>>(new Set());
 
   const getSortedData = () => {
     if (sortBy === "popcorns") {
@@ -109,6 +112,26 @@ export const LeaderboardScreen = ({ onBack }: LeaderboardScreenProps) => {
       return (num / 1000).toFixed(1) + "K";
     }
     return num.toString();
+  };
+
+  const handleChallenge = (entry: LeaderEntry) => {
+    if (challengedUsers.has(entry.id)) {
+      toast({ title: "Кулдаун ⏳", description: "Подожди 1 час перед новым вызовом этому игроку" });
+      return;
+    }
+    
+    haptic.notification('success');
+    setChallengedUsers(prev => new Set(prev).add(entry.id));
+    toast({ title: `Вызов отправлен! ⚔️`, description: `${entry.username} получил ваш вызов` });
+    
+    // Reset cooldown after 1 hour (for demo, using 10 seconds)
+    setTimeout(() => {
+      setChallengedUsers(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(entry.id);
+        return newSet;
+      });
+    }, 10000); // 10 sec for demo, should be 3600000 for 1 hour
   };
 
   const sortedData = getSortedData();
@@ -290,9 +313,10 @@ export const LeaderboardScreen = ({ onBack }: LeaderboardScreenProps) => {
             >
               {rest.map((entry, index) => {
                 const display = getDisplayValue(entry);
+                const isChallenged = challengedUsers.has(entry.id);
                 return (
                   <motion.div
-                    key={`${sortBy}-${entry.username}`}
+                    key={`${sortBy}-${entry.id}`}
                     className="flex items-center gap-3 px-4 py-3"
                     initial={{ x: -20, opacity: 0 }}
                     animate={{ x: 0, opacity: 1 }}
@@ -323,11 +347,28 @@ export const LeaderboardScreen = ({ onBack }: LeaderboardScreenProps) => {
                       </span>
                     </div>
 
-                    <div className="text-right flex items-center gap-1">
-                      {sortBy === "popcorns" && <PopcornIcon className="w-4 h-4 text-primary" />}
-                      <span className="font-bold text-foreground">{formatNumber(display.value)}</span>
-                      {display.suffix && (
-                        <span className="text-xs text-muted-foreground">{display.suffix}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="text-right flex items-center gap-1">
+                        {sortBy === "popcorns" && <PopcornIcon className="w-4 h-4 text-primary" />}
+                        <span className="font-bold text-foreground">{formatNumber(display.value)}</span>
+                        {display.suffix && (
+                          <span className="text-xs text-muted-foreground">{display.suffix}</span>
+                        )}
+                      </div>
+                      
+                      {/* Challenge button - show in challenges category */}
+                      {sortBy === "challenges" && (
+                        <button
+                          onClick={() => handleChallenge(entry)}
+                          disabled={isChallenged}
+                          className={`p-1.5 rounded-lg transition-all ${
+                            isChallenged 
+                              ? "bg-muted text-muted-foreground" 
+                              : "bg-gradient-to-r from-amber-500 to-orange-500 text-white"
+                          }`}
+                        >
+                          <Swords className="w-4 h-4" />
+                        </button>
                       )}
                     </div>
                   </motion.div>

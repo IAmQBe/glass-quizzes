@@ -74,6 +74,62 @@ export type Database = {
         }
         Relationships: []
       }
+      challenges: {
+        Row: {
+          category: string | null
+          challenger_id: string
+          challenger_score: number | null
+          completed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          opponent_id: string
+          opponent_score: number | null
+          quiz_id: string | null
+          started_at: string | null
+          status: string
+          winner_id: string | null
+        }
+        Insert: {
+          category?: string | null
+          challenger_id: string
+          challenger_score?: number | null
+          completed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          opponent_id: string
+          opponent_score?: number | null
+          quiz_id?: string | null
+          started_at?: string | null
+          status?: string
+          winner_id?: string | null
+        }
+        Update: {
+          category?: string | null
+          challenger_id?: string
+          challenger_score?: number | null
+          completed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          opponent_id?: string
+          opponent_score?: number | null
+          quiz_id?: string | null
+          started_at?: string | null
+          status?: string
+          winner_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "challenges_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       favorites: {
         Row: {
           created_at: string
@@ -333,6 +389,65 @@ export type Database = {
         }
         Relationships: []
       }
+      pvp_rooms: {
+        Row: {
+          category: string | null
+          code: string
+          completed_at: string | null
+          created_at: string
+          current_question: number | null
+          guest_id: string | null
+          guest_score: number | null
+          host_id: string
+          host_score: number | null
+          id: string
+          quiz_id: string | null
+          started_at: string | null
+          status: string
+          winner_id: string | null
+        }
+        Insert: {
+          category?: string | null
+          code: string
+          completed_at?: string | null
+          created_at?: string
+          current_question?: number | null
+          guest_id?: string | null
+          guest_score?: number | null
+          host_id: string
+          host_score?: number | null
+          id?: string
+          quiz_id?: string | null
+          started_at?: string | null
+          status?: string
+          winner_id?: string | null
+        }
+        Update: {
+          category?: string | null
+          code?: string
+          completed_at?: string | null
+          created_at?: string
+          current_question?: number | null
+          guest_id?: string | null
+          guest_score?: number | null
+          host_id?: string
+          host_score?: number | null
+          id?: string
+          quiz_id?: string | null
+          started_at?: string | null
+          status?: string
+          winner_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pvp_rooms_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       questions: {
         Row: {
           correct_answer: number
@@ -556,6 +671,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_challenge_user: {
+        Args: { challenger: string; opponent: string }
+        Returns: boolean
+      }
+      generate_room_code: { Args: never; Returns: string }
       has_taken_quiz: {
         Args: { check_quiz_id: string; check_user_id: string }
         Returns: boolean
