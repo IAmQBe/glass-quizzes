@@ -186,9 +186,8 @@ export const QuizPreviewScreen = ({
               haptic.impact('light');
               onToggleLike?.();
             }}
-            className={`flex-1 tg-button-secondary flex items-center justify-center gap-2 ${
-              isLiked ? 'text-orange-500' : ''
-            }`}
+            className={`flex-1 tg-button-secondary flex items-center justify-center gap-2 ${isLiked ? 'text-orange-500' : ''
+              }`}
           >
             <PopcornIcon className={`w-5 h-5 ${isLiked ? 'fill-orange-500' : ''}`} />
             {quiz.like_count}
@@ -198,9 +197,8 @@ export const QuizPreviewScreen = ({
               haptic.impact('light');
               onToggleSave?.();
             }}
-            className={`flex-1 tg-button-secondary flex items-center justify-center gap-2 ${
-              isSaved ? 'text-primary' : ''
-            }`}
+            className={`flex-1 tg-button-secondary flex items-center justify-center gap-2 ${isSaved ? 'text-primary' : ''
+              }`}
           >
             <BookmarkIcon className={`w-5 h-5 ${isSaved ? 'fill-primary' : ''}`} />
             {quiz.save_count}

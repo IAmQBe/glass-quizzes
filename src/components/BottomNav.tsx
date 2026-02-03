@@ -57,8 +57,8 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
                 <div className="relative">
                   <tab.icon
                     className={`w-5 h-5 ${activeTab === tab.id && !isComingSoon(tab.id)
-                        ? "text-primary"
-                        : "text-muted-foreground"
+                      ? "text-primary"
+                      : "text-muted-foreground"
                       }`}
                   />
                   {isComingSoon(tab.id) && (
@@ -69,8 +69,8 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
                 </div>
                 <span
                   className={`text-[10px] mt-0.5 ${activeTab === tab.id && !isComingSoon(tab.id)
-                      ? "text-primary font-medium"
-                      : "text-muted-foreground"
+                    ? "text-primary font-medium"
+                    : "text-muted-foreground"
                     }`}
                 >
                   {tab.label}

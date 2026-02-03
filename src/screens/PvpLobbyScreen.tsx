@@ -110,7 +110,7 @@ export const PvpLobbyScreen = ({ onBack, onStartGame }: PvpLobbyScreenProps) => 
             exit={{ opacity: 0, y: -20 }}
           >
             {/* Create Room */}
-            <Card 
+            <Card
               className="overflow-hidden cursor-pointer hover:bg-secondary/50 transition-colors"
               onClick={handleCreateRoom}
             >
@@ -152,7 +152,7 @@ export const PvpLobbyScreen = ({ onBack, onStartGame }: PvpLobbyScreenProps) => 
                     className="text-center text-lg font-mono tracking-widest uppercase"
                     maxLength={6}
                   />
-                  <Button 
+                  <Button
                     onClick={handleJoinRoom}
                     disabled={joinCode.length !== 6 || joinRoom.isPending}
                   >
@@ -213,7 +213,7 @@ export const PvpLobbyScreen = ({ onBack, onStartGame }: PvpLobbyScreenProps) => 
                 <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
                   <Swords className="w-10 h-10 text-primary" />
                 </div>
-                
+
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">Код комнаты</p>
                   <div className="flex items-center justify-center gap-2">
@@ -244,8 +244,8 @@ export const PvpLobbyScreen = ({ onBack, onStartGame }: PvpLobbyScreenProps) => 
               </CardContent>
             </Card>
 
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="w-full"
               onClick={() => {
                 setLobbyState("menu");

@@ -69,9 +69,13 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
   };
 
   const handleShareReferral = () => {
-    if (profile?.referral_code) {
-      haptic.impact('medium');
-      shareReferralLink(profile.referral_code);
+    haptic.impact('medium');
+    // Use referral_code if available, otherwise use telegram_id
+    const code = profile?.referral_code || user?.id?.toString() || '';
+    if (code) {
+      shareReferralLink(code);
+    } else {
+      toast({ title: "Не удалось создать ссылку", variant: "destructive" });
     }
   };
 
@@ -449,10 +453,10 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                               </button>
                             )}
                             <span className={`text-xs px-2 py-1 rounded-full ${test.is_published
-                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                                : isPending
-                                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
-                                  : 'bg-secondary text-muted-foreground'
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                              : isPending
+                                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                                : 'bg-secondary text-muted-foreground'
                               }`}>
                               {test.is_published ? 'Live' : isPending ? 'На модерации' : 'Draft'}
                             </span>
@@ -607,10 +611,10 @@ const QuizListItem = ({ quiz, onClick, onEdit }: { quiz: any; onClick: () => voi
           )}
           <span
             className={`text-xs px-2 py-1 rounded-full ${quiz.is_published
-                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                : isPending
-                  ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-                  : "bg-secondary text-muted-foreground"
+              ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+              : isPending
+                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                : "bg-secondary text-muted-foreground"
               }`}
           >
             {quiz.is_published ? "Live" : isPending ? "На модерации" : "Draft"}

@@ -358,8 +358,8 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
           <button
             key={tab}
             className={`py-2 px-3 rounded-xl font-medium transition-colors whitespace-nowrap text-sm flex items-center gap-1 ${activeTab === tab
-                ? tab === "tests" ? "bg-purple-500 text-white" : "bg-primary text-primary-foreground"
-                : "bg-secondary text-foreground"
+              ? tab === "tests" ? "bg-purple-500 text-white" : "bg-primary text-primary-foreground"
+              : "bg-secondary text-foreground"
               }`}
             onClick={() => {
               haptic.selection();
@@ -431,8 +431,8 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                         key={d}
                         onClick={() => setNewQuiz({ ...newQuiz, duration_seconds: d })}
                         className={`flex-1 py-2 rounded-lg font-medium text-sm transition-colors ${newQuiz.duration_seconds === d
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-secondary text-foreground"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary text-foreground"
                           }`}
                       >
                         {d}s
@@ -501,8 +501,8 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                     </div>
                     <span
                       className={`text-xs px-2 py-1 rounded-full ${quiz.is_published
-                          ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                          : "bg-secondary text-muted-foreground"
+                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                        : "bg-secondary text-muted-foreground"
                         }`}
                     >
                       {quiz.is_published ? "Published" : "Draft"}
@@ -676,8 +676,8 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                     <button
                       onClick={() => setNewBanner({ ...newBanner, link_type: "internal" })}
                       className={`px-3 py-1 rounded-lg text-sm ${newBanner.link_type === "internal"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-secondary text-foreground"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-foreground"
                         }`}
                     >
                       Внутренняя
@@ -685,8 +685,8 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                     <button
                       onClick={() => setNewBanner({ ...newBanner, link_type: "external" })}
                       className={`px-3 py-1 rounded-lg text-sm ${newBanner.link_type === "external"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-secondary text-foreground"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-foreground"
                         }`}
                     >
                       Внешняя
@@ -845,8 +845,8 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                           </div>
                           <span
                             className={`text-xs px-2 py-1 rounded-full ${banner.is_active
-                                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                                : "bg-secondary text-muted-foreground"
+                              ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                              : "bg-secondary text-muted-foreground"
                               }`}
                           >
                             {banner.is_active ? "Active" : "Hidden"}

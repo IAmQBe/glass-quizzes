@@ -593,6 +593,12 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2026-02-03 | Draft editing | Редактирование драфтов в профиле (не для pending) | ProfileScreen, QuizListItem |
 | 2026-02-03 | Referral tracking v2 | refUserId в share links, улучшенный парсинг | telegram.ts, useCurrentProfile |
 | 2026-02-03 | useTracking hook | Трекинг событий и шаров | useTracking.ts |
+| 2026-02-03 | Quiz/Test Preview Screens | Экраны превью перед стартом с info, stats, creator, like/save | QuizPreviewScreen, PersonalityTestPreviewScreen |
+| 2026-02-03 | Bottom padding fix | pb-32 вместо pb-24 на всех экранах для BottomNav | All screens |
+| 2026-02-03 | Top tab active | Убран leaderboard из COMING_SOON_TABS | BottomNav |
+| 2026-02-03 | Separate queries for creator | Убраны JOINs, отдельные запросы для избежания RLS проблем | useQuizzes, usePersonalityTests |
+| 2026-02-03 | Improved shareReferralLink | Используем tg.openTelegramLink с share URL вместо switchInlineQuery | telegram.ts |
+| 2026-02-03 | Fallback referral code | Если нет referral_code, используем telegram_id | ProfileScreen |
 
 ## TODO / Backlog
 

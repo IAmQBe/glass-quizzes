@@ -53,27 +53,70 @@ export const usePublishedQuizzes = () => {
   return useQuery({
     queryKey: ["quizzes", "published"],
     queryFn: async (): Promise<Quiz[]> => {
-      const { data, error } = await supabase
+      // First, get quizzes
+      const { data: quizzes, error: quizError } = await supabase
         .from("quizzes")
-        .select(`
-          *,
-          creator:profiles (
+        .select("*")
+        .eq("is_published", true)
+        .order("created_at", { ascending: false });
+
+      if (quizError) {
+        console.error("Error fetching quizzes:", quizError);
+        throw quizError;
+      }
+
+      if (!quizzes || quizzes.length === 0) {
+        return [];
+      }
+
+      // Get unique creator IDs
+      const creatorIds = [...new Set(quizzes.map(q => q.created_by).filter(Boolean))];
+      
+      // Fetch creators separately
+      let creatorsMap: Record<string, CreatorInfo> = {};
+      if (creatorIds.length > 0) {
+        const { data: creators } = await supabase
+          .from("profiles")
+          .select(`
             id,
             first_name,
             username,
             avatar_url,
-            squad:squads (
-              id,
-              title,
-              username
-            )
-          )
-        `)
-        .eq("is_published", true)
-        .order("created_at", { ascending: false });
+            squad_id
+          `)
+          .in("id", creatorIds);
 
-      if (error) throw error;
-      return (data || []) as Quiz[];
+        if (creators) {
+          // Get squad info for creators who have squads
+          const squadIds = [...new Set(creators.map(c => c.squad_id).filter(Boolean))];
+          let squadsMap: Record<string, { id: string; title: string; username: string | null }> = {};
+          
+          if (squadIds.length > 0) {
+            const { data: squads } = await supabase
+              .from("squads")
+              .select("id, title, username")
+              .in("id", squadIds);
+            
+            if (squads) {
+              squadsMap = Object.fromEntries(squads.map(s => [s.id, s]));
+            }
+          }
+
+          creatorsMap = Object.fromEntries(creators.map(c => [c.id, {
+            id: c.id,
+            first_name: c.first_name,
+            username: c.username,
+            avatar_url: c.avatar_url,
+            squad: c.squad_id ? squadsMap[c.squad_id] || null : null,
+          }]));
+        }
+      }
+
+      // Merge quizzes with creators
+      return quizzes.map(quiz => ({
+        ...quiz,
+        creator: quiz.created_by ? creatorsMap[quiz.created_by] || null : null,
+      })) as Quiz[];
     },
   });
 };

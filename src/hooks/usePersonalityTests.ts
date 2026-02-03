@@ -102,27 +102,70 @@ export const usePublishedPersonalityTests = () => {
   return useQuery({
     queryKey: ["personalityTests", "published"],
     queryFn: async (): Promise<PersonalityTest[]> => {
-      const { data, error } = await supabase
+      // First, get tests
+      const { data: tests, error: testError } = await supabase
         .from("personality_tests")
-        .select(`
-          *,
-          creator:profiles (
+        .select("*")
+        .eq("is_published", true)
+        .order("created_at", { ascending: false });
+
+      if (testError) {
+        console.error("Error fetching personality tests:", testError);
+        throw testError;
+      }
+
+      if (!tests || tests.length === 0) {
+        return [];
+      }
+
+      // Get unique creator IDs
+      const creatorIds = [...new Set(tests.map(t => t.created_by).filter(Boolean))];
+      
+      // Fetch creators separately
+      let creatorsMap: Record<string, CreatorInfo> = {};
+      if (creatorIds.length > 0) {
+        const { data: creators } = await supabase
+          .from("profiles")
+          .select(`
             id,
             first_name,
             username,
             avatar_url,
-            squad:squads (
-              id,
-              title,
-              username
-            )
-          )
-        `)
-        .eq("is_published", true)
-        .order("created_at", { ascending: false });
+            squad_id
+          `)
+          .in("id", creatorIds);
 
-      if (error) throw error;
-      return (data || []) as PersonalityTest[];
+        if (creators) {
+          // Get squad info for creators who have squads
+          const squadIds = [...new Set(creators.map(c => c.squad_id).filter(Boolean))];
+          let squadsMap: Record<string, { id: string; title: string; username: string | null }> = {};
+          
+          if (squadIds.length > 0) {
+            const { data: squads } = await supabase
+              .from("squads")
+              .select("id, title, username")
+              .in("id", squadIds);
+            
+            if (squads) {
+              squadsMap = Object.fromEntries(squads.map(s => [s.id, s]));
+            }
+          }
+
+          creatorsMap = Object.fromEntries(creators.map(c => [c.id, {
+            id: c.id,
+            first_name: c.first_name,
+            username: c.username,
+            avatar_url: c.avatar_url,
+            squad: c.squad_id ? squadsMap[c.squad_id] || null : null,
+          }]));
+        }
+      }
+
+      // Merge tests with creators
+      return tests.map(test => ({
+        ...test,
+        creator: test.created_by ? creatorsMap[test.created_by] || null : null,
+      })) as PersonalityTest[];
     },
   });
 };

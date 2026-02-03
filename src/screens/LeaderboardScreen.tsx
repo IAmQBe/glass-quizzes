@@ -115,10 +115,10 @@ export const LeaderboardScreen = ({ onBack, onSquadSelect }: LeaderboardScreenPr
               key={tab.id}
               onClick={() => handleTabClick(tab.id, tab.active)}
               className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tab.id && tab.active
-                  ? "bg-primary text-primary-foreground"
-                  : tab.active
-                    ? "bg-secondary text-muted-foreground"
-                    : "bg-secondary/50 text-muted-foreground/50"
+                ? "bg-primary text-primary-foreground"
+                : tab.active
+                  ? "bg-secondary text-muted-foreground"
+                  : "bg-secondary/50 text-muted-foreground/50"
                 }`}
             >
               {tab.icon}

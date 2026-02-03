@@ -237,18 +237,29 @@ function fallbackShare(id: string, title: string, type: 'test' | 'quiz', refUser
 }
 
 // Share referral link to Telegram chat
-export const shareReferralLink = (referralCode: string, botUsername: string = 'MindTestBot') => {
+export const shareReferralLink = (referralCode: string, botUsername: string = 'QuipoBot') => {
   const tg = getTelegram();
-  const referralUrl = `https://t.me/${botUsername}?start=${referralCode}`;
-  const shareText = `🧠 Присоединяйся к Mind Test!\n\nПроходи тесты, соревнуйся с друзьями и узнай себя лучше!\n\n${referralUrl}`;
+  const referralUrl = `https://t.me/${botUsername}?start=ref_${referralCode}`;
+  const shareText = `🧠 Присоединяйся к Quipo!\n\nПроходи тесты, соревнуйся с друзьями и узнай себя лучше!`;
 
   if (tg) {
-    tg.switchInlineQuery(shareText, ['users', 'groups', 'channels']);
+    // Use share URL which opens Telegram's share dialog
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralUrl)}&text=${encodeURIComponent(shareText)}`;
+    
+    // Try openTelegramLink first (works in Mini Apps)
+    if (tg.openTelegramLink) {
+      tg.openTelegramLink(shareUrl);
+    } else if (tg.openLink) {
+      tg.openLink(shareUrl);
+    } else {
+      // Fallback to switchInlineQuery
+      tg.switchInlineQuery(`${shareText}\n\n${referralUrl}`, ['users', 'groups', 'channels']);
+    }
   } else {
     // Fallback for non-Telegram environment
     if (navigator.share) {
       navigator.share({
-        title: 'Mind Test',
+        title: 'Quipo - Quiz & Tests',
         text: shareText,
         url: referralUrl,
       });
