@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Trash2, Image, Clock, X } from "lucide-react";
-import { useCreateQuiz } from "@/hooks/useQuizzes";
+import { ArrowLeft, Plus, Trash2, Image, Clock, X, Upload, Loader2 } from "lucide-react";
+import { useCreateQuiz, useSubmitForReview } from "@/hooks/useQuizzes";
+import { useImageUpload, resizeImage } from "@/hooks/useImageUpload";
 import { haptic } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
 
@@ -27,8 +28,54 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
     options: ["", "", "", ""],
     correctAnswer: 0,
   });
+  
+  // Image upload state
+  const [coverImage, setCoverImage] = useState<File | null>(null);
+  const [coverImageUrl, setCoverImageUrl] = useState<string>("");
+  const [coverPreview, setCoverPreview] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const createQuiz = useCreateQuiz();
+  const submitForReview = useSubmitForReview();
+  const { uploadImage, isUploading, progress } = useImageUpload();
+
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      toast({ title: "Ошибка", description: "Используйте JPG, PNG, GIF или WebP" });
+      return;
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Ошибка", description: "Файл слишком большой (макс. 5MB)" });
+      return;
+    }
+
+    haptic.selection();
+    setCoverImage(file);
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setCoverPreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    haptic.selection();
+    setCoverImage(null);
+    setCoverPreview("");
+    setCoverImageUrl("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const handleBack = () => {
     haptic.selection();
@@ -69,28 +116,68 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      toast({ title: "Please enter a title" });
+      toast({ title: "Введите название" });
       return;
     }
 
     if (questions.length < 2) {
-      toast({ title: "Please add at least 2 questions" });
+      toast({ title: "Добавьте минимум 2 вопроса" });
       return;
     }
 
     haptic.impact("medium");
 
     try {
-      await createQuiz.mutateAsync({
+      // Step 1: Upload cover image if selected
+      let imageUrl = coverImageUrl;
+      if (coverImage && !imageUrl) {
+        toast({ title: "Загружаем обложку..." });
+        try {
+          // Resize image before upload for optimization
+          const resizedImage = await resizeImage(coverImage, 1200);
+          imageUrl = await uploadImage(resizedImage);
+          setCoverImageUrl(imageUrl);
+        } catch (uploadError) {
+          console.error("Image upload error:", uploadError);
+          toast({ title: "Ошибка загрузки изображения", description: "Попробуйте ещё раз" });
+          return;
+        }
+      }
+
+      // Step 2: Create quiz with status='pending'
+      const quiz = await createQuiz.mutateAsync({
         title,
         description,
+        image_url: imageUrl || undefined,
         duration_seconds: duration,
+        questions: questions.map(q => ({
+          text: q.text,
+          options: q.options,
+          correctAnswer: q.correctAnswer,
+        })),
       });
 
-      toast({ title: "Quiz created!", description: "Your quiz is now in drafts" });
+      // Step 3: Submit for review (notify admins)
+      try {
+        await submitForReview.mutateAsync(quiz.id);
+      } catch (reviewError) {
+        console.error("Submit for review error:", reviewError);
+        // Quiz created, but notification failed - not critical
+      }
+
+      haptic.notification("success");
+      toast({ 
+        title: "Квиз создан! 🎉", 
+        description: "Отправлен на модерацию. Мы уведомим когда опубликуем." 
+      });
       onSuccess();
     } catch (error) {
-      toast({ title: "Error", description: "Failed to create quiz" });
+      console.error("Create quiz error:", error);
+      haptic.notification("error");
+      toast({ 
+        title: "Ошибка", 
+        description: "Не удалось создать квиз. Проверьте авторизацию." 
+      });
     }
   };
 
@@ -118,11 +205,10 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
           {["info", "questions", "preview"].map((s, i) => (
             <div
               key={s}
-              className={`flex-1 h-1 rounded-full ${
-                ["info", "questions", "preview"].indexOf(step) >= i
+              className={`flex-1 h-1 rounded-full ${["info", "questions", "preview"].indexOf(step) >= i
                   ? "bg-primary"
                   : "bg-secondary"
-              }`}
+                }`}
             />
           ))}
         </div>
@@ -177,11 +263,10 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                       haptic.selection();
                       setDuration(d);
                     }}
-                    className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
-                      duration === d
+                    className={`flex-1 py-2 rounded-lg font-medium transition-colors ${duration === d
                         ? "bg-primary text-primary-foreground"
                         : "bg-secondary text-foreground"
-                    }`}
+                      }`}
                   >
                     {d}s
                   </button>
@@ -193,12 +278,49 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
             <div className="tg-section p-4">
               <label className="text-sm font-medium text-foreground block mb-2">
                 <Image className="w-4 h-4 inline mr-1" />
-                Cover Image (optional)
+                Обложка (опционально)
               </label>
-              <button className="w-full py-8 border-2 border-dashed border-muted rounded-xl flex flex-col items-center gap-2 text-muted-foreground">
-                <Plus className="w-8 h-8" />
-                <span className="text-sm">Tap to upload</span>
-              </button>
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+              
+              {coverPreview ? (
+                <div className="relative rounded-xl overflow-hidden">
+                  <img 
+                    src={coverPreview} 
+                    alt="Preview" 
+                    className="w-full h-48 object-cover"
+                  />
+                  <button
+                    onClick={handleRemoveImage}
+                    className="absolute top-2 right-2 p-2 bg-background/80 backdrop-blur rounded-full text-destructive"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                  {isUploading && (
+                    <div className="absolute inset-0 bg-background/60 backdrop-blur flex items-center justify-center">
+                      <div className="text-center">
+                        <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto mb-2" />
+                        <p className="text-sm text-foreground">{progress}%</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full py-8 border-2 border-dashed border-muted rounded-xl flex flex-col items-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                >
+                  <Upload className="w-8 h-8" />
+                  <span className="text-sm">Нажмите для загрузки</span>
+                  <span className="text-xs">JPG, PNG, GIF, WebP до 5MB</span>
+                </button>
+              )}
             </div>
 
             <button
@@ -282,11 +404,10 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                             correctAnswer: index,
                           });
                         }}
-                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-                          currentQuestion.correctAnswer === index
+                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${currentQuestion.correctAnswer === index
                             ? "border-green-500 bg-green-500"
                             : "border-muted"
-                        }`}
+                          }`}
                       >
                         {currentQuestion.correctAnswer === index && (
                           <span className="text-white text-xs">✓</span>
@@ -343,14 +464,23 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
             initial={{ x: 20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
           >
-            <div className="tg-section p-4">
-              <h2 className="text-xl font-bold text-foreground mb-2">{title}</h2>
-              {description && (
-                <p className="text-muted-foreground mb-4">{description}</p>
+            <div className="tg-section overflow-hidden">
+              {coverPreview && (
+                <img 
+                  src={coverPreview} 
+                  alt={title} 
+                  className="w-full h-40 object-cover"
+                />
               )}
-              <div className="flex gap-4 text-sm text-muted-foreground">
-                <span>{questions.length} questions</span>
-                <span>{duration}s per question</span>
+              <div className="p-4">
+                <h2 className="text-xl font-bold text-foreground mb-2">{title}</h2>
+                {description && (
+                  <p className="text-muted-foreground mb-4">{description}</p>
+                )}
+                <div className="flex gap-4 text-sm text-muted-foreground">
+                  <span>{questions.length} вопросов</span>
+                  <span>{duration}с на вопрос</span>
+                </div>
               </div>
             </div>
 
@@ -367,11 +497,10 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                         {q.options.map((opt, optIndex) => (
                           <div
                             key={optIndex}
-                            className={`px-3 py-2 rounded-lg text-sm ${
-                              optIndex === q.correctAnswer
+                            className={`px-3 py-2 rounded-lg text-sm ${optIndex === q.correctAnswer
                                 ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
                                 : "bg-secondary text-foreground"
-                            }`}
+                              }`}
                           >
                             {opt}
                           </div>
@@ -384,11 +513,19 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
             </div>
 
             <button
-              className="tg-button w-full"
+              className="tg-button w-full flex items-center justify-center gap-2"
               onClick={handleSubmit}
-              disabled={createQuiz.isPending}
+              disabled={createQuiz.isPending || isUploading}
             >
-              {createQuiz.isPending ? "Creating..." : "Create Quiz"}
+              {(createQuiz.isPending || isUploading) && (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              )}
+              {isUploading 
+                ? "Загружаем изображение..." 
+                : createQuiz.isPending 
+                  ? "Создаём квиз..." 
+                  : "Создать и отправить на модерацию"
+              }
             </button>
           </motion.div>
         )}

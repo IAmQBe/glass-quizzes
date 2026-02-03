@@ -3,9 +3,10 @@ import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { validateInitData, parseStartParam, type InitData } from '../lib/telegram.js';
-import { getQuizById, getPublishedQuizzes, getDailyQuiz } from '../lib/supabase.js';
+import { getQuizById, getPublishedQuizzes, getDailyQuiz, updateQuizStatus, getProfileByTelegramId } from '../lib/supabase.js';
 import { bot } from '../bot/index.js';
 import { analytics } from './analytics.js';
+import { notifyAdminsNewQuiz, notifyAuthorModerationResult } from '../bot/notifications.js';
 
 const app = new Hono();
 
@@ -173,6 +174,55 @@ app.post('/api/shares', authMiddleware, async (c) => {
   });
   
   return c.json({ success: true });
+});
+
+/**
+ * Submit quiz for review (notifies admins)
+ */
+app.post('/api/quizzes/submit-for-review', authMiddleware, async (c) => {
+  const initData = c.get('initData');
+  const body = await c.req.json();
+  const { quizId } = body;
+  
+  if (!quizId) {
+    return c.json({ error: 'quizId is required' }, 400);
+  }
+  
+  try {
+    // Get quiz details
+    const quiz = await getQuizById(quizId);
+    if (!quiz) {
+      return c.json({ error: 'Quiz not found' }, 404);
+    }
+    
+    // Get author info
+    const user = initData.user;
+    if (!user) {
+      return c.json({ error: 'User not found' }, 400);
+    }
+    
+    // Send notification to admins
+    await notifyAdminsNewQuiz({
+      quizId: quiz.id,
+      title: quiz.title,
+      description: quiz.description || undefined,
+      questionCount: quiz.question_count || 0,
+      authorId: user.id,
+      authorName: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
+      authorUsername: user.username,
+    });
+    
+    console.log('Quiz submitted for review:', {
+      quizId,
+      authorId: user.id,
+      timestamp: new Date().toISOString(),
+    });
+    
+    return c.json({ success: true, message: 'Quiz submitted for review' });
+  } catch (error) {
+    console.error('Submit for review error:', error);
+    return c.json({ error: 'Failed to submit for review' }, 500);
+  }
 });
 
 // ==================

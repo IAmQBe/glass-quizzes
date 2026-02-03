@@ -8,107 +8,72 @@
 /* Following Telegram's theme parameters and iOS native feel */
 
 @layer base {
+  /* LIGHT THEME (default) - explicit values, no CSS var indirection */
   :root {
-    /* Telegram Light Theme - Native Colors */
-    --tg-theme-bg-color: 0 0% 100%;
-    --tg-theme-secondary-bg-color: 210 20% 96%;
-    --tg-theme-text-color: 0 0% 0%;
-    --tg-theme-hint-color: 0 0% 50%;
-    --tg-theme-link-color: 211 100% 50%;
-    --tg-theme-button-color: 211 100% 50%;
-    --tg-theme-button-text-color: 0 0% 100%;
-    --tg-theme-accent-text-color: 211 100% 50%;
-    --tg-theme-destructive-text-color: 0 79% 55%;
-    --tg-theme-section-bg-color: 0 0% 100%;
-    --tg-theme-section-header-text-color: 211 100% 50%;
-    --tg-theme-subtitle-text-color: 0 0% 50%;
-    --tg-theme-separator-color: 0 0% 90%;
-
-    /* Map to shadcn variables */
-    --background: var(--tg-theme-secondary-bg-color);
-    --foreground: var(--tg-theme-text-color);
-
-    --card: var(--tg-theme-section-bg-color);
-    --card-foreground: var(--tg-theme-text-color);
-
-    --popover: var(--tg-theme-section-bg-color);
-    --popover-foreground: var(--tg-theme-text-color);
-
-    --primary: var(--tg-theme-button-color);
-    --primary-foreground: var(--tg-theme-button-text-color);
-
-    --secondary: var(--tg-theme-secondary-bg-color);
-    --secondary-foreground: var(--tg-theme-text-color);
-
-    --muted: var(--tg-theme-secondary-bg-color);
-    --muted-foreground: var(--tg-theme-hint-color);
-
-    --accent: var(--tg-theme-accent-text-color);
-    --accent-foreground: var(--tg-theme-button-text-color);
-
-    --destructive: var(--tg-theme-destructive-text-color);
+    /* Core colors - LIGHT */
+    --background: 210 20% 96%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 211 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 211 100% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 79% 55%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: var(--tg-theme-separator-color);
-    --input: var(--tg-theme-separator-color);
-    --ring: var(--tg-theme-button-color);
-
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 211 100% 50%;
     --radius: 0.875rem;
 
-    /* Sidebar (required) */
-    --sidebar-background: var(--tg-theme-bg-color);
-    --sidebar-foreground: var(--tg-theme-text-color);
-    --sidebar-primary: var(--tg-theme-button-color);
-    --sidebar-primary-foreground: var(--tg-theme-button-text-color);
-    --sidebar-accent: var(--tg-theme-secondary-bg-color);
-    --sidebar-accent-foreground: var(--tg-theme-text-color);
-    --sidebar-border: var(--tg-theme-separator-color);
-    --sidebar-ring: var(--tg-theme-button-color);
+    /* Sidebar */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 211 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 20% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 211 100% 50%;
   }
 
-  /* Dark theme - Telegram dark mode */
+  /* DARK THEME - explicit values */
   .dark {
-    --tg-theme-bg-color: 210 11% 15%;
-    --tg-theme-secondary-bg-color: 210 11% 11%;
-    --tg-theme-text-color: 0 0% 100%;
-    --tg-theme-hint-color: 210 8% 56%;
-    --tg-theme-link-color: 211 89% 63%;
-    --tg-theme-button-color: 211 89% 63%;
-    --tg-theme-button-text-color: 0 0% 100%;
-    --tg-theme-accent-text-color: 211 89% 63%;
-    --tg-theme-destructive-text-color: 0 79% 55%;
-    --tg-theme-section-bg-color: 210 11% 15%;
-    --tg-theme-section-header-text-color: 211 89% 63%;
-    --tg-theme-subtitle-text-color: 210 8% 56%;
-    --tg-theme-separator-color: 210 11% 22%;
-
-    --background: var(--tg-theme-secondary-bg-color);
-    --foreground: var(--tg-theme-text-color);
-    --card: var(--tg-theme-section-bg-color);
-    --card-foreground: var(--tg-theme-text-color);
-    --popover: var(--tg-theme-section-bg-color);
-    --popover-foreground: var(--tg-theme-text-color);
-    --primary: var(--tg-theme-button-color);
-    --primary-foreground: var(--tg-theme-button-text-color);
-    --secondary: var(--tg-theme-secondary-bg-color);
-    --secondary-foreground: var(--tg-theme-text-color);
-    --muted: var(--tg-theme-secondary-bg-color);
-    --muted-foreground: var(--tg-theme-hint-color);
-    --accent: var(--tg-theme-accent-text-color);
-    --accent-foreground: var(--tg-theme-button-text-color);
-    --destructive: var(--tg-theme-destructive-text-color);
+    --background: 217 33% 17%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 63% 31%;
     --destructive-foreground: 0 0% 100%;
-    --border: var(--tg-theme-separator-color);
-    --input: var(--tg-theme-separator-color);
-    --ring: var(--tg-theme-button-color);
-    --sidebar-background: var(--tg-theme-bg-color);
-    --sidebar-foreground: var(--tg-theme-text-color);
-    --sidebar-primary: var(--tg-theme-button-color);
-    --sidebar-primary-foreground: var(--tg-theme-button-text-color);
-    --sidebar-accent: var(--tg-theme-secondary-bg-color);
-    --sidebar-accent-foreground: var(--tg-theme-text-color);
-    --sidebar-border: var(--tg-theme-separator-color);
-    --sidebar-ring: var(--tg-theme-button-color);
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
+
+    /* Sidebar */
+    --sidebar-background: 222 47% 11%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 217 33% 17%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 217 91% 60%;
   }
 }
 
@@ -120,14 +85,50 @@
   html {
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
+    /* Prevent Telegram from overriding colors */
+    color-scheme: light dark;
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply font-sans antialiased;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
     overscroll-behavior: none;
     user-select: none;
     -webkit-user-select: none;
+    /* Explicit background and text colors */
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    /* Hide scrollbar globally */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  body::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Force colors on root element too */
+  #root {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    min-height: 100vh;
+    /* Hide scrollbar */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  #root::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hide all scrollbars globally for mobile-native feel */
+  *::-webkit-scrollbar {
+    display: none;
+  }
+
+  * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }
 
@@ -241,5 +242,14 @@
 
   .safe-top {
     padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari, Opera */
   }
 }

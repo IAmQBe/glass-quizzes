@@ -41,6 +41,10 @@ interface TelegramWebApp {
   isExpanded: boolean;
   viewportHeight: number;
   viewportStableHeight: number;
+  disableVerticalSwipes?: () => void;
+  enableVerticalSwipes?: () => void;
+  enableClosingConfirmation?: () => void;
+  disableClosingConfirmation?: () => void;
   MainButton: {
     text: string;
     color: string;
@@ -104,7 +108,7 @@ export const getTelegramUser = (): TelegramUser | null => {
 export const getTelegramUserData = () => {
   const user = getTelegramUser();
   if (!user) return null;
-  
+
   return {
     telegram_id: user.id,
     username: user.username || null,
@@ -133,7 +137,7 @@ export const shareResult = (score: number, percentile: number, verdict: string) 
   if (tg) {
     // Use switchInlineQuery for sharing
     const shareText = `🧠 My score: ${score}/100 (Top ${percentile}%)\n${verdict}\n\nCan you beat me?`;
-    
+
     // Try to share via inline mode or open a share link
     tg.switchInlineQuery(shareText, ['users', 'groups', 'channels']);
   }
@@ -152,7 +156,7 @@ export const shareReferralLink = (referralCode: string, botUsername: string = 'M
   const tg = getTelegram();
   const referralUrl = `https://t.me/${botUsername}?start=${referralCode}`;
   const shareText = `🧠 Присоединяйся к Mind Test!\n\nПроходи тесты, соревнуйся с друзьями и узнай себя лучше!\n\n${referralUrl}`;
-  
+
   if (tg) {
     tg.switchInlineQuery(shareText, ['users', 'groups', 'channels']);
   } else {
@@ -169,32 +173,41 @@ export const shareReferralLink = (referralCode: string, botUsername: string = 'M
   }
 };
 
+
 // Initialize Telegram WebApp
 export const initTelegramApp = () => {
   const tg = getTelegram();
   if (tg) {
     // Tell Telegram the app is ready
     tg.ready();
-    
+
     // Expand to full height
     tg.expand();
-    
-    // Apply color scheme
-    if (tg.colorScheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+
+    // Disable vertical swipe to close (lock the Mini App)
+    if (typeof tg.disableVerticalSwipes === 'function') {
+      tg.disableVerticalSwipes();
     }
-    
-    // Set header and background colors
-    if (tg.themeParams.bg_color) {
-      tg.setHeaderColor(tg.themeParams.bg_color);
-      tg.setBackgroundColor(tg.themeParams.secondary_bg_color || tg.themeParams.bg_color);
+
+    // Enable closing confirmation (optional safety)
+    if (typeof tg.enableClosingConfirmation === 'function') {
+      tg.enableClosingConfirmation();
     }
-    
+
+    // NOTE: Theme is managed by useTheme hook only
+    // We don't apply Telegram themeParams because they override CSS and break theme switching
+    // This prevents conflicts between initTelegramApp and useTheme
+
     return true;
   }
+
   return false;
+};
+
+// Get Telegram color scheme (for useTheme)
+export const getTelegramColorScheme = (): 'light' | 'dark' => {
+  const tg = getTelegram();
+  return tg?.colorScheme === 'dark' ? 'dark' : 'light';
 };
 
 // Main Button helpers

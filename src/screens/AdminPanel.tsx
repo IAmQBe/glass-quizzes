@@ -30,6 +30,8 @@ const TASK_ICONS = ["🎯", "📢", "👥", "🎁", "⭐", "🔔", "💎", "🏆
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
   const [activeTab, setActiveTab] = useState<Tab>("analytics");
   const [showNewTask, setShowNewTask] = useState(false);
+  const [showNewQuiz, setShowNewQuiz] = useState(false);
+  const [showNewBanner, setShowNewBanner] = useState(false);
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -37,6 +39,20 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     task_type: "link",
     action_url: "",
     icon: "🎯",
+  });
+  const [newQuiz, setNewQuiz] = useState({
+    title: "",
+    description: "",
+    duration_seconds: 60,
+    is_published: false,
+  });
+  const [newBanner, setNewBanner] = useState({
+    title: "",
+    description: "",
+    image_url: "",
+    link_url: "",
+    link_type: "external" as "external" | "internal",
+    is_active: true,
   });
   const queryClient = useQueryClient();
 
@@ -159,6 +175,67 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     },
   });
 
+  // Create quiz
+  const createQuiz = useMutation({
+    mutationFn: async (quiz: typeof newQuiz) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from("quizzes")
+        .insert({
+          title: quiz.title,
+          description: quiz.description || null,
+          duration_seconds: quiz.duration_seconds,
+          is_published: quiz.is_published,
+          created_by: user?.id || null,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["quizzes"] });
+      toast({ title: "Quiz created! 🎉" });
+      setShowNewQuiz(false);
+      setNewQuiz({ title: "", description: "", duration_seconds: 60, is_published: false });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  // Create banner
+  const createBanner = useMutation({
+    mutationFn: async (banner: typeof newBanner) => {
+      const { data, error } = await supabase
+        .from("banners")
+        .insert({
+          title: banner.title,
+          description: banner.description || null,
+          image_url: banner.image_url,
+          link_url: banner.link_url || null,
+          link_type: banner.link_type,
+          is_active: banner.is_active,
+          display_order: banners.length,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "banners"] });
+      queryClient.invalidateQueries({ queryKey: ["banners"] });
+      toast({ title: "Banner created! 🎨" });
+      setShowNewBanner(false);
+      setNewBanner({ title: "", description: "", image_url: "", link_url: "", link_type: "external", is_active: true });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleBack = () => {
     haptic.selection();
     onBack();
@@ -251,6 +328,104 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
 
         {activeTab === "quizzes" && (
           <>
+            {/* Add Quiz Button */}
+            <button
+              className="w-full tg-section p-4 flex items-center justify-center gap-2 text-primary font-medium"
+              onClick={() => {
+                haptic.selection();
+                setShowNewQuiz(!showNewQuiz);
+              }}
+            >
+              <Plus className="w-5 h-5" />
+              Создать квиз
+            </button>
+
+            {/* New Quiz Form */}
+            {showNewQuiz && (
+              <motion.div
+                className="tg-section p-4 space-y-4"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+              >
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">Название *</label>
+                  <Input
+                    value={newQuiz.title}
+                    onChange={(e) => setNewQuiz({ ...newQuiz, title: e.target.value })}
+                    placeholder="Как хорошо ты знаешь React?"
+                    className="bg-secondary border-0"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">Описание</label>
+                  <Input
+                    value={newQuiz.description}
+                    onChange={(e) => setNewQuiz({ ...newQuiz, description: e.target.value })}
+                    placeholder="Проверь свои знания"
+                    className="bg-secondary border-0"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">Время на вопрос (сек)</label>
+                  <div className="flex gap-2">
+                    {[10, 15, 20, 30, 60].map((d) => (
+                      <button
+                        key={d}
+                        onClick={() => setNewQuiz({ ...newQuiz, duration_seconds: d })}
+                        className={`flex-1 py-2 rounded-lg font-medium text-sm transition-colors ${
+                          newQuiz.duration_seconds === d
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-secondary text-foreground"
+                        }`}
+                      >
+                        {d}s
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Опубликовать сразу</span>
+                  <Switch
+                    checked={newQuiz.is_published}
+                    onCheckedChange={(checked) => setNewQuiz({ ...newQuiz, is_published: checked })}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 tg-button py-3"
+                    onClick={() => {
+                      if (!newQuiz.title.trim()) {
+                        toast({ title: "Введите название", variant: "destructive" });
+                        return;
+                      }
+                      createQuiz.mutate(newQuiz);
+                    }}
+                    disabled={createQuiz.isPending}
+                  >
+                    {createQuiz.isPending ? (
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                    ) : (
+                      "Создать"
+                    )}
+                  </button>
+                  <button
+                    className="tg-button-secondary py-3 px-4"
+                    onClick={() => setShowNewQuiz(false)}
+                  >
+                    Отмена
+                  </button>
+                </div>
+
+                <p className="text-xs text-muted-foreground text-center">
+                  💡 После создания добавьте вопросы через редактирование
+                </p>
+              </motion.div>
+            )}
+
             {quizzesLoading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-6 h-6 text-primary animate-spin" />
@@ -319,6 +494,127 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
 
         {activeTab === "banners" && (
           <>
+            {/* Add Banner Button */}
+            <button
+              className="w-full tg-section p-4 flex items-center justify-center gap-2 text-primary font-medium"
+              onClick={() => {
+                haptic.selection();
+                setShowNewBanner(!showNewBanner);
+              }}
+            >
+              <Plus className="w-5 h-5" />
+              Добавить баннер
+            </button>
+
+            {/* New Banner Form */}
+            {showNewBanner && (
+              <motion.div
+                className="tg-section p-4 space-y-4"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+              >
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">Заголовок *</label>
+                  <Input
+                    value={newBanner.title}
+                    onChange={(e) => setNewBanner({ ...newBanner, title: e.target.value })}
+                    placeholder="Новый квиз недели!"
+                    className="bg-secondary border-0"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">Описание</label>
+                  <Input
+                    value={newBanner.description}
+                    onChange={(e) => setNewBanner({ ...newBanner, description: e.target.value })}
+                    placeholder="Проверь себя"
+                    className="bg-secondary border-0"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">URL изображения *</label>
+                  <Input
+                    value={newBanner.image_url}
+                    onChange={(e) => setNewBanner({ ...newBanner, image_url: e.target.value })}
+                    placeholder="https://..."
+                    className="bg-secondary border-0"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">Ссылка</label>
+                  <Input
+                    value={newBanner.link_url}
+                    onChange={(e) => setNewBanner({ ...newBanner, link_url: e.target.value })}
+                    placeholder="https://..."
+                    className="bg-secondary border-0"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Тип ссылки</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setNewBanner({ ...newBanner, link_type: "internal" })}
+                      className={`px-3 py-1 rounded-lg text-sm ${
+                        newBanner.link_type === "internal"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary text-foreground"
+                      }`}
+                    >
+                      Внутренняя
+                    </button>
+                    <button
+                      onClick={() => setNewBanner({ ...newBanner, link_type: "external" })}
+                      className={`px-3 py-1 rounded-lg text-sm ${
+                        newBanner.link_type === "external"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary text-foreground"
+                      }`}
+                    >
+                      Внешняя
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Активен</span>
+                  <Switch
+                    checked={newBanner.is_active}
+                    onCheckedChange={(checked) => setNewBanner({ ...newBanner, is_active: checked })}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 tg-button py-3"
+                    onClick={() => {
+                      if (!newBanner.title.trim() || !newBanner.image_url.trim()) {
+                        toast({ title: "Заполните обязательные поля", variant: "destructive" });
+                        return;
+                      }
+                      createBanner.mutate(newBanner);
+                    }}
+                    disabled={createBanner.isPending}
+                  >
+                    {createBanner.isPending ? (
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                    ) : (
+                      "Создать"
+                    )}
+                  </button>
+                  <button
+                    className="tg-button-secondary py-3 px-4"
+                    onClick={() => setShowNewBanner(false)}
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
             {bannersLoading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-6 h-6 text-primary animate-spin" />
@@ -647,22 +943,6 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
           </>
         )}
       </div>
-      {/* Add Button */}
-      {activeTab !== "seasons" && activeTab !== "analytics" && activeTab !== "tasks" && (
-        <button
-          className="tg-button mt-4 flex items-center justify-center gap-2"
-          onClick={() => {
-            haptic.impact('medium');
-            toast({
-              title: "Coming soon",
-              description: `Create ${activeTab === "quizzes" ? "quiz" : "banner"} form will be added`,
-            });
-          }}
-        >
-          <Plus className="w-5 h-5" />
-          Add {activeTab === "quizzes" ? "Quiz" : "Banner"}
-        </button>
-      )}
     </motion.div>
   );
 };

@@ -1,27 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { getTelegramUser } from "@/lib/telegram";
+
+// Admin IDs from env
+const ADMIN_TELEGRAM_IDS = (import.meta.env.VITE_ADMIN_TELEGRAM_IDS || "")
+  .split(",")
+  .map((id: string) => parseInt(id.trim(), 10))
+  .filter((id: number) => !isNaN(id));
 
 export const useIsAdmin = () => {
   return useQuery({
     queryKey: ["isAdmin"],
     queryFn: async (): Promise<boolean> => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return false;
+      const tgUser = getTelegramUser();
+      if (!tgUser) return false;
 
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "admin")
-        .maybeSingle();
-
-      if (error) {
-        console.error("Error checking admin status:", error);
-        return false;
-      }
-
-      return !!data;
+      // Check if Telegram user ID is in admin list
+      return ADMIN_TELEGRAM_IDS.includes(tgUser.id);
     },
+    staleTime: Infinity, // Admin status doesn't change
   });
 };
 

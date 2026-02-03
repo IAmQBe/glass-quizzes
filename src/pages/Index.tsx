@@ -9,6 +9,7 @@ import { useBanners } from "@/hooks/useBanners";
 import { usePublishedQuizzes, useQuizWithQuestions } from "@/hooks/useQuizzes";
 import { useFavoriteIds, useToggleFavorite } from "@/hooks/useFavorites";
 import { useLikeIds, useToggleLike } from "@/hooks/useLikes";
+import { useUserStats } from "@/hooks/useUserStats";
 import { QuizScreen } from "@/screens/QuizScreen";
 import { ResultScreen } from "@/screens/ResultScreen";
 import { CompareScreen } from "@/screens/CompareScreen";
@@ -41,14 +42,14 @@ const Index = () => {
   const { data: likeIds = new Set() } = useLikeIds();
   const toggleSave = useToggleFavorite();
   const toggleLike = useToggleLike();
-  
+
   const [currentScreen, setCurrentScreen] = useState<AppScreen>("home");
   const [activeTab, setActiveTab] = useState<TabId>("home");
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
-  
+
   const [quizTab, setQuizTab] = useState<QuizTab>("trending");
   const [sortBy, setSortBy] = useState<SortType>("popular");
   const [searchQuery, setSearchQuery] = useState("");
@@ -71,11 +72,21 @@ const Index = () => {
   };
 
   useEffect(() => {
-    initTelegramApp();
-    const userData = getTelegramUserData();
-    if (userData) {
-      console.log("Telegram user data:", userData);
-    }
+    const init = async () => {
+      initTelegramApp();
+      const userData = getTelegramUserData();
+      if (userData) {
+        console.log("Telegram user data:", userData);
+      }
+
+      // Initialize anonymous session for Supabase operations
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        await supabase.auth.signInAnonymously();
+      }
+    };
+    init();
   }, []);
 
   useEffect(() => {
@@ -183,14 +194,17 @@ const Index = () => {
     toggleLike.mutate({ quizId, isLiked });
   };
 
+  // Fetch real user stats from database
+  const { data: fetchedStats } = useUserStats();
+  
   const userStats: UserStats = {
-    bestScore: result?.score ?? 0,
-    testsCompleted: 1,
-    globalRank: 12847,
-    activeChallenges: 0,
+    bestScore: fetchedStats?.bestScore ?? result?.score ?? 0,
+    testsCompleted: fetchedStats?.testsCompleted ?? 0,
+    globalRank: fetchedStats?.globalRank ?? 0,
+    activeChallenges: fetchedStats?.activeChallenges ?? 0,
   };
 
-  const filteredQuizzes = quizzes.filter(quiz => 
+  const filteredQuizzes = quizzes.filter(quiz =>
     quiz.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     quiz.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -288,11 +302,10 @@ const Index = () => {
                 transition={{ delay: 0.14 }}
               >
                 <button
-                  className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${
-                    quizTab === "trending"
+                  className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${quizTab === "trending"
                       ? "bg-primary text-primary-foreground"
                       : "bg-secondary text-foreground"
-                  }`}
+                    }`}
                   onClick={() => {
                     haptic.selection();
                     setQuizTab("trending");
@@ -302,11 +315,10 @@ const Index = () => {
                   Trending
                 </button>
                 <button
-                  className={`flex-1 py-2.5 rounded-xl font-medium transition-colors ${
-                    quizTab === "all"
+                  className={`flex-1 py-2.5 rounded-xl font-medium transition-colors ${quizTab === "all"
                       ? "bg-primary text-primary-foreground"
                       : "bg-secondary text-foreground"
-                  }`}
+                    }`}
                   onClick={() => {
                     haptic.selection();
                     setQuizTab("all");
@@ -362,18 +374,17 @@ const Index = () => {
                           haptic.selection();
                           setSortBy(sort);
                         }}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
-                          sortBy === sort
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${sortBy === sort
                             ? "bg-primary text-primary-foreground"
                             : "bg-secondary text-muted-foreground"
-                        }`}
+                          }`}
                       >
                         {sort === "popular" && <><PopcornIcon className="w-3 h-3" /> Лайки</>}
                         {sort === "saves" && <><BookmarkIcon className="w-3 h-3" /> Saves</>}
                         {sort === "newest" && "✨ Новые"}
                       </button>
                     ))}
-                    
+
                     {!searchOpen && (
                       <button
                         onClick={() => {
@@ -403,8 +414,8 @@ const Index = () => {
                       {searchQuery ? "Ничего не найдено" : "Нет квизов"}
                     </h3>
                     <p className="text-sm text-muted-foreground mb-4">
-                      {searchQuery 
-                        ? "Попробуй изменить поисковый запрос" 
+                      {searchQuery
+                        ? "Попробуй изменить поисковый запрос"
                         : "Стань первым создателем квиза!"}
                     </p>
                     {!searchQuery && (

@@ -2,12 +2,254 @@
 
 > **Single source of truth** — все архитектурные решения, изменения API/схемы БД фиксируются здесь.
 
+---
+
+## 🗺️ PROJECT MAP (Карта проекта)
+
+### Архитектура
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    TELEGRAM MINI APP                            │
+├─────────────────────────────────────────────────────────────────┤
+│  User opens Mini App via:                                       │
+│  - Direct link (t.me/QuipoBot/app)                              │
+│  - Inline button in chat                                        │
+│  - Bot /start command                                           │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    FRONTEND (Vite + React)                      │
+│                    https://quipobot.netlify.app                 │
+├─────────────────────────────────────────────────────────────────┤
+│  Entry: src/main.tsx → App.tsx → pages/Index.tsx                │
+│                                                                 │
+│  Screens:            Components:          Hooks:                │
+│  ├── Home            ├── BottomNav        ├── useQuizzes        │
+│  ├── QuizScreen      ├── QuizCard         ├── useBanners        │
+│  ├── ResultScreen    ├── BannerCarousel   ├── useTheme ⚠️       │
+│  ├── ProfileScreen   ├── TasksBlock       ├── usePvp            │
+│  ├── AdminPanel      ├── ui/* (shadcn)    ├── useTasks          │
+│  └── PvpLobbyScreen  └── icons/*          └── useAuth           │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    SUPABASE (PostgreSQL + RLS)                  │
+│                    wyiwdhtefbnjdrdbgaas.supabase.co             │
+├─────────────────────────────────────────────────────────────────┤
+│  Tables:                                                        │
+│  ├── profiles         ← User data (telegram_id)                 │
+│  ├── quizzes          ← Quiz metadata                           │
+│  ├── questions        ← Questions with options JSONB            │
+│  ├── quiz_results     ← Completed attempts                      │
+│  ├── banners          ← Promotional banners                     │
+│  ├── tasks            ← Admin tasks with rewards                │
+│  ├── pvp_rooms        ← Real-time PvP                           │
+│  └── verdicts         ← Score→verdict mapping                   │
+└────────────────────────┬────────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    SERVER (Node.js + TypeScript)                │
+│                    server/src/index.ts (port 3001)              │
+├─────────────────────────────────────────────────────────────────┤
+│  Bot: grammY                  API: Hono                         │
+│  ├── /start command           ├── GET /api/quizzes              │
+│  ├── Inline mode              ├── POST /api/attempts            │
+│  └── Webhook handler          └── Admin routes                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Точки входа
+
+| Entry Point | File | Description |
+|-------------|------|-------------|
+| **Frontend** | `src/main.tsx` | React app bootstrap |
+| **App Root** | `src/App.tsx` | React Query + Router setup |
+| **Main Page** | `src/pages/Index.tsx` | Screen manager, state machine |
+| **Server** | `server/src/index.ts` | Hono API + grammY bot |
+| **Bot** | `server/src/bot/index.ts` | Telegram bot handlers |
+| **Styles** | `src/index.css` | CSS variables + tg-* classes |
+
+### Поток данных
+
+```
+User action → React state → useQuery/useMutation → Supabase RLS → PostgreSQL
+                                ↓
+                         React Query cache
+                                ↓
+                         UI update (optimistic)
+```
+
+---
+
+## 🚀 КАК ЗАПУСТИТЬ
+
+### 1. Локальный запуск Frontend
+```bash
+cd glass-quizzes
+npm install
+npm run dev                    # http://localhost:5173
+```
+
+### 2. Локальный запуск Server (Bot + API)
+```bash
+npm run server:install         # Install server deps
+npm run server                 # http://localhost:3001
+```
+
+### 3. Локальная БД (опционально)
+```bash
+npm run db:up                  # Start PostgreSQL via Docker
+npm run db:down                # Stop
+npm run db:logs                # View logs
+```
+
+### 4. Тесты и линтер
+```bash
+npm run test                   # Vitest (run once)
+npm run test:watch             # Watch mode
+npm run lint                   # ESLint
+```
+
+### 5. Сборка и деплой
+```bash
+npm run build                  # Build to /dist
+npx netlify deploy --prod --dir=dist --site=0ebc8ded-38e2-450f-81f2-5b9ff8969dbe
+```
+
+---
+
+## ⚙️ КОНФИГИ И СЕКРЕТЫ
+
+| File | Purpose |
+|------|---------|
+| `.env` | **Секреты** (gitignored) — создать из `.env.example` |
+| `.env.example` | Шаблон переменных |
+| `VITE_*` | Доступны во фронтенде |
+| `SUPABASE_SERVICE_KEY` | Только для сервера (RLS bypass) |
+| `ADMIN_TELEGRAM_IDS` | ID админов (server + frontend) |
+| `VITE_ADMIN_TELEGRAM_IDS` | ID админов для фронта |
+
+### Критические ENV переменные
+```bash
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_PUBLISHABLE_KEY=...
+TELEGRAM_BOT_TOKEN=...
+VITE_ADMIN_TELEGRAM_IDS=47284045
+```
+
+---
+
+## 🎨 ДИЗАЙН-СИСТЕМА (КРИТИЧЕСКИ ВАЖНО!)
+
+### ⚠️ Почему дизайн ломается
+
+1. **Inline стили перезаписывают CSS классы** — НЕ использовать `style.setProperty()`
+2. **`applyTelegramTheme()` УБРАН** — ломал переключение тем
+3. **useTheme — ЕДИНСТВЕННЫЙ источник** для dark/light mode
+4. **Hardcoded colors** — ЗАПРЕЩЕНЫ (`bg-white`, `text-black`)
+5. **CSS var indirection УБРАН** — вместо `--background: var(--tg-theme-...)` используем прямые HSL значения
+
+### Файлы дизайн-системы
+
+| File | What it controls |
+|------|------------------|
+| `src/index.css` | CSS переменные `:root` и `.dark`, tg-* классы |
+| `tailwind.config.ts` | Цвета, шрифты, анимации, радиусы |
+| `.cursorrules` | AI rules для Cursor |
+| `DESIGN_SYSTEM.md` | Полная документация |
+
+### Как работает тема
+
+```
+1. При загрузке: useTheme.ts → getInitialTheme() → applyThemeToDOM() (ДО React)
+2. При переключении: toggleTheme() → localStorage + classList.add/remove('dark')
+3. CSS: :root = light (прямые HSL значения), .dark = dark (прямые HSL значения)
+4. initTelegramApp() НЕ ТРОГАЕТ тему
+5. body/root используют background-color: hsl(var(--background)) вместо Tailwind класса
+```
+
+### Правильные цвета (семантические токены)
+
+```tsx
+// ✅ ПРАВИЛЬНО
+<div className="bg-background text-foreground">
+<div className="bg-card text-card-foreground">
+<div className="bg-secondary text-secondary-foreground">
+<div className="text-muted-foreground">
+
+// ❌ НЕПРАВИЛЬНО (сломает тему)
+<div className="bg-white text-black">
+<div className="bg-[#ffffff]">
+```
+
+### State colors (с dark mode)
+
+```tsx
+// Success
+className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200"
+
+// Warning
+className="bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200"
+
+// Error
+className="bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200"
+```
+
+### Custom tg-* классы
+
+```tsx
+.tg-section     // Card with shadow
+.tg-cell        // List item (44px)
+.tg-button      // Primary button
+.tg-button-secondary
+.tg-option      // Quiz answer
+.tg-progress    // Progress bar
+```
+
+---
+
+## 📦 ДОМЕННЫЕ СУЩНОСТИ
+
+### Frontend Types (`src/types/quiz.ts`)
+- `Question` — вопрос с опциями
+- `QuizResult` — результат (score, percentile, verdict)
+- `UserStats` — статистика пользователя
+- `Friend` — друг для сравнения
+
+### Database Tables (Supabase)
+- `profiles` — пользователи (telegram_id)
+- `quizzes` — квизы (title, is_published, like_count)
+- `questions` — вопросы (options JSONB, correct_answer)
+- `quiz_results` — результаты
+- `banners` — баннеры
+- `tasks` — задания с наградами
+- `pvp_rooms` — PvP комнаты
+- `verdicts` — вердикты по score
+
+---
+
+## ❌ ЧТО ОТСУТСТВУЕТ В РЕПОЗИТОРИИ
+
+1. **Тестовые данные в Supabase** — нужно выполнить `supabase/seed_data.sql`
+2. **Типы Supabase** — `src/integrations/supabase/types.ts` может быть устаревшим
+3. **E2E тесты** — только unit test example
+4. **CI/CD** — нет GitHub Actions
+5. **Monitoring** — нет Sentry/PostHog интеграции
+6. **Rate limiting** — не реализовано на сервере
+
+---
+
 ## Project Overview
 
 **Glass Quizzes** — Viral Quiz/Quest для Telegram с inline-вызовом в чатах и Mini App для прохождения.
 
 - **Repo**: IAmQBe/glass-quizzes
 - **UI Source**: Lovable.dev (Liquid Glass design — НЕ ПЕРЕПИСЫВАТЬ)
+- **Deploy**: https://quipobot.netlify.app
 
 ## Tech Stack
 
@@ -244,6 +486,26 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2024-02-03 | Tasks replace Leaderboard preview | More engaging, earn rewards | TasksBlock |
 | 2024-02-03 | Referral system | Growth through referrals, profiles.referral_code | ProfileScreen |
 | 2024-02-03 | Challenge cooldown (1h) | Prevent spam, can_challenge_user RPC function | usePvp |
+| 2024-02-03 | Telegram themeParams sync | Fix UI colors in Mini App by syncing Telegram colors to CSS vars | `telegram.ts` |
+| 2024-02-03 | disableVerticalSwipes | Prevent accidental close of Mini App | `initTelegramApp()` |
+| 2024-02-03 | BottomNav backdrop-blur | Glass effect, prevent content overlap | BottomNav |
+| 2024-02-03 | useTheme respects localStorage | User-selected theme persists, system=Telegram theme | useTheme |
+| 2024-02-03 | Admin by Telegram ID | VITE_ADMIN_TELEGRAM_IDS env var, no DB table needed | useIsAdmin |
+| 2024-02-03 | Anonymous Supabase auth | signInAnonymously() for DB operations without Telegram auth | Index.tsx |
+| 2024-02-03 | Full Admin CRUD | Create quizzes, banners, tasks directly in AdminPanel | AdminPanel |
+| 2024-02-03 | useTheme единственный источник | Убрал управление темой из initTelegramApp, оставил только в useTheme | useTheme.ts, telegram.ts |
+| 2024-02-03 | Тема применяется до React | applyThemeToDOM() вызывается на уровне модуля | useTheme.ts |
+| 2024-02-03 | Seed data SQL | Тестовые квизы, вопросы, вердикты, баннеры, таски | supabase/seed_data.sql |
+| 2024-02-03 | Убрали applyTelegramTheme | Inline стили ломали переключение темы | telegram.ts |
+| 2024-02-03 | Explicit CSS values | Убрали CSS var indirection, прямые HSL значения | index.css |
+| 2024-02-03 | Profile stats compact | grid-cols-4 gap-1.5, text-base, whitespace-nowrap | ProfileScreen.tsx |
+| 2024-02-03 | Rank без toLocaleString | Убрал пробелы в числе для компактности | ProfileScreen.tsx |
+| 2024-02-03 | Quiz moderation system | status field (draft/pending/published/rejected), admin notifications via bot | migrations, API, bot |
+| 2024-02-03 | Image upload for quizzes | Supabase Storage bucket 'quiz-images', useImageUpload hook | CreateQuizScreen |
+| 2024-02-03 | Real leaderboard | RPC functions get_leaderboard_by_*, useLeaderboard hook | LeaderboardScreen |
+| 2024-02-03 | Real user stats | RPC function get_user_stats, useUserStats hook | Index.tsx, ProfileScreen |
+| 2024-02-03 | Bot moderation handlers | approve_quiz/reject_quiz callbacks, notifyAdmins, notifyAuthor | server/bot/ |
+| 2024-02-03 | CreatorsScreen real data | Replaced mock data with useLeaderboard('popcorns') | CreatorsScreen |
 
 ## TODO / Backlog
 
@@ -327,6 +589,18 @@ See `.env.example` for required variables.
 3. **Стиль** — Liquid Glass (прозрачность, blur, градиенты) уже в Tailwind конфиге
 4. **Анимации** — использовать framer-motion как в существующих экранах
 5. **Haptic feedback** — вызывать `haptic.*` на все интерактивные элементы
+6. **BottomNav** — backdrop-blur + bg-background/80 для glass эффекта
+7. **Mini App locked** — disableVerticalSwipes() предотвращает случайное закрытие
+
+### Тема (ВАЖНО!)
+1. **useTheme** — ЕДИНСТВЕННЫЙ источник правды для dark/light mode
+2. **initTelegramApp** — НЕ трогает тему вообще (только ready/expand/disableSwipes)
+3. **НЕ используем applyTelegramTheme** — inline стили ломают переключение тем
+4. **localStorage["theme"]** — хранит выбор пользователя ("light" | "dark")
+5. **По умолчанию** — светлая тема (light)
+6. **При загрузке** — тема применяется ДО рендера React (в useTheme.ts на уровне модуля)
+7. **toggleTheme()** — переключает между light и dark, сохраняет в localStorage
+8. **CSS классы** — `:root` для light, `.dark` для dark — единственный источник цветов
 
 ### Код и архитектура
 1. **Решения → CLAUDE.md → Код** — сначала запись, потом реализация
@@ -382,6 +656,18 @@ See `.env.example` for required variables.
 2. **Tracking**: referrals таблица (referrer_id → referred_id)
 3. **Stats**: useReferralCount для отображения в профиле
 4. **Share**: copyReferralLink через telegram.ts
+
+### Deployment
+1. **Frontend**: Netlify — https://quipobot.netlify.app
+2. **Bot**: Local dev (polling) / Production (webhook на /api/bot/webhook)
+3. **Database**: Supabase — wyiwdhtefbnjdrdbgaas.supabase.co
+4. **Build**: `npm run build` → `npx netlify deploy --prod --dir=dist --site=0ebc8ded-38e2-450f-81f2-5b9ff8969dbe`
+
+### Design System Files
+1. **`.cursorrules`** — AI rules for Cursor (styling, components, patterns)
+2. **`DESIGN_SYSTEM.md`** — Full design system documentation
+3. **`src/index.css`** — CSS variables and Telegram theme
+4. **`tailwind.config.ts`** — Tailwind config with colors and animations
 
 ---
 

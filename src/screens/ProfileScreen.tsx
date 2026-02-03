@@ -33,7 +33,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
   const { data: referralCount = 0 } = useReferralCount();
   const updateProfile = useUpdateProfile();
   const { isDark, toggleTheme } = useTheme();
-  
+
   const [activeTab, setActiveTab] = useState<TabType>("my");
   const [sortBy, setSortBy] = useState<FilterType>("date");
   const [copied, setCopied] = useState(false);
@@ -64,8 +64,8 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
   const handleToggleNotifications = () => {
     if (profile) {
       haptic.selection();
-      updateProfile.mutate({ 
-        challenge_notifications_enabled: !profile.challenge_notifications_enabled 
+      updateProfile.mutate({
+        challenge_notifications_enabled: !profile.challenge_notifications_enabled
       });
     }
   };
@@ -73,7 +73,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
   const statItems = [
     { icon: Trophy, label: "Best", value: stats.bestScore, color: "text-yellow-500" },
     { icon: Target, label: "Tests", value: stats.testsCompleted, color: "text-primary" },
-    { icon: Globe, label: "Rank", value: `#${stats.globalRank.toLocaleString()}`, color: "text-green-500" },
+    { icon: Globe, label: "Rank", value: `#${stats.globalRank}`, color: "text-green-500" },
     { icon: Swords, label: "Challenges", value: stats.activeChallenges, color: "text-purple-500" },
   ];
 
@@ -134,7 +134,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
 
         {/* Stats Grid */}
         <motion.div
-          className="grid grid-cols-4 gap-2"
+          className="grid grid-cols-4 gap-1.5"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
@@ -142,14 +142,14 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
           {statItems.map((item, index) => (
             <motion.div
               key={item.label}
-              className="tg-stat"
+              className="tg-stat px-1 py-3"
               initial={{ y: 15, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.2 + index * 0.05 }}
             >
-              <item.icon className={`w-5 h-5 mx-auto mb-2 ${item.color}`} />
-              <p className="text-lg font-bold text-foreground">{item.value}</p>
-              <p className="text-[10px] text-muted-foreground">{item.label}</p>
+              <item.icon className={`w-5 h-5 mx-auto mb-1.5 ${item.color}`} />
+              <p className="text-base font-bold text-foreground whitespace-nowrap">{item.value}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{item.label}</p>
             </motion.div>
           ))}
         </motion.div>
@@ -168,7 +168,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
               {referralCount} приглашений
             </span>
           </div>
-          
+
           {profile?.referral_code ? (
             <div className="flex gap-2">
               <div className="flex-1 bg-secondary rounded-lg px-3 py-2 font-mono text-sm text-foreground truncate">
@@ -279,11 +279,10 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
           transition={{ delay: 0.35 }}
         >
           <button
-            className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${
-              activeTab === "my"
+            className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${activeTab === "my"
                 ? "bg-primary text-primary-foreground"
                 : "bg-secondary text-foreground"
-            }`}
+              }`}
             onClick={() => {
               haptic.selection();
               setActiveTab("my");
@@ -293,11 +292,10 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
             Мои ({myQuizzes.length})
           </button>
           <button
-            className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${
-              activeTab === "saved"
+            className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${activeTab === "saved"
                 ? "bg-primary text-primary-foreground"
                 : "bg-secondary text-foreground"
-            }`}
+              }`}
             onClick={() => {
               haptic.selection();
               setActiveTab("saved");
@@ -316,11 +314,10 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
             animate={{ opacity: 1 }}
           >
             <button
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                sortBy === "date"
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-colors ${sortBy === "date"
                   ? "bg-primary/10 text-primary"
                   : "bg-secondary text-muted-foreground"
-              }`}
+                }`}
               onClick={() => {
                 haptic.selection();
                 setSortBy("date");
@@ -330,11 +327,10 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
               Date
             </button>
             <button
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                sortBy === "popularity"
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-colors ${sortBy === "popularity"
                   ? "bg-primary/10 text-primary"
                   : "bg-secondary text-muted-foreground"
-              }`}
+                }`}
               onClick={() => {
                 haptic.selection();
                 setSortBy("popularity");
@@ -433,11 +429,10 @@ const QuizListItem = ({ quiz, onClick }: { quiz: any; onClick: () => void }) => 
         </div>
       </div>
       <span
-        className={`text-xs px-2 py-1 rounded-full ${
-          quiz.is_published
+        className={`text-xs px-2 py-1 rounded-full ${quiz.is_published
             ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
             : "bg-secondary text-muted-foreground"
-        }`}
+          }`}
       >
         {quiz.is_published ? "Live" : "Draft"}
       </span>

@@ -1,5 +1,6 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import { handleInlineQuery } from './handlers/inline.js';
+import { registerModerationHandlers } from './handlers/moderation.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -17,16 +18,34 @@ const MINI_APP_URL = process.env.VITE_MINI_APP_URL || 'https://t.me/YourBotUsern
  */
 bot.command('start', async (ctx) => {
   const startParam = ctx.match; // e.g., "quest_abc123_ref_456"
-  
-  const keyboard = new InlineKeyboard()
-    .webApp('🧠 Open Mind Test', `${MINI_APP_URL}${startParam ? `?startapp=${startParam}` : ''}`);
-  
-  await ctx.reply(
-    '👋 Welcome to Mind Test!\n\n' +
-    '🎯 Take quizzes, challenge friends, and climb the leaderboard.\n\n' +
-    'Tap the button below to start:',
-    { reply_markup: keyboard }
-  );
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'QuipoBot';
+
+  // Check if MINI_APP_URL is a real HTTPS URL (not a t.me link)
+  const isRealUrl = MINI_APP_URL.startsWith('https://') && !MINI_APP_URL.includes('t.me');
+
+  if (isRealUrl) {
+    // Use webApp button with real URL
+    const keyboard = new InlineKeyboard()
+      .webApp('🧠 Open Mind Test', `${MINI_APP_URL}${startParam ? `?startapp=${startParam}` : ''}`);
+
+    await ctx.reply(
+      '👋 Welcome to Mind Test!\n\n' +
+      '🎯 Take quizzes, challenge friends, and climb the leaderboard.\n\n' +
+      'Tap the button below to start:',
+      { reply_markup: keyboard }
+    );
+  } else {
+    // No deployed app yet - use URL button with deep link
+    const keyboard = new InlineKeyboard()
+      .url('🧠 Open Mind Test', `https://t.me/${botUsername}/app${startParam ? `?startapp=${startParam}` : ''}`);
+
+    await ctx.reply(
+      '👋 Welcome to Mind Test!\n\n' +
+      '🎯 Take quizzes, challenge friends, and climb the leaderboard.\n\n' +
+      'Tap the button below to start:',
+      { reply_markup: keyboard }
+    );
+  }
 });
 
 /**
@@ -54,11 +73,16 @@ bot.command('help', async (ctx) => {
 bot.on('inline_query', handleInlineQuery);
 
 /**
- * Handle callback queries from inline buttons
+ * Register moderation handlers (approve/reject quiz callbacks)
+ */
+registerModerationHandlers(bot);
+
+/**
+ * Handle other callback queries from inline buttons
  */
 bot.on('callback_query:data', async (ctx) => {
   const data = ctx.callbackQuery.data;
-  
+
   if (data.startsWith('quiz_')) {
     const quizId = data.replace('quiz_', '');
     // Could show quiz preview or stats
@@ -81,7 +105,7 @@ bot.catch((err) => {
  */
 export async function startBot() {
   console.log('🤖 Starting Telegram bot...');
-  
+
   // Use long polling in development
   if (process.env.NODE_ENV !== 'production') {
     bot.start({
