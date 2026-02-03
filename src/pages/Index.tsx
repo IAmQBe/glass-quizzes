@@ -17,17 +17,18 @@ import { AdminPanel } from "@/screens/AdminPanel";
 import { LeaderboardScreen } from "@/screens/LeaderboardScreen";
 import { CreateQuizScreen } from "@/screens/CreateQuizScreen";
 import { CreatorsScreen } from "@/screens/CreatorsScreen";
+import { PvpLobbyScreen } from "@/screens/PvpLobbyScreen";
 import { toast } from "@/hooks/use-toast";
 import { UserStats, QuizResult } from "@/types/quiz";
 import { initTelegramApp, backButton, isTelegramWebApp, shareResult, getTelegramUserData } from "@/lib/telegram";
 import { calculateResult } from "@/data/quizData";
-import { TrendingUp, Sparkles, Search, X } from "lucide-react";
+import { TrendingUp, Sparkles, Search, X, Swords } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Input } from "@/components/ui/input";
 import { haptic } from "@/lib/telegram";
 
-type AppScreen = "home" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery";
+type AppScreen = "home" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp";
 type TabId = "home" | "gallery" | "create" | "leaderboard" | "profile";
 type QuizTab = "trending" | "all";
 type SortType = "popular" | "saves" | "newest";
@@ -56,7 +57,6 @@ const Index = () => {
   const [answers, setAnswers] = useState<number[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
   
-  // New state
   const [quizTab, setQuizTab] = useState<QuizTab>("trending");
   const [sortBy, setSortBy] = useState<SortType>("popular");
   const [searchQuery, setSearchQuery] = useState("");
@@ -65,7 +65,6 @@ const Index = () => {
 
   const { data: quizData } = useQuizWithQuestions(selectedQuizId);
 
-  // Check onboarding status
   useEffect(() => {
     const onboardingCompleted = localStorage.getItem("onboarding_completed");
     if (!onboardingCompleted) {
@@ -79,18 +78,14 @@ const Index = () => {
     haptic.notification('success');
   };
 
-  // Initialize Telegram WebApp and sync user data
   useEffect(() => {
     initTelegramApp();
-    
-    // Get Telegram user data for profile sync
     const userData = getTelegramUserData();
     if (userData) {
       console.log("Telegram user data:", userData);
     }
   }, []);
 
-  // Handle Telegram back button
   useEffect(() => {
     if (!isTelegramWebApp()) return;
 
@@ -109,6 +104,9 @@ const Index = () => {
           setCurrentScreen("home");
           setSelectedQuizId(null);
           setResult(null);
+        } else if (currentScreen === "pvp") {
+          setCurrentScreen("home");
+          setActiveTab("home");
         } else {
           setCurrentScreen("home");
           setActiveTab("home");
@@ -123,7 +121,6 @@ const Index = () => {
     };
   }, [currentScreen, result]);
 
-  // Handle tab changes
   const handleTabChange = (tab: TabId) => {
     if (tab === "create") {
       setCurrentScreen("create");
@@ -201,7 +198,6 @@ const Index = () => {
     activeChallenges: 0,
   };
 
-  // Filter and sort quizzes
   const filteredQuizzes = quizzes.filter(quiz => 
     quiz.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     quiz.description?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -220,12 +216,10 @@ const Index = () => {
     }
   });
 
-  // Trending: top by likes
   const trendingQuizzes = [...quizzes]
     .sort((a, b) => ((b as any).like_count ?? 0) - ((a as any).like_count ?? 0))
     .slice(0, 10);
 
-  // Map quiz data questions to the format expected by QuizScreen
   const mappedQuestions = quizData?.questions?.map((q, i) => ({
     id: i + 1,
     text: q.question_text,
@@ -235,7 +229,6 @@ const Index = () => {
   const showBottomNav = ["home", "gallery", "leaderboard", "profile"].includes(currentScreen);
   const displayQuizzes = quizTab === "trending" ? trendingQuizzes : sortedQuizzes;
 
-  // Show onboarding
   if (showOnboarding) {
     return <OnboardingCarousel onComplete={handleOnboardingComplete} />;
   }
@@ -255,13 +248,24 @@ const Index = () => {
               {/* Header */}
               <div className="flex items-center justify-between py-2">
                 <h1 className="text-xl font-bold text-foreground">Mind Test</h1>
-                <div className="flex items-center gap-1 bg-primary/10 px-3 py-1.5 rounded-full">
-                  <PopcornIcon className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-medium text-primary">12.5K</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      haptic.impact('medium');
+                      setCurrentScreen("pvp");
+                    }}
+                    className="p-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
+                  >
+                    <Swords className="w-5 h-5" />
+                  </button>
+                  <div className="flex items-center gap-1 bg-primary/10 px-3 py-1.5 rounded-full">
+                    <PopcornIcon className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-medium text-primary">12.5K</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Banner Carousel - Compact */}
+              {/* Banner Carousel */}
               <motion.div
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -338,7 +342,6 @@ const Index = () => {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                 >
-                  {/* Search bar (expandable) */}
                   <AnimatePresence>
                     {searchOpen && (
                       <motion.div
@@ -370,7 +373,6 @@ const Index = () => {
                     )}
                   </AnimatePresence>
 
-                  {/* Sort chips */}
                   <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                     {(["popular", "saves", "newest"] as const).map((sort) => (
                       <button
@@ -391,7 +393,6 @@ const Index = () => {
                       </button>
                     ))}
                     
-                    {/* Search button */}
                     {!searchOpen && (
                       <button
                         onClick={() => {
@@ -453,6 +454,19 @@ const Index = () => {
                 )}
               </motion.div>
             </motion.div>
+          )}
+
+          {currentScreen === "pvp" && (
+            <PvpLobbyScreen
+              key="pvp"
+              onBack={() => {
+                setCurrentScreen("home");
+                setActiveTab("home");
+              }}
+              onStartGame={(roomId, quizId) => {
+                console.log("Starting PvP game:", roomId, quizId);
+              }}
+            />
           )}
 
           {currentScreen === "gallery" && (
@@ -541,7 +555,6 @@ const Index = () => {
         </AnimatePresence>
       </div>
 
-      {/* Bottom Navigation */}
       {showBottomNav && (
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
       )}
