@@ -223,13 +223,13 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 - [x] Add docker-compose.yml for local Postgres
 - [x] First commit
 
-### Milestone B: Bot + API Server (IN PROGRESS)
-- [ ] Create `server/` folder structure (bot + api)
-- [ ] Set up grammY bot with TypeScript
-- [ ] Implement inline query handler
-- [ ] Add initData validation middleware
-- [ ] Create verdicts table migration
-- [ ] Basic API endpoints
+### Milestone B: Bot + API Server ✅
+- [x] Create `server/` folder structure (bot + api)
+- [x] Set up grammY bot with TypeScript
+- [x] Implement inline query handler (daily/random/profile/search)
+- [x] Add initData validation middleware
+- [x] Create verdicts + shares tables migration
+- [x] Basic API endpoints (quizzes, auth, attempts, shares)
 
 ### Milestone C: Integrate UI with Real Data
 - [ ] Connect screens to API
