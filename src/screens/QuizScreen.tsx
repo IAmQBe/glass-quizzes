@@ -78,7 +78,7 @@ export const QuizScreen = ({ questions, currentQuestion, onAnswer }: QuizScreenP
                 className="tg-option w-full text-left touch-manipulation"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ 
+                transition={{
                   duration: 0.35,
                   delay: 0.15 + index * 0.08,
                   ease: [0.25, 0.46, 0.45, 0.94]

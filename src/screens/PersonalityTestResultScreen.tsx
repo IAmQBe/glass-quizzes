@@ -136,8 +136,13 @@ export const PersonalityTestResultScreen = ({
         {/* Share and Challenge in row */}
         <div className="flex gap-3">
           <button
+            type="button"
             className="tg-button-secondary flex-1 flex items-center justify-center gap-2"
-            onClick={handleShare}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleShare();
+            }}
           >
             <Share2 className="w-4 h-4" />
             Поделиться

@@ -299,18 +299,32 @@ export async function handleInlineQuery(ctx: Context) {
       const parts = rawQuery.split(':');
       if (parts.length >= 3) {
         const testId = parts[1];
-        const resultTitle = decodeURIComponent(parts.slice(2).join(':'));
+        const resultTitleRaw = decodeURIComponent(parts.slice(2).join(':')).trim();
 
         // Fetch test and result data
         const test = await getPersonalityTestById(testId);
         if (test) {
-          // Fetch the result
-          const { data: resultData } = await supabase
+          // Fetch the result: exact match first, then prefix match (for truncated title from share flow)
+          let resultData: { title: string; description?: string; image_url?: string } | null = null;
+          const { data: exact } = await supabase
             .from('personality_test_results')
             .select('*')
             .eq('test_id', testId)
-            .eq('title', resultTitle)
-            .single();
+            .eq('title', resultTitleRaw)
+            .maybeSingle();
+          if (exact) {
+            resultData = exact;
+          } else {
+            const { data: allResults } = await supabase
+              .from('personality_test_results')
+              .select('*')
+              .eq('test_id', testId);
+            const byPrefix = allResults?.find((r: { title: string }) =>
+              r.title.startsWith(resultTitleRaw) || resultTitleRaw.startsWith(r.title)
+            );
+            if (byPrefix) resultData = byPrefix;
+          }
+          const resultTitle = resultData?.title ?? resultTitleRaw;
 
           const startParam = buildStartParam({
             testId,
@@ -318,8 +332,8 @@ export async function handleInlineQuery(ctx: Context) {
             source: 'result_share',
           });
 
-          const resultImage = resultData?.image_url || test.image_url;
-          const resultDesc = resultData?.description || '';
+          const resultImage = resultData?.image_url ?? test.image_url;
+          const resultDesc = resultData?.description ?? '';
 
           // Get description without repeating the title
           // Split by sentences and skip if first sentence contains the result title
@@ -339,8 +353,6 @@ export async function handleInlineQuery(ctx: Context) {
           // Note: Telegram requires ID to be alphanumeric only (no dashes), max 64 chars
           const safeTestId = testId.replace(/-/g, '');
           const buttonUrl = buildDeepLink(startParam);
-          console.log('Inline share button URL:', buttonUrl);
-          console.log('startParam:', startParam);
 
           if (isValidImageUrl(resultImage)) {
             const photoResult: InlineQueryResultPhoto = {

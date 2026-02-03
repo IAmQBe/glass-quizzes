@@ -131,7 +131,7 @@ export const haptic = {
   },
 };
 
-// Share quiz result to chat
+// Share quiz result: use switchInlineQuery for 1-click sharing
 export const shareQuizResult = (
   quizId: string,
   quizTitle: string,
@@ -139,49 +139,25 @@ export const shareQuizResult = (
   totalQuestions: number,
   verdict?: string
 ) => {
-  const tg = getTelegram();
-  const botUsername = 'QuipoBot';
-  const percentage = Math.round((score / totalQuestions) * 100);
-
-  // Format: quiz_result:quizId:score:total:title - bot will parse this
-  const shareQuery = `quiz_result:${quizId}:${score}:${totalQuestions}:${encodeURIComponent(quizTitle)}`;
+  const tg = window.Telegram?.WebApp;
   
-  console.log('Sharing quiz result:', { quizId, score, totalQuestions, shareQuery, tgAvailable: !!tg });
-
-  if (tg) {
-    // Method 1: Try switchInlineQuery
-    if (typeof tg.switchInlineQuery === 'function') {
-      console.log('Using switchInlineQuery for quiz');
-      tg.switchInlineQuery(shareQuery, ['users', 'groups', 'channels']);
-      return;
-    }
-    
-    // Method 2: Try opening share URL directly
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(`https://t.me/${botUsername}/app?startapp=quest_${quizId}`)}&text=${encodeURIComponent(`🧠 ${quizTitle}\n✅ Мой результат: ${score}/${totalQuestions} (${percentage}%)\nСможешь лучше? 👇`)}`;
-    
-    if (typeof tg.openTelegramLink === 'function') {
-      tg.openTelegramLink(shareUrl);
-      return;
-    }
-    
-    if (typeof tg.openLink === 'function') {
-      tg.openLink(shareUrl);
-      return;
-    }
-  }
+  // Format: quiz_result:quizId:score:total:title (inline handler expects this)
+  const titlePart = quizTitle.slice(0, 20).replace(/:/g, ' ');
+  const inlineQuery = `quiz_result:${quizId}:${score}:${totalQuestions}:${encodeURIComponent(titlePart)}`;
   
-  // Fallback
-  const shareUrl = `https://t.me/${botUsername}/app?startapp=quest_${quizId}`;
-  if (navigator.share) {
-    navigator.share({
-      title: `🧠 ${quizTitle}`,
-      text: `✅ Мой результат: ${score}/${totalQuestions} (${percentage}%)\nСможешь лучше?`,
-      url: shareUrl,
-    }).catch(() => {
-      navigator.clipboard?.writeText(`🧠 ${quizTitle}\n✅ ${score}/${totalQuestions}\n${shareUrl}`);
-    });
-  } else if (navigator.clipboard) {
-    navigator.clipboard.writeText(`🧠 ${quizTitle}\n✅ ${score}/${totalQuestions}\n${shareUrl}`);
+  console.log('[Share Quiz] Attempting switchInlineQuery:', inlineQuery);
+  
+  if (tg?.switchInlineQuery) {
+    try {
+      tg.switchInlineQuery(inlineQuery, ['users', 'groups', 'channels']);
+      console.log('[Share Quiz] switchInlineQuery called successfully');
+    } catch (err) {
+      console.error('[Share Quiz] switchInlineQuery error:', err);
+      fallbackShare(quizId, titlePart, 'quiz');
+    }
+  } else {
+    console.log('[Share Quiz] switchInlineQuery not available, using fallback');
+    fallbackShare(quizId, titlePart, 'quiz');
   }
 };
 
@@ -202,62 +178,53 @@ export const challengeFriend = () => {
   }
 };
 
-// Share personality test result
+// Share personality test result: use switchInlineQuery for 1-click sharing
+// Opens chat selector directly, sends rich card with image + title + description + CTA
 export const sharePersonalityTestResult = (
   resultTitle: string,
   description: string,
   testId: string,
   testTitle?: string
 ) => {
-  const tg = getTelegram();
-  const botUsername = 'QuipoBot';
-
-  // Format: test_result:testId:resultTitle - bot will parse this  
-  const shareQuery = `test_result:${testId}:${encodeURIComponent(resultTitle)}`;
+  const tg = window.Telegram?.WebApp;
   
-  console.log('Sharing test result:', { resultTitle, testId, shareQuery, tgAvailable: !!tg });
-
-  if (tg) {
-    // Method 1: Try switchInlineQuery (opens chat picker with inline query)
-    if (typeof tg.switchInlineQuery === 'function') {
-      console.log('Using switchInlineQuery');
-      tg.switchInlineQuery(shareQuery, ['users', 'groups', 'channels']);
-      return;
-    }
-    
-    // Method 2: Try opening share URL directly
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(`https://t.me/${botUsername}/app?startapp=test_${testId}`)}&text=${encodeURIComponent(`🎭 Я — ${resultTitle}!\nА ты кто? Пройди тест 👇`)}`;
-    console.log('Using openTelegramLink:', shareUrl);
-    
-    if (typeof tg.openTelegramLink === 'function') {
-      tg.openTelegramLink(shareUrl);
-      return;
-    }
-    
-    // Method 3: Open link externally
-    if (typeof tg.openLink === 'function') {
-      tg.openLink(shareUrl);
-      return;
-    }
-  }
+  // Format: test_result:testId:resultTitle (inline handler expects this)
+  const titlePart = resultTitle.slice(0, 30).replace(/:/g, ' ');
+  const inlineQuery = `test_result:${testId}:${encodeURIComponent(titlePart)}`;
   
-  // Fallback for web browser or if Telegram methods fail
-  const shareUrl = `https://t.me/${botUsername}/app?startapp=test_${testId}_ref_share`;
-  console.log('Using fallback share');
+  console.log('[Share] Attempting switchInlineQuery:', inlineQuery);
   
-  if (navigator.share) {
-    navigator.share({
-      title: `🎭 Я — ${resultTitle}!`,
-      text: description,
-      url: shareUrl,
-    }).catch(() => {
-      // If share fails, copy to clipboard
-      navigator.clipboard?.writeText(`🎭 Я — ${resultTitle}!\nПройди тест: ${shareUrl}`);
-    });
-  } else if (navigator.clipboard) {
-    navigator.clipboard.writeText(`🎭 Я — ${resultTitle}!\nПройди тест: ${shareUrl}`);
+  if (tg?.switchInlineQuery) {
+    try {
+      // Opens chat selector directly - user picks chat, rich card is sent
+      tg.switchInlineQuery(inlineQuery, ['users', 'groups', 'channels']);
+      console.log('[Share] switchInlineQuery called successfully');
+    } catch (err) {
+      console.error('[Share] switchInlineQuery error:', err);
+      // Fallback: open bot with share parameter
+      fallbackShare(testId, titlePart, 'test');
+    }
+  } else {
+    console.log('[Share] switchInlineQuery not available, using fallback');
+    fallbackShare(testId, titlePart, 'test');
   }
 };
+
+// Fallback when switchInlineQuery doesn't work
+function fallbackShare(id: string, title: string, type: 'test' | 'quiz') {
+  const botUsername = 'QuipoBot';
+  const startParam = type === 'test' 
+    ? `share_${id}_${title}`
+    : `qshare_${id}`;
+  const url = `https://t.me/${botUsername}?start=${encodeURIComponent(startParam)}`;
+  
+  const tg = window.Telegram?.WebApp;
+  if (tg?.openTelegramLink) {
+    tg.openTelegramLink(url);
+  } else {
+    window.open(url, '_blank');
+  }
+}
 
 // Share referral link to Telegram chat
 export const shareReferralLink = (referralCode: string, botUsername: string = 'MindTestBot') => {

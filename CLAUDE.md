@@ -21,7 +21,7 @@
                          ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    FRONTEND (Vite + React)                      │
-│                    https://endearing-taiyaki-03c7aa.netlify.app │
+│                    VITE_MINI_APP_URL (твой Netlify URL)          │
 ├─────────────────────────────────────────────────────────────────┤
 │  Entry: src/main.tsx → App.tsx → pages/Index.tsx                │
 │                                                                 │
@@ -117,8 +117,17 @@ npm run lint                   # ESLint
 ### 5. Сборка и деплой
 ```bash
 npm run build                  # Build to /dist
-npx netlify deploy --prod --dir=dist --site=0ebc8ded-38e2-450f-81f2-5b9ff8969dbe
+npx netlify link --id YOUR_SITE_ID   # один раз после переезда
+npx netlify deploy --prod --dir=dist
 ```
+
+### 6. После переезда на новый Netlify
+1. Создай новый сайт в Netlify (или используй существующий).
+2. В корне проекта: `npx netlify link --id <новый Site ID>`.
+3. В `.env` поставь новый URL: `VITE_MINI_APP_URL=https://ТВОЙ-САЙТ.netlify.app`.
+4. В BotFather: Menu Button URL и Mini App URL → тот же `https://ТВОЙ-САЙТ.netlify.app`.
+5. Деплой: `npm run build && npx netlify deploy --prod --dir=dist`.
+6. Перезапусти бота (он читает `VITE_MINI_APP_URL` из .env).
 
 ---
 
@@ -249,7 +258,7 @@ className="bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200"
 
 - **Repo**: IAmQBe/glass-quizzes
 - **UI Source**: Lovable.dev (Liquid Glass design — НЕ ПЕРЕПИСЫВАТЬ)
-- **Deploy**: https://quipobot.netlify.app
+- **Deploy**: Netlify — URL из VITE_MINI_APP_URL (.env)
 
 ## Tech Stack
 
@@ -531,6 +540,9 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2026-02-03 | Sharing fallbacks | sharePersonalityTestResult/shareQuizResult: switchInlineQuery → openTelegramLink → openLink → navigator.share | telegram.ts |
 | 2026-02-03 | Smooth animations | Плавные анимации вопросов/ответов: duration 0.4s, easeOutQuad, последовательное появление | QuizScreen, PersonalityTestScreen |
 | 2026-02-03 | Touch-friendly options | Убрали hover на тач-устройствах, добавили touch-manipulation, -webkit-tap-highlight-color: transparent | index.css |
+| 2026-02-03 | Netlify переезд | Документация и .env.example без хардкода URL; после переезда: VITE_MINI_APP_URL + netlify link + BotFather | CLAUDE.md, .env.example |
+| 2026-02-03 | 1-click sharing | Прямой switchInlineQuery из Mini App для шаринга результатов (без редиректа в бота) | telegram.ts |
+| 2026-02-03 | New Netlify: zingy-quokka | Новый деплой на zingy-quokka-ea065f.netlify.app | .env, BotFather |
 
 ## TODO / Backlog
 
@@ -683,7 +695,7 @@ See `.env.example` for required variables.
 4. **Share**: copyReferralLink через telegram.ts
 
 ### Deployment
-1. **Frontend**: Netlify — https://quipobot.netlify.app
+1. **Frontend**: Netlify — URL из VITE_MINI_APP_URL
 2. **Bot**: Local dev (polling) / Production (webhook на /api/bot/webhook)
 3. **Database**: Supabase — wyiwdhtefbnjdrdbgaas.supabase.co
 4. **Build**: `npm run build` → `npx netlify deploy --prod --dir=dist --site=0ebc8ded-38e2-450f-81f2-5b9ff8969dbe`

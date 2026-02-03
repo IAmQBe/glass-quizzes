@@ -154,15 +154,15 @@ export const PersonalityTestScreen = ({ testId, onBack, onComplete }: Personalit
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            transition={{ 
-              duration: 0.4, 
+            transition={{
+              duration: 0.4,
               ease: [0.25, 0.46, 0.45, 0.94] // easeOutQuad
             }}
             className="space-y-6"
           >
             {/* Question image */}
             {currentQuestion.image_url && (
-              <motion.div 
+              <motion.div
                 className="rounded-xl overflow-hidden"
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -177,7 +177,7 @@ export const PersonalityTestScreen = ({ testId, onBack, onComplete }: Personalit
             )}
 
             {/* Question text */}
-            <motion.h2 
+            <motion.h2
               className="text-xl font-semibold text-foreground text-center"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -198,7 +198,7 @@ export const PersonalityTestScreen = ({ testId, onBack, onComplete }: Personalit
                   disabled={isSubmitting}
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ 
+                  transition={{
                     duration: 0.35,
                     delay: 0.2 + index * 0.08,
                     ease: [0.25, 0.46, 0.45, 0.94]

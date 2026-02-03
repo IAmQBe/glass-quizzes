@@ -14,17 +14,55 @@ export const bot = new Bot(BOT_TOKEN);
 const MINI_APP_URL = process.env.VITE_MINI_APP_URL || 'https://t.me/YourBotUsername/app';
 
 /**
- * /start command - opens Mini App
+ * /start command - opens Mini App or shows share button
  */
 bot.command('start', async (ctx) => {
-  const startParam = ctx.match; // e.g., "quest_abc123_ref_456"
+  const startParam = (ctx.match || '').trim();
   const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'QuipoBot';
 
-  // Check if MINI_APP_URL is a real HTTPS URL (not a t.me link)
+  // Share flow: Mini App opened t.me/QuipoBot?start=share_testId_title
+  // We show a button that opens inline mode → user picks chat → rich card is sent
+  if (startParam.startsWith('share_')) {
+    const parts = startParam.split('_');
+    if (parts.length >= 3) {
+      const testId = parts[1];
+      const titlePart = parts.slice(2).join('_');
+      const inlineQuery = `test_result:${testId}:${encodeURIComponent(titlePart)}`;
+
+      const keyboard = new InlineKeyboard()
+        .switchInline('📤 Выбрать чат для отправки', inlineQuery);
+
+      await ctx.reply(
+        '👆 Нажми кнопку ниже — откроется выбор чата. В чат отправится карточка с результатом (картинка, название, описание и кнопка на тест).',
+        { reply_markup: keyboard }
+      );
+      return;
+    }
+  }
+
+  // Quiz share flow: start=qshare_quizId|score|total|title
+  if (startParam.startsWith('qshare_')) {
+    const rest = startParam.slice(7);
+    const parts = rest.split('|');
+    if (parts.length >= 4) {
+      const [quizId, score, total, titlePart] = parts;
+      const inlineQuery = `quiz_result:${quizId}:${score}:${total}:${encodeURIComponent(titlePart)}`;
+
+      const keyboard = new InlineKeyboard()
+        .switchInline('📤 Выбрать чат для отправки', inlineQuery);
+
+      await ctx.reply(
+        '👆 Нажми кнопку ниже — откроется выбор чата. В чат отправится карточка с результатом квиза.',
+        { reply_markup: keyboard }
+      );
+      return;
+    }
+  }
+
+  // Normal start - open Mini App
   const isRealUrl = MINI_APP_URL.startsWith('https://') && !MINI_APP_URL.includes('t.me');
 
   if (isRealUrl) {
-    // Use webApp button with real URL
     const keyboard = new InlineKeyboard()
       .webApp('🧠 Open Mind Test', `${MINI_APP_URL}${startParam ? `?startapp=${startParam}` : ''}`);
 
@@ -35,7 +73,6 @@ bot.command('start', async (ctx) => {
       { reply_markup: keyboard }
     );
   } else {
-    // No deployed app yet - use URL button with deep link
     const keyboard = new InlineKeyboard()
       .url('🧠 Open Mind Test', `https://t.me/${botUsername}/app${startParam ? `?startapp=${startParam}` : ''}`);
 

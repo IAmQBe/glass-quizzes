@@ -41,3 +41,6 @@ dist-ssr
 
 # Supabase local
 .supabase
+
+# Local Netlify folder
+.netlify
