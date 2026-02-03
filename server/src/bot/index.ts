@@ -193,12 +193,12 @@ bot.on('my_chat_member', async (ctx) => {
         if ('photo' in chatInfo && chatInfo.photo) {
           const file = await ctx.api.getFile(chatInfo.photo.big_file_id);
           const avatarUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
-          
+
           await supabase
             .from('squads')
             .update({ avatar_url: avatarUrl })
             .eq('telegram_chat_id', squadChatId);
-          
+
           console.log(`🍿 Squad avatar saved for: ${chatTitle}`);
         }
       } catch (e) {

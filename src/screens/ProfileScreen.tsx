@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { UserStats } from "@/types/quiz";
-import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Sun, Moon, Sparkles, History, Pencil, Lock } from "lucide-react";
+import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Sun, Moon, Sparkles, History, Pencil, Lock, ExternalLink } from "lucide-react";
 import { haptic, getTelegramUser, shareReferralLink, sharePersonalityTestResult, getTelegram } from "@/lib/telegram";
 import { useIsAdmin } from "@/hooks/useAuth";
 import { useMyQuizzes, useMyQuizResults } from "@/hooks/useQuizzes";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useProfile, useUpdateProfile, useReferralCount } from "@/hooks/useProfile";
 import { useMyPersonalityTestCompletions, useMyPersonalityTests } from "@/hooks/usePersonalityTests";
+import { useTotalPopcornsReceived } from "@/hooks/useLikes";
+import { useMySquad, useSquadLeaderboard } from "@/hooks/useSquads";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Loader2 } from "lucide-react";
@@ -45,8 +47,14 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
   const { data: favorites = [], isLoading: favoritesLoading } = useFavorites();
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { data: referralCount = 0 } = useReferralCount();
+  const { data: totalPopcorns = 0 } = useTotalPopcornsReceived();
+  const { data: mySquad } = useMySquad();
+  const { data: squadLeaderboard = [] } = useSquadLeaderboard(100);
   const updateProfile = useUpdateProfile();
   const { isDark, toggleTheme } = useTheme();
+
+  // Find my squad rank
+  const mySquadRank = mySquad ? squadLeaderboard.findIndex(s => s.id === mySquad.id) + 1 : 0;
 
   const [activeTab, setActiveTab] = useState<TabType>("my");
   const [sortBy, setSortBy] = useState<FilterType>("date");
@@ -88,12 +96,14 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
     }
   };
 
+  // Calculate actual stats
+  const totalTestsCompleted = quizResults.length + testCompletions.length;
+  const totalCreated = myQuizzes.length + myTests.length;
+
   const statItems = [
-    { icon: Trophy, label: "Best", value: stats.bestScore, color: "text-yellow-500" },
-    { icon: Target, label: "Tests", value: stats.testsCompleted, color: "text-primary" },
-    { icon: PopcornIcon, label: "Popcorn", value: stats.totalPopcorns || 0, color: "text-orange-500" },
-    { icon: Globe, label: "Rank", value: `#${stats.globalRank}`, color: "text-green-500" },
-    { icon: Swords, label: "Challenges", value: stats.activeChallenges, color: "text-purple-500" },
+    { icon: Target, label: "Пройдено", value: totalTestsCompleted, color: "text-primary" },
+    { icon: Sparkles, label: "Создано", value: totalCreated, color: "text-purple-500" },
+    { icon: PopcornIcon, label: "Попкорн", value: totalPopcorns, color: "text-orange-500" },
   ];
 
   // Sort quizzes
@@ -157,11 +167,35 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
               Admin
             </span>
           )}
+
+          {/* Squad Badge */}
+          {mySquad && (
+            <button
+              onClick={() => {
+                haptic.impact('light');
+                const tg = getTelegram();
+                const url = mySquad.username
+                  ? `https://t.me/${mySquad.username}`
+                  : mySquad.invite_link;
+                if (url && tg?.openTelegramLink) {
+                  tg.openTelegramLink(url);
+                }
+              }}
+              className="mt-2 flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-500 text-sm font-medium"
+            >
+              <PopcornIcon className="w-4 h-4" />
+              {mySquad.title}
+              {mySquadRank > 0 && (
+                <span className="text-xs opacity-75">#{mySquadRank}</span>
+              )}
+              <ExternalLink className="w-3 h-3" />
+            </button>
+          )}
         </motion.div>
 
         {/* Stats Grid */}
         <motion.div
-          className="grid grid-cols-5 gap-1"
+          className="grid grid-cols-3 gap-2"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
@@ -169,14 +203,14 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
           {statItems.map((item, index) => (
             <motion.div
               key={item.label}
-              className="tg-stat px-1 py-3"
+              className="tg-stat px-3 py-4"
               initial={{ y: 15, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.2 + index * 0.05 }}
             >
               <item.icon className={`w-5 h-5 mx-auto mb-1.5 ${item.color}`} />
-              <p className="text-base font-bold text-foreground whitespace-nowrap">{item.value}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">{item.label}</p>
+              <p className="text-lg font-bold text-foreground">{item.value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{item.label}</p>
             </motion.div>
           ))}
         </motion.div>
@@ -261,27 +295,6 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                 <Moon className="w-5 h-5 text-primary" />
               )}
             </button>
-          </div>
-
-          {/* Challenges - Coming Soon */}
-          <div
-            className="flex items-center justify-between p-4 border-b border-border opacity-50"
-            onClick={() => {
-              haptic.selection();
-              toast({ title: "Скоро! 🎯", description: "Челленджи появятся в следующем обновлении" });
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <Swords className="w-5 h-5 text-muted-foreground" />
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-foreground font-medium">Челленджи</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500 text-white font-medium">soon</span>
-                </div>
-                <p className="text-xs text-muted-foreground">Вызывай друзей на дуэли</p>
-              </div>
-            </div>
-            <Lock className="w-4 h-4 text-muted-foreground" />
           </div>
 
           {/* Admin Button */}

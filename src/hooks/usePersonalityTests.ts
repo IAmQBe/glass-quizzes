@@ -573,39 +573,17 @@ export const useTogglePersonalityTestLike = () => {
       if (!profileId) throw new Error("Нужно открыть через Telegram");
 
       if (isLiked) {
+        // Remove like - trigger will decrement like_count
         await supabase
           .from("personality_test_likes")
           .delete()
           .eq("test_id", testId)
           .eq("user_id", profileId);
-
-        // Decrement
-        const { data: test } = await supabase
-          .from("personality_tests")
-          .select("like_count")
-          .eq("id", testId)
-          .single();
-
-        await supabase
-          .from("personality_tests")
-          .update({ like_count: Math.max(0, (test?.like_count || 1) - 1) })
-          .eq("id", testId);
       } else {
+        // Add like - trigger will increment like_count
         await supabase
           .from("personality_test_likes")
           .insert({ test_id: testId, user_id: profileId });
-
-        // Increment
-        const { data: test } = await supabase
-          .from("personality_tests")
-          .select("like_count")
-          .eq("id", testId)
-          .single();
-
-        await supabase
-          .from("personality_tests")
-          .update({ like_count: (test?.like_count || 0) + 1 })
-          .eq("id", testId);
       }
     },
     onMutate: async ({ testId, isLiked }) => {

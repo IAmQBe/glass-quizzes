@@ -82,7 +82,7 @@ export const useToggleLike = () => {
       }
 
       if (isLiked) {
-        // Remove like
+        // Remove like - trigger will decrement like_count
         const { error } = await supabase
           .from("quiz_likes")
           .delete()
@@ -90,37 +90,13 @@ export const useToggleLike = () => {
           .eq("user_id", profileId);
 
         if (error) throw error;
-
-        // Decrement quiz like_count (direct update)
-        const { data: quiz } = await supabase
-          .from("quizzes")
-          .select("like_count")
-          .eq("id", quizId)
-          .single();
-
-        await supabase
-          .from("quizzes")
-          .update({ like_count: Math.max(0, (quiz?.like_count || 1) - 1) })
-          .eq("id", quizId);
       } else {
-        // Add like
+        // Add like - trigger will increment like_count
         const { error } = await supabase
           .from("quiz_likes")
           .insert({ quiz_id: quizId, user_id: profileId });
 
         if (error) throw error;
-
-        // Increment quiz like_count (direct update)
-        const { data: quiz } = await supabase
-          .from("quizzes")
-          .select("like_count")
-          .eq("id", quizId)
-          .single();
-
-        await supabase
-          .from("quizzes")
-          .update({ like_count: (quiz?.like_count || 0) + 1 })
-          .eq("id", quizId);
       }
     },
     onMutate: async ({ quizId, isLiked }) => {
