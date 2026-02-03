@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { UserStats } from "@/types/quiz";
-import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Bell, BellOff } from "lucide-react";
+import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Bell, BellOff, Sun, Moon } from "lucide-react";
 import { haptic, getTelegramUser, shareReferralLink } from "@/lib/telegram";
 import { useIsAdmin } from "@/hooks/useAuth";
 import { useMyQuizzes } from "@/hooks/useQuizzes";
@@ -12,6 +12,7 @@ import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useTheme } from "@/hooks/useTheme";
 
 interface ProfileScreenProps {
   stats: UserStats;
@@ -31,6 +32,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { data: referralCount = 0 } = useReferralCount();
   const updateProfile = useUpdateProfile();
+  const { isDark, toggleTheme } = useTheme();
   
   const [activeTab, setActiveTab] = useState<TabType>("my");
   const [sortBy, setSortBy] = useState<FilterType>("date");
@@ -203,6 +205,34 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.28 }}
         >
+          {/* Theme Toggle */}
+          <div className="flex items-center justify-between p-4 border-b border-border">
+            <div className="flex items-center gap-3">
+              {isDark ? (
+                <Moon className="w-5 h-5 text-primary" />
+              ) : (
+                <Sun className="w-5 h-5 text-amber-500" />
+              )}
+              <div>
+                <span className="text-foreground font-medium">Тема</span>
+                <p className="text-xs text-muted-foreground">{isDark ? "Тёмная тема" : "Светлая тема"}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                haptic.selection();
+                toggleTheme();
+              }}
+              className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
+            >
+              {isDark ? (
+                <Sun className="w-5 h-5 text-amber-500" />
+              ) : (
+                <Moon className="w-5 h-5 text-primary" />
+              )}
+            </button>
+          </div>
+
           {/* Challenge Notifications Toggle */}
           <div className="flex items-center justify-between p-4 border-b border-border">
             <div className="flex items-center gap-3">
@@ -405,8 +435,8 @@ const QuizListItem = ({ quiz, onClick }: { quiz: any; onClick: () => void }) => 
       <span
         className={`text-xs px-2 py-1 rounded-full ${
           quiz.is_published
-            ? "bg-green-100 text-green-700"
-            : "bg-gray-100 text-gray-600"
+            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+            : "bg-secondary text-muted-foreground"
         }`}
       >
         {quiz.is_published ? "Live" : "Draft"}

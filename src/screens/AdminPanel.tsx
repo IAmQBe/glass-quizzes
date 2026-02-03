@@ -266,8 +266,8 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                     <span
                       className={`text-xs px-2 py-1 rounded-full ${
                         quiz.is_published
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-600"
+                          ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                          : "bg-secondary text-muted-foreground"
                       }`}
                     >
                       {quiz.is_published ? "Published" : "Draft"}
@@ -342,8 +342,8 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                       <span
                         className={`text-xs px-2 py-1 rounded-full ${
                           banner.is_active
-                            ? "bg-green-100 text-green-700"
-                            : "bg-gray-100 text-gray-600"
+                            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                            : "bg-secondary text-muted-foreground"
                         }`}
                       >
                         {banner.is_active ? "Active" : "Hidden"}

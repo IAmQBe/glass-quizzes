@@ -364,7 +364,7 @@ export const LiveQuizScreen = ({ liveQuizId, onBack }: LiveQuizScreenProps) => {
                 <div
                   key={p.id}
                   className={`flex items-center justify-between p-3 rounded-xl ${
-                    i === 0 ? "bg-yellow-500/10" : i === 1 ? "bg-gray-400/10" : "bg-amber-600/10"
+                    i === 0 ? "bg-yellow-500/10" : i === 1 ? "bg-secondary" : "bg-amber-600/10"
                   }`}
                 >
                   <div className="flex items-center gap-3">
