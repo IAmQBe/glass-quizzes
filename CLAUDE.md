@@ -51,13 +51,16 @@ glass-quizzes/
 
 ## Existing Screens (Lovable UI)
 
-1. **Home** (`pages/Index.tsx`) — banner carousel + quiz showcase + profile button
-2. **WelcomeScreen** — quiz intro card (5 questions • 60 sec • public) + "Start test" CTA
+1. **Home** (`pages/Index.tsx`) — banner carousel + leaderboard preview + quiz tabs (trending/all) + sorting + search
+2. **OnboardingCarousel** — 5-slide intro (Mind Test, Соревнуйся, Создавай, Live квизы, Готов начать?) + swipe gestures
 3. **QuizScreen** — 1 question per screen, progress bar, animated transitions
 4. **ResultScreen** — score display + percentile + verdict emoji + share/challenge/retry/profile buttons
 5. **CompareScreen** — You vs Friend cards with VS badge, waiting state if friend hasn't completed
-6. **ProfileScreen** — avatar, name, stats grid (4 cols), admin button (if admin), Pro features teaser
-7. **AdminPanel** — tabs (Quizzes/Banners), list items with publish/delete actions
+6. **ProfileScreen** — avatar, stats grid, history tabs (completed/created/saved), admin button
+7. **AdminPanel** — tabs (Quizzes/Banners/Stats), CRUD with publish/unpublish/delete
+8. **LeaderboardScreen** — Top-3 podium + full leaderboard list with premium badges
+9. **CreateQuizScreen** — 3-step wizard (info → questions → preview) with form validation
+10. **LiveQuizScreen** — [NEW] Real-time quiz hosting (lobby → playing → results)
 
 ## Existing UI Components
 
@@ -83,9 +86,18 @@ glass-quizzes/
 | Component | Props | Description |
 |-----------|-------|-------------|
 | `BannerCarousel` | `banners[]` | Auto-swipe carousel with dots, swipe gestures |
-| `QuizCard` | `id, title, description, image_url, participant_count, question_count, duration_seconds, onClick` | Quiz list item card |
-| `QuizShowcase` | `quizzes[], isLoading, onQuizSelect` | Grid of QuizCards with loading state |
+| `QuizCard` | `id, title, ..., likeCount, saveCount, isLiked, isSaved, onLike, onSave` | Quiz card with like/save buttons |
+| `QuizShowcase` | `quizzes[], isLoading, onQuizSelect, likeIds, saveIds, onToggleLike, onToggleSave` | Grid of QuizCards with interactions |
+| `BottomNav` | `activeTab, onTabChange` | Bottom navigation (Home, Top, Create, Profile) |
+| `LeaderboardPreview` | `entries[], onViewAll` | Compact leaderboard widget for home |
+| `OnboardingCarousel` | `onComplete` | 5-slide swipeable onboarding flow |
 | `NavLink` | react-router NavLink wrapper | Adds activeClassName support |
+
+### Custom Icons (`components/icons/`)
+| Icon | Description |
+|------|-------------|
+| `PopcornIcon` | Like/popcorn icon for engagement |
+| `BookmarkIcon` | Save/bookmark icon |
 
 ### shadcn/ui Components (`components/ui/`)
 Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkbox, switch, progress, skeleton, avatar, badge, tooltip, popover, dropdown-menu, etc.
@@ -94,7 +106,7 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 
 | Hook | Returns | Description |
 |------|---------|-------------|
-| `usePublishedQuizzes()` | `{ data: Quiz[], isLoading }` | Fetch published quizzes |
+| `usePublishedQuizzes()` | `{ data: Quiz[], isLoading }` | Fetch published quizzes with like/save counts |
 | `useQuizWithQuestions(id)` | `{ data: { quiz, questions } }` | Fetch quiz + questions |
 | `useMyQuizzes()` | `{ data: Quiz[] }` | Current user's quizzes |
 | `useCreateQuiz()` | mutation | Create new quiz |
@@ -102,6 +114,12 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | `useBanners()` | `{ data: Banner[] }` | Fetch active banners |
 | `useIsAdmin()` | `{ data: boolean }` | Check if current user is admin |
 | `useQuiz()` | quiz state machine | Local quiz flow state (welcome→quiz→result) |
+| `useFavorites()` | `{ data: Favorite[] }` | User's saved quizzes with details |
+| `useFavoriteIds()` | `{ data: Set<string> }` | Set of saved quiz IDs |
+| `useToggleFavorite()` | mutation | Add/remove from favorites |
+| `useLikeIds()` | `{ data: Set<string> }` | Set of liked quiz IDs |
+| `useToggleLike()` | mutation | Like/unlike quiz (optimistic update) |
+| `useLiveQuiz()` | `{ ... }` | Live quiz state management (host/join/play) |
 
 ## Existing Data/Types
 
@@ -133,19 +151,41 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 
 ## Database Schema (Supabase)
 
-### Existing Tables
-- `profiles` (id, telegram_id, username, first_name, last_name, avatar_url)
-- `quizzes` (id, title, description, image_url, created_by, question_count, participant_count, duration_seconds, is_published)
-- `questions` (id, quiz_id, question_text, image_url, options JSONB, correct_answer, order_index)
-- `quiz_results` (id, quiz_id, user_id, score, max_score, percentile, answers JSONB, completed_at)
-- `banners` (id, title, description, image_url, link_url, link_type, display_order, is_active)
-- `user_roles` (id, user_id, role ENUM)
+### Core Tables
+| Table | Key Fields | Description |
+|-------|------------|-------------|
+| `profiles` | id, telegram_id, username, first_name, has_telegram_premium, onboarding_completed | User profiles synced from Telegram |
+| `quizzes` | id, title, created_by, like_count, save_count, rating, is_published | Quiz metadata with engagement metrics |
+| `questions` | id, quiz_id, question_text, options JSONB, correct_answer, order_index | Quiz questions |
+| `quiz_results` | id, quiz_id, user_id, score, percentile, answers JSONB | Completed quiz attempts |
+| `banners` | id, title, image_url, link_url, link_type, display_order, is_active | Promotional banners |
+| `user_roles` | id, user_id, role ENUM (admin/user) | Role-based access |
 
-### To Add (Milestone B)
-- `verdicts` (id, quiz_id, min_score, max_score, title, text, emoji)
-- `attempts` (id, user_id, quiz_id, started_at, finished_at, score, verdict_id, source, ref_user_id)
-- `shares` (id, attempt_id, shared_at, chat_type, source)
-- `admins` (telegram_id, role, created_at) — or use env whitelist
+### Engagement Tables
+| Table | Key Fields | Description |
+|-------|------------|-------------|
+| `quiz_likes` | quiz_id, user_id | Like/popcorn reactions |
+| `favorites` | quiz_id, user_id | Saved/bookmarked quizzes |
+| `quiz_ratings` | quiz_id, user_id, rating (1-5) | Star ratings |
+
+### Live Quiz Tables
+| Table | Key Fields | Description |
+|-------|------------|-------------|
+| `live_quizzes` | id, quiz_id, host_user_id, status, current_question, is_paid, price_stars | Live quiz sessions |
+| `live_quiz_participants` | live_quiz_id, user_id, score, correct_answers, total_time_ms | Participants & scores |
+| `live_quiz_answers` | live_quiz_id, user_id, question_index, answer_index, is_correct, time_ms | Individual answers |
+| `live_quiz_reactions` | live_quiz_id, user_id, emoji | Real-time reactions |
+
+### System Tables
+| Table | Key Fields | Description |
+|-------|------------|-------------|
+| `leaderboard_seasons` | id, name, start_date, end_date, is_active | Seasonal leaderboards |
+| `app_settings` | key, value JSONB | Global app configuration |
+
+### Still Needed (Milestone B)
+- `verdicts` — score→verdict mapping per quiz
+- `shares` — share event tracking for viral metrics
+- Server-side `admins` whitelist (or use env)
 
 ## API Endpoints (Planned)
 
@@ -171,6 +211,8 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2024-02-03 | Keep Supabase for DB | Already integrated in UI, has RLS | `supabase/` |
 | 2024-02-03 | Add Express/Hono API | For initData validation + bot webhooks | `server/api/` |
 | 2024-02-03 | Verdicts separate table | Flexible score→verdict mapping per quiz | DB schema |
+| 2024-02-03 | Synced remote UI updates | Onboarding, Leaderboard, Create, Live Quiz, Likes/Saves | Frontend |
+| 2024-02-03 | Live Quiz via Supabase Realtime | Already have Supabase, RLS works, no extra infra | `live_quizzes` tables |
 
 ## TODO / Backlog
 
@@ -179,13 +221,15 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 - [x] Add backup scripts
 - [x] Add .env.example
 - [x] Add docker-compose.yml for local Postgres
-- [ ] First commit
+- [x] First commit
 
-### Milestone B: DB + Models + API
-- [ ] Add verdicts, attempts, shares tables (Supabase migration)
-- [ ] Create server/ folder structure
-- [ ] Implement basic API endpoints
-- [ ] initData validation middleware
+### Milestone B: Bot + API Server (IN PROGRESS)
+- [ ] Create `server/` folder structure (bot + api)
+- [ ] Set up grammY bot with TypeScript
+- [ ] Implement inline query handler
+- [ ] Add initData validation middleware
+- [ ] Create verdicts table migration
+- [ ] Basic API endpoints
 
 ### Milestone C: Integrate UI with Real Data
 - [ ] Connect screens to API
