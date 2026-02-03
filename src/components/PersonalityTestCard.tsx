@@ -92,7 +92,7 @@ export const PersonalityTestCard = ({
           Пройден
         </div>
       )}
-      
+
       {/* Image with gradient overlay */}
       {image_url && (
         <div className="relative h-32 overflow-hidden rounded-t-xl -mx-4 -mt-4 mb-3">

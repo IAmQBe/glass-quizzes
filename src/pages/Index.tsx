@@ -38,13 +38,17 @@ import { toast } from "@/hooks/use-toast";
 import { UserStats, QuizResult } from "@/types/quiz";
 import { initTelegramApp, backButton, isTelegramWebApp, shareResult, getTelegramUserData, getTelegram } from "@/lib/telegram";
 import { calculateResult } from "@/data/quizData";
-import { TrendingUp, Sparkles, Search, X, Swords } from "lucide-react";
+import { TrendingUp, Sparkles, Search, X, Swords, Users, Plus } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Input } from "@/components/ui/input";
 import { haptic } from "@/lib/telegram";
+import { SquadScreen } from "@/screens/SquadScreen";
+import { SquadListScreen } from "@/screens/SquadListScreen";
+import { CreateSquadGuide } from "@/screens/CreateSquadGuide";
+import { useMySquad, Squad } from "@/hooks/useSquads";
 
-type AppScreen = "home" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp" | "personality_test" | "personality_result" | "create_test";
+type AppScreen = "home" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp" | "personality_test" | "personality_result" | "create_test" | "squad_list" | "squad_detail" | "create_squad";
 type TabId = "home" | "gallery" | "create" | "leaderboard" | "profile";
 type QuizTab = "trending" | "all";
 type ContentType = "quizzes" | "tests";
@@ -80,6 +84,10 @@ const Index = () => {
   const [testResultTitle, setTestResultTitle] = useState("");
   const [testResultTestId, setTestResultTestId] = useState("");
   const [contentType, setContentType] = useState<ContentType>("quizzes");
+
+  // Squad state
+  const [selectedSquad, setSelectedSquad] = useState<Squad | null>(null);
+  const { data: mySquad } = useMySquad();
 
   const [quizTab, setQuizTab] = useState<QuizTab>("trending");
   const [sortBy, setSortBy] = useState<SortType>("popular");
@@ -457,6 +465,49 @@ const Index = () => {
                 <TasksBlock />
               </motion.div>
 
+              {/* Squad Block */}
+              <motion.div
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.13 }}
+                className="tg-section p-4"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    <PopcornIcon className="w-5 h-5 text-orange-500" />
+                    Попкорн-команды
+                  </h3>
+                  {mySquad && (
+                    <span className="text-xs text-muted-foreground">
+                      Ты в: {mySquad.title}
+                    </span>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      haptic.impact('medium');
+                      setCurrentScreen("squad_list");
+                    }}
+                    className="tg-button-secondary text-sm py-3 flex items-center justify-center gap-2"
+                  >
+                    <Users className="w-4 h-4" />
+                    {mySquad ? "Сменить" : "Вступить"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      haptic.impact('medium');
+                      setCurrentScreen("create_squad");
+                    }}
+                    className="tg-button-secondary text-sm py-3 flex items-center justify-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Создать
+                  </button>
+                </div>
+              </motion.div>
+
               {/* Content Type Tabs: Quizzes / Tests */}
               <motion.div
                 className="flex gap-2"
@@ -813,6 +864,46 @@ const Index = () => {
               onBack={() => {
                 setCurrentScreen("home");
                 setActiveTab("home");
+              }}
+              onSquadSelect={(squad) => {
+                setSelectedSquad(squad);
+                setCurrentScreen("squad_detail");
+              }}
+            />
+          )}
+
+          {currentScreen === "squad_list" && (
+            <SquadListScreen
+              key="squad_list"
+              onBack={() => {
+                setCurrentScreen("home");
+              }}
+              onSquadSelect={(squad) => {
+                setSelectedSquad(squad);
+                setCurrentScreen("squad_detail");
+              }}
+              onCreateSquad={() => {
+                setCurrentScreen("create_squad");
+              }}
+            />
+          )}
+
+          {currentScreen === "squad_detail" && selectedSquad && (
+            <SquadScreen
+              key="squad_detail"
+              squad={selectedSquad}
+              onBack={() => {
+                setSelectedSquad(null);
+                setCurrentScreen("squad_list");
+              }}
+            />
+          )}
+
+          {currentScreen === "create_squad" && (
+            <CreateSquadGuide
+              key="create_squad"
+              onBack={() => {
+                setCurrentScreen("home");
               }}
             />
           )}

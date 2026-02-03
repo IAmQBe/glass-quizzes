@@ -552,6 +552,11 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2026-02-03 | Quiz/Test editing | useUpdateQuiz, useIsQuizCreator для редактирования своих квизов | useQuizzes.ts |
 | 2026-02-03 | Smooth banner animation | Плавная анимация смены баннеров: scale + opacity вместо x-translate | BannerCarousel.tsx |
 | 2026-02-03 | Bot squad handler | my_chat_member event: создание/деактивация сквадов при добавлении/удалении бота как админа | bot/index.ts |
+| 2026-02-03 | Squad UI screens | SquadScreen (detail), SquadListScreen (browse + search), CreateSquadGuide (step-by-step) | screens/ |
+| 2026-02-03 | Leaderboard refactor | Только команды и создатели активны, остальные вкладки "soon" | LeaderboardScreen.tsx |
+| 2026-02-03 | Squad block on home | Кнопки "Вступить" и "Создать команду" на главной | Index.tsx |
+| 2026-02-03 | Completed tests display | Пройденные тесты показываются с бейджем "Пройден" и затемнением | PersonalityTestCard, useCompletedTestIds |
+| 2026-02-03 | LEFT JOIN for creators | Исправлен запрос creator info (тесты с null created_by теперь показываются) | useQuizzes, usePersonalityTests |
 
 ## TODO / Backlog
 
