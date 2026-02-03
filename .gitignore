@@ -32,8 +32,8 @@ dist-ssr
 /backups/*
 !/backups/.gitkeep
 
-# Database
-*.sql
+# Database dumps (not migrations)
+/backups/*.sql
 *.sql.gz
 
 # Server build
