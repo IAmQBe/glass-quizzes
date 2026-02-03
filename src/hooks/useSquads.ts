@@ -86,7 +86,7 @@ export const useCanChangeSquad = () => {
       // Calculate next change date
       const joinedAt = new Date(profile.squad_joined_at);
       const nextChangeAt = new Date(joinedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
-      
+
       return { canChange: false, nextChangeAt };
     },
   });

@@ -70,7 +70,7 @@ export const QuizCard = ({
   const handleSquadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!creator?.squad?.username) return;
-    
+
     haptic.impact('light');
     const tg = getTelegram();
     const url = `https://t.me/${creator.squad.username}`;
@@ -112,7 +112,7 @@ export const QuizCard = ({
             <HelpCircle className="w-12 h-12 text-muted-foreground/30" />
           </div>
         )}
-        
+
         {/* Top left - Participants */}
         <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
           <Users className="w-3 h-3 text-white" />
@@ -125,11 +125,10 @@ export const QuizCard = ({
         {onToggleLike && (
           <button
             onClick={handleLike}
-            className={`absolute top-2 right-2 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
-              isLiked 
-                ? "bg-amber-500 text-white" 
+            className={`absolute top-2 right-2 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${isLiked
+                ? "bg-amber-500 text-white"
                 : "bg-black/40 text-white hover:bg-black/60"
-            }`}
+              }`}
           >
             <PopcornIcon className="w-4 h-4" />
           </button>
@@ -139,11 +138,10 @@ export const QuizCard = ({
         {onToggleSave && (
           <button
             onClick={handleSave}
-            className={`absolute bottom-2 right-2 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
-              isSaved 
-                ? "bg-primary text-white" 
+            className={`absolute bottom-2 right-2 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${isSaved
+                ? "bg-primary text-white"
                 : "bg-black/40 text-white hover:bg-black/60"
-            }`}
+              }`}
           >
             <BookmarkIcon className="w-4 h-4" filled={isSaved} />
           </button>
@@ -175,7 +173,7 @@ export const QuizCard = ({
         <h3 className="font-semibold text-foreground text-base mb-1 line-clamp-1">
           {title}
         </h3>
-        
+
         {description && (
           <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
             {description}

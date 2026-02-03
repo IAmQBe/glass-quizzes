@@ -106,7 +106,7 @@ export const usePublishedPersonalityTests = () => {
         .from("personality_tests")
         .select(`
           *,
-          creator:profiles!created_by (
+          creator:profiles (
             id,
             first_name,
             username,
@@ -468,6 +468,27 @@ export const useMyPersonalityTestCompletions = () => {
 
       if (error) throw error;
       return (data || []) as PersonalityTestCompletion[];
+    },
+  });
+};
+
+/**
+ * Get Set of completed test IDs for current user
+ */
+export const useCompletedTestIds = () => {
+  return useQuery({
+    queryKey: ["completedTestIds"],
+    queryFn: async (): Promise<Set<string>> => {
+      const profileId = await getProfileId();
+      if (!profileId) return new Set();
+
+      const { data, error } = await supabase
+        .from("personality_test_completions")
+        .select("test_id")
+        .eq("user_id", profileId);
+
+      if (error) return new Set();
+      return new Set((data || []).map(c => c.test_id));
     },
   });
 };

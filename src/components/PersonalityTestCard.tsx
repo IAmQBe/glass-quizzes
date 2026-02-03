@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Users, Clock, HelpCircle, Sparkles } from "lucide-react";
+import { Users, Clock, HelpCircle, Sparkles, Check } from "lucide-react";
 import { PopcornIcon } from "./icons/PopcornIcon";
 import { BookmarkIcon } from "./icons/BookmarkIcon";
 import { haptic, getTelegram } from "@/lib/telegram";
@@ -28,6 +28,7 @@ interface PersonalityTestCardProps {
   save_count?: number;
   isLiked?: boolean;
   isSaved?: boolean;
+  isCompleted?: boolean;
   creator?: CreatorInfo | null;
   onClick: () => void;
   onToggleLike?: () => void;
@@ -46,6 +47,7 @@ export const PersonalityTestCard = ({
   save_count = 0,
   isLiked = false,
   isSaved = false,
+  isCompleted = false,
   creator,
   onClick,
   onToggleLike,
@@ -66,7 +68,7 @@ export const PersonalityTestCard = ({
   const handleSquadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!creator?.squad?.username) return;
-    
+
     haptic.impact('light');
     const tg = getTelegram();
     const url = `https://t.me/${creator.squad.username}`;
@@ -79,17 +81,25 @@ export const PersonalityTestCard = ({
 
   return (
     <motion.div
-      className="tg-card overflow-hidden cursor-pointer active:scale-[0.98] transition-transform rounded-2xl"
+      className={`tg-card overflow-hidden cursor-pointer active:scale-[0.98] transition-transform rounded-2xl relative ${isCompleted ? 'opacity-70' : ''}`}
       onClick={onClick}
       whileTap={{ scale: 0.98 }}
     >
+      {/* Completed overlay */}
+      {isCompleted && (
+        <div className="absolute top-2 right-2 z-10 px-2 py-1 rounded-full bg-green-500/90 text-white text-xs font-medium flex items-center gap-1">
+          <Check className="w-3 h-3" />
+          Пройден
+        </div>
+      )}
+      
       {/* Image with gradient overlay */}
       {image_url && (
         <div className="relative h-32 overflow-hidden rounded-t-xl -mx-4 -mt-4 mb-3">
           <img
             src={image_url}
             alt={title}
-            className="w-full h-full object-cover"
+            className={`w-full h-full object-cover ${isCompleted ? 'grayscale-[30%]' : ''}`}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
 

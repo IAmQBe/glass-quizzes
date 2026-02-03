@@ -153,9 +153,9 @@ bot.on('my_chat_member', async (ctx) => {
   const chatType = chat.type;
 
   // Bot became admin
-  if ((newStatus === 'administrator' || newStatus === 'creator') && 
-      oldStatus !== 'administrator' && oldStatus !== 'creator') {
-    
+  if ((newStatus === 'administrator' || newStatus === 'creator') &&
+    oldStatus !== 'administrator' && oldStatus !== 'creator') {
+
     console.log(`🍿 Bot added as admin to ${chatType}: ${chatTitle} (${chatId})`);
 
     // Find who added the bot (their profile)
@@ -219,7 +219,7 @@ bot.on('my_chat_member', async (ctx) => {
         console.error('Failed to create squad:', error);
       } else {
         console.log(`🍿 Squad created: ${chatTitle}`);
-        
+
         // Notify the chat
         try {
           await ctx.api.sendMessage(
@@ -240,9 +240,9 @@ bot.on('my_chat_member', async (ctx) => {
   }
 
   // Bot was removed from admin
-  if ((oldStatus === 'administrator' || oldStatus === 'creator') && 
-      newStatus !== 'administrator' && newStatus !== 'creator') {
-    
+  if ((oldStatus === 'administrator' || oldStatus === 'creator') &&
+    newStatus !== 'administrator' && newStatus !== 'creator') {
+
     console.log(`🍿 Bot removed as admin from ${chatType}: ${chatTitle} (${chatId})`);
 
     // Deactivate squad

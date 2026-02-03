@@ -31,6 +31,7 @@ import {
   usePersonalityTestFavoriteIds,
   useTogglePersonalityTestLike,
   useTogglePersonalityTestFavorite,
+  useCompletedTestIds,
   PersonalityTestResult
 } from "@/hooks/usePersonalityTests";
 import { toast } from "@/hooks/use-toast";
@@ -62,6 +63,7 @@ const Index = () => {
   const { data: personalityTests = [], isLoading: testsLoading } = usePublishedPersonalityTests();
   const { data: testLikeIds = new Set() } = usePersonalityTestLikeIds();
   const { data: testSaveIds = new Set() } = usePersonalityTestFavoriteIds();
+  const { data: completedTestIds = new Set() } = useCompletedTestIds();
   const toggleTestLike = useTogglePersonalityTestLike();
   const toggleTestSave = useTogglePersonalityTestFavorite();
 
@@ -647,6 +649,7 @@ const Index = () => {
                               like_count={test.like_count}
                               save_count={test.save_count}
                               creator={test.creator}
+                              isCompleted={completedTestIds.has(test.id)}
                               isLiked={testLikeIds.has(test.id)}
                               isSaved={testSaveIds.has(test.id)}
                               onClick={() => handleTestSelect(test.id)}

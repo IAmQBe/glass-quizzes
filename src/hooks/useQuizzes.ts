@@ -57,7 +57,7 @@ export const usePublishedQuizzes = () => {
         .from("quizzes")
         .select(`
           *,
-          creator:profiles!created_by (
+          creator:profiles (
             id,
             first_name,
             username,
