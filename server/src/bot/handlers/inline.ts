@@ -299,7 +299,7 @@ export async function handleInlineQuery(ctx: Context) {
     if (rawQuery.startsWith('test_result:')) {
       const parts = rawQuery.split(':');
       console.log('[Inline] test_result share, parts:', parts);
-      
+
       if (parts.length >= 3) {
         const testId = parts[1];
         // Handle case where userId might be at the end (format: test_result:testId:title:userId)
@@ -312,33 +312,44 @@ export async function handleInlineQuery(ctx: Context) {
         } else {
           resultTitleRaw = decodeURIComponent(parts.slice(2).join(':')).trim();
         }
-        
+
         console.log('[Inline] testId:', testId, 'resultTitle:', resultTitleRaw);
 
         // Fetch test and result data
         const test = await getPersonalityTestById(testId);
         console.log('[Inline] test found:', test ? test.title : 'NOT FOUND');
-        
+
         if (test) {
           // Fetch the result: exact match first, then prefix match (for truncated title from share flow)
           let resultData: { title: string; description?: string; image_url?: string } | null = null;
-          const { data: exact } = await supabase
+          console.log('[Inline] Looking for result with title:', resultTitleRaw);
+          
+          const { data: exact, error: exactErr } = await supabase
             .from('personality_test_results')
             .select('*')
             .eq('test_id', testId)
             .eq('title', resultTitleRaw)
             .maybeSingle();
+          
+          console.log('[Inline] Exact match result:', exact ? exact.title : 'NOT FOUND', exactErr?.message || '');
+          
           if (exact) {
             resultData = exact;
           } else {
-            const { data: allResults } = await supabase
+            const { data: allResults, error: allErr } = await supabase
               .from('personality_test_results')
               .select('*')
               .eq('test_id', testId);
+            
+            console.log('[Inline] All results for test:', allResults?.length || 0, 'titles:', allResults?.map((r: any) => r.title).join(', '));
+            
             const byPrefix = allResults?.find((r: { title: string }) =>
               r.title.startsWith(resultTitleRaw) || resultTitleRaw.startsWith(r.title)
             );
-            if (byPrefix) resultData = byPrefix;
+            if (byPrefix) {
+              console.log('[Inline] Found by prefix:', byPrefix.title);
+              resultData = byPrefix;
+            }
           }
           const resultTitle = resultData?.title ?? resultTitleRaw;
 

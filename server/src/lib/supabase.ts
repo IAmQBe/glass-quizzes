@@ -225,6 +225,8 @@ export interface PersonalityTest {
  * Get personality test by ID
  */
 export async function getPersonalityTestById(testId: string): Promise<PersonalityTest | null> {
+  console.log('[getPersonalityTestById] Looking for test:', testId);
+  
   const { data, error } = await supabase
     .from('personality_tests')
     .select('*')
@@ -232,9 +234,12 @@ export async function getPersonalityTestById(testId: string): Promise<Personalit
     .single();
 
   if (error) {
+    console.log('[getPersonalityTestById] Error:', error.code, error.message);
     if (error.code === 'PGRST116') return null;
     throw error;
   }
+  
+  console.log('[getPersonalityTestById] Found test:', data?.title, 'status:', data?.status);
   return data;
 }
 
