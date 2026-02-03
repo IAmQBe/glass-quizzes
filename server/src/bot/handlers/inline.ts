@@ -245,7 +245,7 @@ export async function handleInlineQuery(ctx: Context) {
       return;
     }
 
-    // Check for test result share format: test_result:testId:resultTitle:imageUrl:userId
+    // Check for test result share format: test_result:testId:resultTitle:description:imageUrl:userId
     if (rawQuery.startsWith('test_result:')) {
       const parts = rawQuery.split(':');
       console.log('[Inline] test_result query, parts:', parts.length);
@@ -254,17 +254,32 @@ export async function handleInlineQuery(ctx: Context) {
         const testId = parts[1];
         const resultTitle = decodeURIComponent(parts[2]).trim();
 
-        // Parse imageUrl (part 3) - check it's not a userId (all digits)
-        let imageUrl = '';
+        // Parse description (part 3) - if not all digits (userId)
+        let resultDescription = '';
         if (parts.length >= 4 && parts[3] && !/^\d+$/.test(parts[3])) {
-          imageUrl = decodeURIComponent(parts[3]);
+          resultDescription = decodeURIComponent(parts[3]).trim();
         }
-        console.log('[Inline] resultTitle:', resultTitle, '| imageUrl from query:', imageUrl ? imageUrl.slice(0, 50) + '...' : 'EMPTY');
+
+        // Parse imageUrl (part 4) - if starts with http
+        let imageUrl = '';
+        if (parts.length >= 5 && parts[4]) {
+          const decoded = decodeURIComponent(parts[4]);
+          if (decoded.startsWith('http')) {
+            imageUrl = decoded;
+          }
+        }
+
+        console.log('[Inline] resultTitle:', resultTitle);
+        console.log('[Inline] description:', resultDescription ? resultDescription.slice(0, 50) + '...' : 'EMPTY');
+        console.log('[Inline] imageUrl:', imageUrl ? imageUrl.slice(0, 50) + '...' : 'EMPTY');
 
         const startParam = buildStartParam({ testId, refUserId: userId, source: 'result_share' });
         const buttonUrl = buildDeepLink(startParam);
         const safeId = `tr${testId.replace(/-/g, '').slice(0, 12)}${Date.now()}`;
-        const caption = `🎭 *Я — ${resultTitle}*\n\nА ты кто? Пройди тест и узнай! 👇`;
+
+        // Build caption with description
+        const descriptionText = resultDescription || 'Пройди тест и узнай кто ты!';
+        const caption = `🎭 *Я — ${resultTitle}*\n\n${descriptionText}\n\n👇 А ты кто?`;
         const keyboard = new InlineKeyboard().url('🧪 Пройти тест', buttonUrl);
 
         // Try to get image URL - first from query, then from DB
@@ -297,7 +312,7 @@ export async function handleInlineQuery(ctx: Context) {
             photo_width: 400,
             photo_height: 400,
             title: `🎭 Я — ${resultTitle}`,
-            description: 'Пройди тест и узнай кто ты!',
+            description: descriptionText.slice(0, 100),
             caption,
             parse_mode: 'Markdown',
             reply_markup: keyboard,
@@ -306,7 +321,7 @@ export async function handleInlineQuery(ctx: Context) {
           console.log('[Inline] Building ARTICLE result (no valid image)');
           // Use the builder for article result
           result = InlineQueryResultBuilder.article(safeId, `🎭 Я — ${resultTitle}`, {
-            description: 'Пройди тест и узнай кто ты!',
+            description: descriptionText.slice(0, 100),
             thumbnail_url: 'https://placehold.co/100x100/9333ea/white?text=Test',
             reply_markup: keyboard,
           }).text(caption, { parse_mode: 'Markdown' });

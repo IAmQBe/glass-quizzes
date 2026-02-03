@@ -194,12 +194,14 @@ export const sharePersonalityTestResult = (
   const tg = window.Telegram?.WebApp;
   const userId = tg?.initDataUnsafe?.user?.id;
 
-  // Format: test_result:testId:resultTitle:imageUrl:refUserId
+  // Format: test_result:testId:resultTitle:description:imageUrl:refUserId
   const titlePart = resultTitle.slice(0, 30).replace(/:/g, ' ');
+  // Truncate description to ~100 chars, remove colons and newlines
+  const descPart = (description || '').slice(0, 120).replace(/:/g, ' ').replace(/\n/g, ' ').trim();
   const imgPart = imageUrl ? encodeURIComponent(imageUrl) : '';
 
   // Build query with all data for instant response
-  const parts = ['test_result', testId, encodeURIComponent(titlePart), imgPart];
+  const parts = ['test_result', testId, encodeURIComponent(titlePart), encodeURIComponent(descPart), imgPart];
   if (userId) parts.push(String(userId));
   const inlineQuery = parts.join(':');
 
