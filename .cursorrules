@@ -1,0 +1,165 @@
+# Mind Test - Telegram Mini App Design System Rules
+
+## Project Overview
+This is a Telegram Mini App quiz game built with React, TypeScript, Tailwind CSS, and shadcn/ui.
+The visual style follows native Telegram iOS "Liquid Glass" aesthetic with full light/dark theme support.
+
+## Critical Styling Rules
+
+### 1. NEVER Use Hardcoded Colors
+```tsx
+// ❌ WRONG - Never do this
+<div className="bg-white text-black border-gray-200">
+<div className="bg-[#ffffff] text-[#000000]">
+
+// ✅ CORRECT - Always use semantic tokens
+<div className="bg-background text-foreground border-border">
+<div className="bg-card text-card-foreground">
+<div className="bg-secondary text-secondary-foreground">
+<div className="bg-muted text-muted-foreground">
+```
+
+### 2. Dark Mode Support
+Always include dark mode variants when needed:
+```tsx
+// For conditional styling based on theme
+<div className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
+<div className="bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200">
+```
+
+### 3. Semantic Color Tokens (from index.css)
+- `background` - Main app background (secondary bg in Telegram terms)
+- `foreground` - Primary text color
+- `card` - Card/section background
+- `card-foreground` - Card text color
+- `primary` - Telegram blue accent (#007AFF equivalent)
+- `primary-foreground` - Text on primary buttons (white)
+- `secondary` - Secondary background
+- `secondary-foreground` - Secondary text
+- `muted` - Muted background
+- `muted-foreground` - Hint/subtitle text (gray)
+- `accent` - Accent color (same as primary)
+- `destructive` - Red for errors/delete actions
+- `border` - Border/separator color
+
+### 4. Custom Telegram-Style Classes
+Use these classes from index.css:
+- `.tg-section` - Card container with subtle shadow
+- `.tg-cell` - List item row (44px min height)
+- `.tg-button` - Primary full-width button
+- `.tg-button-secondary` - Secondary button style
+- `.tg-button-text` - Text-only button
+- `.tg-header` - Section header (uppercase, small)
+- `.tg-hint` - Hint text below sections
+- `.tg-separator` - Horizontal divider
+- `.tg-option` - Quiz answer option card
+- `.tg-stat` - Statistics card
+- `.tg-avatar` - Avatar circle container
+
+### 5. Typography Rules
+- Primary font: Inter, -apple-system, BlinkMacSystemFont
+- Avoid uppercase text (per design language)
+- Use `font-medium` or `font-semibold` for emphasis
+- Hint text: `text-muted-foreground text-sm`
+
+### 6. Spacing & Layout
+- Container max-width: 430px (mobile-first)
+- Default padding: `p-4` or `px-4`
+- Card padding: `p-4`
+- Gap between sections: `space-y-4` or `gap-4`
+- Border radius: Use `rounded-xl` or `rounded-2xl`
+
+### 7. Component Imports
+```tsx
+// shadcn/ui components
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+// Custom icons
+import { PopcornIcon } from "@/components/icons/PopcornIcon";
+import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
+
+// Supabase client
+import { supabase } from "@/integrations/supabase/client";
+
+// Telegram utilities
+import { hapticFeedback, shareReferralLink } from "@/lib/telegram";
+```
+
+### 8. Custom Icons Usage
+- `PopcornIcon` - Used for likes (replaces hearts)
+- `BookmarkIcon` - Used for saves/favorites
+
+### 9. Animations
+Use framer-motion for animations:
+```tsx
+import { motion } from "framer-motion";
+
+<motion.div
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.3 }}
+>
+```
+
+### 10. Telegram WebApp Integration
+```tsx
+// Access Telegram WebApp
+const tg = window.Telegram?.WebApp;
+
+// Haptic feedback
+tg?.HapticFeedback?.impactOccurred("medium");
+
+// Theme detection
+const isDark = tg?.colorScheme === "dark";
+
+// User data
+const user = tg?.initDataUnsafe?.user;
+```
+
+## File Structure
+- `/src/components/ui/` - shadcn/ui base components
+- `/src/components/` - Custom app components
+- `/src/components/icons/` - Custom icon components
+- `/src/screens/` - Full page screens
+- `/src/pages/` - Router pages
+- `/src/hooks/` - Custom React hooks
+- `/src/lib/` - Utility functions
+- `/src/integrations/supabase/` - Supabase client & types
+
+## Button Styles
+```tsx
+// Primary action
+<Button className="w-full">Action</Button>
+
+// Secondary
+<Button variant="secondary">Secondary</Button>
+
+// Ghost/Text
+<Button variant="ghost">Ghost</Button>
+
+// Destructive
+<Button variant="destructive">Delete</Button>
+
+// Custom Challenge button (orange, full-width)
+<Button className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold py-3 rounded-xl">
+  Challenge
+</Button>
+```
+
+## State Colors Pattern
+```tsx
+// Success state
+className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200"
+
+// Warning state  
+className="bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200"
+
+// Error state
+className="bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200"
+
+// Info state
+className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200"
+```
