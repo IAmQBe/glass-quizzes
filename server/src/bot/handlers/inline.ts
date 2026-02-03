@@ -214,6 +214,7 @@ export async function handleInlineQuery(ctx: Context) {
     const results: InlineQueryResultArticle[] = [];
 
     // Check for quiz result share format: quiz_result:quizId:score:total:title
+    // INSTANT RESPONSE - NO DATABASE CALLS!
     if (rawQuery.startsWith('quiz_result:')) {
       const parts = rawQuery.split(':');
       if (parts.length >= 5) {
@@ -221,74 +222,25 @@ export async function handleInlineQuery(ctx: Context) {
         const score = parseInt(parts[2], 10);
         const total = parseInt(parts[3], 10);
         const quizTitle = decodeURIComponent(parts.slice(4).join(':'));
+        const percentage = Math.round((score / total) * 100);
 
-        // Fetch quiz data
-        const { data: quiz } = await supabase
-          .from('quizzes')
-          .select('*')
-          .eq('id', quizId)
-          .single();
+        const startParam = buildStartParam({ questId: quizId, refUserId: userId, source: 'quiz_result_share' });
+        const buttonUrl = buildDeepLink(startParam);
+        const safeId = `qr${quizId.replace(/-/g, '').slice(0, 12)}${Date.now()}`;
 
-        if (quiz) {
-          const startParam = buildStartParam({
-            questId: quizId,
-            refUserId: userId,
-            source: 'quiz_result_share',
-          });
-
-          const safeQuizId = quizId.replace(/-/g, '');
-          const percentage = Math.round((score / total) * 100);
-          const resultImage = quiz.image_url;
-
-          if (isValidImageUrl(resultImage)) {
-            const photoResult: InlineQueryResultPhoto = {
-              type: 'photo',
-              id: `qr${safeQuizId.slice(0, 20)}${userId}${Date.now()}`,
-              photo_url: resultImage!,
-              thumbnail_url: resultImage!,
-              title: `🧠 ${quizTitle}: ${score}/${total}`,
-              description: `${percentage}% правильных • Сможешь лучше?`,
-              caption: `🧠 *${quizTitle}*\n\n✅ Мой результат: *${score}/${total}* (${percentage}%)\n\nСможешь лучше? Попробуй 👇`,
-              parse_mode: 'Markdown',
-              reply_markup: {
-                inline_keyboard: [
-                  [
-                    {
-                      text: '🎯 Пройти квиз',
-                      url: buildDeepLink(startParam),
-                    },
-                  ],
-                ],
-              },
-            };
-            results.push(photoResult as any);
-          } else {
-            results.push({
-              type: 'article',
-              id: `qa${safeQuizId.slice(0, 20)}${userId}${Date.now()}`,
-              title: `🧠 ${quizTitle}: ${score}/${total}`,
-              description: `${percentage}% правильных • Сможешь лучше?`,
-              thumbnail_url: 'https://via.placeholder.com/100x100.png?text=Quiz',
-              input_message_content: {
-                message_text:
-                  `🧠 *${quizTitle}*\n\n` +
-                  `✅ Мой результат: *${score}/${total}* (${percentage}%)\n\n` +
-                  `Сможешь лучше? Попробуй 👇`,
-                parse_mode: 'Markdown',
-              },
-              reply_markup: {
-                inline_keyboard: [
-                  [
-                    {
-                      text: '🎯 Пройти квиз',
-                      url: buildDeepLink(startParam),
-                    },
-                  ],
-                ],
-              },
-            });
-          }
-        }
+        // Instant response without DB
+        results.push({
+          type: 'article',
+          id: safeId,
+          title: `🧠 ${quizTitle}: ${score}/${total}`,
+          description: `${percentage}% правильных • Сможешь лучше?`,
+          thumbnail_url: 'https://placehold.co/100x100/3b82f6/white?text=%F0%9F%A7%A0',
+          input_message_content: {
+            message_text: `🧠 *${quizTitle}*\n\n✅ Мой результат: *${score}/${total}* (${percentage}%)\n\nСможешь лучше? Попробуй 👇`,
+            parse_mode: 'Markdown',
+          },
+          reply_markup: { inline_keyboard: [[{ text: '🎯 Пройти квиз', url: buttonUrl }]] },
+        });
       }
 
       await ctx.answerInlineQuery(results, { cache_time: 0, is_personal: true });
@@ -296,180 +248,36 @@ export async function handleInlineQuery(ctx: Context) {
     }
 
     // Check for test result share format: test_result:testId:resultTitle
+    // INSTANT RESPONSE - NO DATABASE CALLS!
     if (rawQuery.startsWith('test_result:')) {
       const parts = rawQuery.split(':');
-      console.log('[Inline] test_result share, parts:', parts);
 
       if (parts.length >= 3) {
         const testId = parts[1];
-        // Handle case where userId might be at the end (format: test_result:testId:title:userId)
-        let resultTitleRaw: string;
         const lastPart = parts[parts.length - 1];
-        // Check if last part is a numeric userId
-        if (parts.length >= 4 && /^\d+$/.test(lastPart)) {
-          // title is between testId and userId
-          resultTitleRaw = decodeURIComponent(parts.slice(2, -1).join(':')).trim();
-        } else {
-          resultTitleRaw = decodeURIComponent(parts.slice(2).join(':')).trim();
-        }
+        const resultTitle = parts.length >= 4 && /^\d+$/.test(lastPart)
+          ? decodeURIComponent(parts.slice(2, -1).join(':')).trim()
+          : decodeURIComponent(parts.slice(2).join(':')).trim();
 
-        console.log('[Inline] testId:', testId, 'resultTitle:', resultTitleRaw);
+        const startParam = buildStartParam({ testId, refUserId: userId, source: 'result_share' });
+        const buttonUrl = buildDeepLink(startParam);
+        const safeId = `tr${testId.replace(/-/g, '').slice(0, 12)}${Date.now()}`;
 
-        // Fetch test and result data
-        const test = await getPersonalityTestById(testId);
-        console.log('[Inline] test found:', test ? test.title : 'NOT FOUND');
-
-        if (test) {
-          // Fetch the result: exact match first, then prefix match (for truncated title from share flow)
-          let resultData: { title: string; description?: string; image_url?: string } | null = null;
-          console.log('[Inline] Looking for result with title:', resultTitleRaw);
-          
-          const { data: exact, error: exactErr } = await supabase
-            .from('personality_test_results')
-            .select('*')
-            .eq('test_id', testId)
-            .eq('title', resultTitleRaw)
-            .maybeSingle();
-          
-          console.log('[Inline] Exact match result:', exact ? exact.title : 'NOT FOUND', exactErr?.message || '');
-          
-          if (exact) {
-            resultData = exact;
-          } else {
-            const { data: allResults, error: allErr } = await supabase
-              .from('personality_test_results')
-              .select('*')
-              .eq('test_id', testId);
-            
-            console.log('[Inline] All results for test:', allResults?.length || 0, 'titles:', allResults?.map((r: any) => r.title).join(', '));
-            
-            const byPrefix = allResults?.find((r: { title: string }) =>
-              r.title.startsWith(resultTitleRaw) || resultTitleRaw.startsWith(r.title)
-            );
-            if (byPrefix) {
-              console.log('[Inline] Found by prefix:', byPrefix.title);
-              resultData = byPrefix;
-            }
-          }
-          const resultTitle = resultData?.title ?? resultTitleRaw;
-
-          const startParam = buildStartParam({
-            testId,
-            refUserId: userId,
-            source: 'result_share',
-          });
-
-          const resultImage = resultData?.image_url ?? test.image_url;
-          const resultDesc = resultData?.description ?? '';
-
-          // Get description without repeating the title
-          // Skip sentences that:
-          // 1. Contain the result title
-          // 2. Start with "Я —" or "Ты —" (often just restating the character name)
-          // 3. Are too short (< 15 chars)
-          const sentences = resultDesc.split(/[.!?]+/).filter(s => s.trim());
-          let shortDesc = '';
-          const cleanTitle = resultTitle.toLowerCase().replace(/[^a-zа-яё0-9]/gi, '');
-
-          for (const sentence of sentences) {
-            const trimmed = sentence.trim();
-            const cleanSentence = trimmed.toLowerCase();
-            const cleanSentenceNorm = cleanSentence.replace(/[^a-zа-яё0-9]/gi, '');
-
-            // Skip if sentence contains title or is a character intro
-            const containsTitle = cleanSentenceNorm.includes(cleanTitle) || cleanTitle.includes(cleanSentenceNorm);
-            const isCharacterIntro = /^(я|ты)\s*[—–-]/i.test(trimmed);
-            const isTooShort = trimmed.length < 15;
-
-            if (!containsTitle && !isCharacterIntro && !isTooShort) {
-              shortDesc = trimmed;
-              break;
-            }
-          }
-
-          // Use photo result if we have a valid image URL
-          // Note: Telegram requires ID to be alphanumeric only (no dashes), max 64 chars
-          const safeTestId = testId.replace(/-/g, '');
-          const buttonUrl = buildDeepLink(startParam);
-
-          if (isValidImageUrl(resultImage)) {
-            const photoResult: InlineQueryResultPhoto = {
-              type: 'photo',
-              id: `rp${safeTestId.slice(0, 20)}${userId}${Date.now()}`,
-              photo_url: resultImage!,
-              thumbnail_url: resultImage!,
-              title: `🎭 Я — ${resultTitle}`,
-              description: `${test.title} • Пройди и узнай кто ты!`,
-              caption: shortDesc
-                ? `🎭 *Я — ${resultTitle}*\n\n${shortDesc}.\n\nА ты кто? Пройди тест 👇`
-                : `🎭 *Я — ${resultTitle}*\n\nА ты кто? Пройди тест "${test.title}" 👇`,
-              parse_mode: 'Markdown',
-              reply_markup: {
-                inline_keyboard: [
-                  [
-                    {
-                      text: `🧪 ${test.title}`,
-                      url: buttonUrl,
-                    },
-                  ],
-                ],
-              },
-            };
-            results.push(photoResult as any);
-          } else {
-            // Fallback to article if no valid image
-            results.push({
-              type: 'article',
-              id: `rs${safeTestId.slice(0, 20)}${userId}${Date.now()}`,
-              title: `🎭 Я — ${resultTitle}`,
-              description: `${test.title} • Пройди и узнай кто ты!`,
-              thumbnail_url: 'https://via.placeholder.com/100x100.png?text=Result',
-              input_message_content: {
-                message_text: shortDesc
-                  ? `🎭 *Я — ${resultTitle}*\n\n${shortDesc}.\n\nА кто ты? Пройди тест 👇`
-                  : `🎭 *Я — ${resultTitle}*\n\nА кто ты? Пройди тест "${test.title}" 👇`,
-                parse_mode: 'Markdown',
-              },
-              reply_markup: {
-                inline_keyboard: [
-                  [
-                    {
-                      text: `🧪 ${test.title}`,
-                      url: buildDeepLink(startParam),
-                    },
-                  ],
-                ],
-              },
-            });
-          }
-        } else {
-          // Test not found - provide a fallback
-          console.log('[Inline] Test not found, providing fallback result');
-          results.push({
-            type: 'article',
-            id: `test_not_found_${Date.now()}`,
-            title: '🧪 Поделиться тестом',
-            description: 'Тест временно недоступен',
-            thumbnail_url: 'https://via.placeholder.com/100x100.png?text=Test',
-            input_message_content: {
-              message_text: `🧪 Пройди увлекательные тесты в Quipo!\n\nОткрой для себя что-то новое 👇`,
-              parse_mode: 'Markdown',
-            },
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: '🧪 Открыть Quipo',
-                    url: `https://t.me/${BOT_USERNAME}/app`,
-                  },
-                ],
-              ],
-            },
-          });
-        }
+        // Instant response without DB - all data is in the query
+        results.push({
+          type: 'article',
+          id: safeId,
+          title: `🎭 Я — ${resultTitle}`,
+          description: 'Пройди тест и узнай кто ты!',
+          thumbnail_url: 'https://placehold.co/100x100/9333ea/white?text=%F0%9F%8E%AD',
+          input_message_content: {
+            message_text: `🎭 *Я — ${resultTitle}*\n\nА ты кто? Пройди тест и узнай! 👇`,
+            parse_mode: 'Markdown',
+          },
+          reply_markup: { inline_keyboard: [[{ text: '🧪 Пройти тест', url: buttonUrl }]] },
+        });
       }
 
-      // No caching for personalized share results
       await ctx.answerInlineQuery(results, { cache_time: 0, is_personal: true });
       return;
     }
