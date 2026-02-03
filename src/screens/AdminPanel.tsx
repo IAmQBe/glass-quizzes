@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Trash2, Eye, EyeOff, Loader2, Trophy, Settings } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Eye, EyeOff, Loader2, Trophy, Settings, Gift, ExternalLink } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { haptic } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { useAllTasks, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
 
 interface AdminPanelProps {
   onBack: () => void;
 }
 
-type Tab = "quizzes" | "banners" | "seasons";
+type Tab = "quizzes" | "banners" | "tasks" | "seasons";
 
 interface LeaderboardConfig {
   season_duration_days: number;
@@ -22,8 +24,19 @@ interface LeaderboardConfig {
   };
 }
 
+const TASK_ICONS = ["🎯", "📢", "👥", "🎁", "⭐", "🔔", "💎", "🏆"];
+
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
   const [activeTab, setActiveTab] = useState<Tab>("quizzes");
+  const [showNewTask, setShowNewTask] = useState(false);
+  const [newTask, setNewTask] = useState({
+    title: "",
+    description: "",
+    reward_amount: 10,
+    task_type: "link",
+    action_url: "",
+    icon: "🎯",
+  });
   const queryClient = useQueryClient();
 
   // Fetch all quizzes (admin view)
@@ -51,6 +64,12 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
       return data || [];
     },
   });
+
+  // Tasks
+  const { data: tasks = [], isLoading: tasksLoading } = useAllTasks();
+  const createTask = useCreateTask();
+  const updateTask = useUpdateTask();
+  const deleteTask = useDeleteTask();
 
   // Fetch leaderboard config
   const { data: leaderboardConfig, isLoading: configLoading } = useQuery({
@@ -162,9 +181,29 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     updateConfig.mutate(newConfig);
   };
 
+  const handleCreateTask = () => {
+    if (!newTask.title.trim()) {
+      toast({ title: "Введите название задания", variant: "destructive" });
+      return;
+    }
+    createTask.mutate({
+      title: newTask.title,
+      description: newTask.description || null,
+      reward_type: "popcorns",
+      reward_amount: newTask.reward_amount,
+      task_type: newTask.task_type,
+      action_url: newTask.action_url || null,
+      icon: newTask.icon,
+      is_active: true,
+      display_order: tasks.length,
+    });
+    setNewTask({ title: "", description: "", reward_amount: 10, task_type: "link", action_url: "", icon: "🎯" });
+    setShowNewTask(false);
+  };
+
   return (
     <motion.div
-      className="min-h-screen flex flex-col p-5 safe-bottom"
+      className="min-h-screen flex flex-col p-5 safe-bottom pb-24"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -181,46 +220,25 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        <button
-          className={`flex-1 py-2.5 rounded-xl font-medium transition-colors whitespace-nowrap px-3 ${
-            activeTab === "quizzes"
-              ? "bg-primary text-primary-foreground"
-              : "bg-secondary text-foreground"
-          }`}
-          onClick={() => {
-            haptic.selection();
-            setActiveTab("quizzes");
-          }}
-        >
-          Quizzes ({quizzes.length})
-        </button>
-        <button
-          className={`flex-1 py-2.5 rounded-xl font-medium transition-colors whitespace-nowrap px-3 ${
-            activeTab === "banners"
-              ? "bg-primary text-primary-foreground"
-              : "bg-secondary text-foreground"
-          }`}
-          onClick={() => {
-            haptic.selection();
-            setActiveTab("banners");
-          }}
-        >
-          Banners ({banners.length})
-        </button>
-        <button
-          className={`flex-1 py-2.5 rounded-xl font-medium transition-colors whitespace-nowrap px-3 flex items-center justify-center gap-1 ${
-            activeTab === "seasons"
-              ? "bg-primary text-primary-foreground"
-              : "bg-secondary text-foreground"
-          }`}
-          onClick={() => {
-            haptic.selection();
-            setActiveTab("seasons");
-          }}
-        >
-          <Trophy className="w-4 h-4" />
-          Seasons
-        </button>
+        {(["quizzes", "banners", "tasks", "seasons"] as Tab[]).map((tab) => (
+          <button
+            key={tab}
+            className={`py-2 px-3 rounded-xl font-medium transition-colors whitespace-nowrap text-sm flex items-center gap-1 ${
+              activeTab === tab
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-foreground"
+            }`}
+            onClick={() => {
+              haptic.selection();
+              setActiveTab(tab);
+            }}
+          >
+            {tab === "quizzes" && `Quizzes (${quizzes.length})`}
+            {tab === "banners" && `Banners (${banners.length})`}
+            {tab === "tasks" && <><Gift className="w-4 h-4" /> Tasks ({tasks.length})</>}
+            {tab === "seasons" && <><Trophy className="w-4 h-4" /> Seasons</>}
+          </button>
+        ))}
       </div>
 
       {/* Content */}
@@ -370,6 +388,167 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
           </>
         )}
 
+        {activeTab === "tasks" && (
+          <>
+            {/* Add Task Button */}
+            <button
+              className="w-full tg-section p-4 flex items-center justify-center gap-2 text-primary font-medium"
+              onClick={() => {
+                haptic.selection();
+                setShowNewTask(!showNewTask);
+              }}
+            >
+              <Plus className="w-5 h-5" />
+              Добавить задание
+            </button>
+
+            {/* New Task Form */}
+            {showNewTask && (
+              <motion.div
+                className="tg-section p-4 space-y-4"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+              >
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">Название</label>
+                  <Input
+                    value={newTask.title}
+                    onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                    placeholder="Подпишись на канал"
+                    className="bg-secondary border-0"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">Описание (опционально)</label>
+                  <Input
+                    value={newTask.description}
+                    onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                    placeholder="Получи бонус за подписку"
+                    className="bg-secondary border-0"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">Ссылка</label>
+                  <Input
+                    value={newTask.action_url}
+                    onChange={(e) => setNewTask({ ...newTask, action_url: e.target.value })}
+                    placeholder="https://t.me/channel"
+                    className="bg-secondary border-0"
+                  />
+                </div>
+
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm text-muted-foreground mb-2 block">Награда (попкорны)</label>
+                    <Input
+                      type="number"
+                      value={newTask.reward_amount}
+                      onChange={(e) => setNewTask({ ...newTask, reward_amount: parseInt(e.target.value) || 0 })}
+                      className="bg-secondary border-0"
+                      min={1}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-2 block">Иконка</label>
+                    <div className="flex gap-1 flex-wrap">
+                      {TASK_ICONS.map((icon) => (
+                        <button
+                          key={icon}
+                          className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg ${
+                            newTask.icon === icon ? "bg-primary/20" : "bg-secondary"
+                          }`}
+                          onClick={() => setNewTask({ ...newTask, icon })}
+                        >
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 tg-button py-3"
+                    onClick={handleCreateTask}
+                    disabled={createTask.isPending}
+                  >
+                    {createTask.isPending ? (
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                    ) : (
+                      "Создать"
+                    )}
+                  </button>
+                  <button
+                    className="tg-button-secondary py-3 px-4"
+                    onClick={() => setShowNewTask(false)}
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Tasks List */}
+            {tasksLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 text-primary animate-spin" />
+              </div>
+            ) : tasks.length === 0 ? (
+              <div className="tg-section p-6 text-center">
+                <p className="text-muted-foreground">Нет заданий</p>
+              </div>
+            ) : (
+              tasks.map((task: any) => (
+                <div key={task.id} className="tg-section p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-2xl">{task.icon}</span>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-foreground">{task.title}</h3>
+                      {task.description && (
+                        <p className="text-sm text-muted-foreground">{task.description}</p>
+                      )}
+                      {task.action_url && (
+                        <p className="text-xs text-primary flex items-center gap-1 mt-1">
+                          <ExternalLink className="w-3 h-3" />
+                          {task.action_url}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-semibold text-primary">+{task.reward_amount}</span>
+                      <p className="text-xs text-muted-foreground">попкорнов</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Активно</span>
+                      <Switch
+                        checked={task.is_active}
+                        onCheckedChange={() => {
+                          updateTask.mutate({ id: task.id, is_active: !task.is_active });
+                        }}
+                      />
+                    </div>
+                    <button
+                      className="p-2 bg-destructive/10 rounded-lg text-destructive"
+                      onClick={() => {
+                        haptic.notification('warning');
+                        if (confirm("Удалить задание?")) {
+                          deleteTask.mutate(task.id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </>
+        )}
+
         {activeTab === "seasons" && (
           <>
             {configLoading ? (
@@ -462,23 +641,6 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
           </>
         )}
       </div>
-
-      {/* Add Button */}
-      {activeTab !== "seasons" && (
-        <button
-          className="tg-button mt-4 flex items-center justify-center gap-2"
-          onClick={() => {
-            haptic.impact('medium');
-            toast({
-              title: "Coming soon",
-              description: `Create ${activeTab === "quizzes" ? "quiz" : "banner"} form will be added`,
-            });
-          }}
-        >
-          <Plus className="w-5 h-5" />
-          Add {activeTab === "quizzes" ? "Quiz" : "Banner"}
-        </button>
-      )}
     </motion.div>
   );
 };

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BannerCarousel } from "@/components/BannerCarousel";
 import { QuizShowcase } from "@/components/QuizShowcase";
 import { BottomNav } from "@/components/BottomNav";
-import { LeaderboardPreview } from "@/components/LeaderboardPreview";
+import { TasksBlock } from "@/components/TasksBlock";
 import { OnboardingCarousel } from "@/components/OnboardingCarousel";
 import { useBanners } from "@/hooks/useBanners";
 import { usePublishedQuizzes, useQuizWithQuestions } from "@/hooks/useQuizzes";
@@ -33,14 +33,6 @@ type TabId = "home" | "gallery" | "create" | "leaderboard" | "profile";
 type QuizTab = "trending" | "all";
 type SortType = "popular" | "saves" | "newest";
 
-// Mock leaderboard data
-const mockLeaderboard = [
-  { rank: 1, username: "BrainMaster", score: 9847, hasPremium: true },
-  { rank: 2, username: "QuizKing", score: 9234, hasPremium: true },
-  { rank: 3, username: "MindPro", score: 8956, hasPremium: false },
-  { rank: 4, username: "TestGenius", score: 8721, hasPremium: true },
-  { rank: 5, username: "SmartPlayer", score: 8543, hasPremium: false },
-];
 
 const Index = () => {
   const { data: banners = [], isLoading: bannersLoading } = useBanners();
@@ -279,20 +271,13 @@ const Index = () => {
                 )}
               </motion.div>
 
-              {/* Leaderboard Preview */}
+              {/* Tasks Block */}
               <motion.div
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.12 }}
               >
-                <LeaderboardPreview
-                  entries={mockLeaderboard}
-                  onViewAll={() => {
-                    haptic.selection();
-                    setCurrentScreen("leaderboard");
-                    setActiveTab("leaderboard");
-                  }}
-                />
+                <TasksBlock />
               </motion.div>
 
               {/* Tabs: Trending / All */}
