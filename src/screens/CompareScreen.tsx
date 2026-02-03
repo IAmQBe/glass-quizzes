@@ -35,7 +35,7 @@ export const CompareScreen = ({
 
   return (
     <motion.div
-      className="min-h-screen flex flex-col p-5 safe-bottom"
+      className="min-h-screen flex flex-col p-5 pb-24 safe-bottom"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

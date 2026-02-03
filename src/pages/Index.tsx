@@ -998,7 +998,7 @@ const Index = () => {
           {currentScreen === "create_select" && (
             <motion.div
               key="create_select"
-              className="min-h-screen flex flex-col bg-background"
+              className="min-h-screen flex flex-col bg-background pb-24"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}

@@ -62,7 +62,7 @@ export const CreateSquadGuide = ({ onBack }: CreateSquadGuideProps) => {
 
   return (
     <motion.div
-      className="min-h-screen flex flex-col bg-background"
+      className="min-h-screen flex flex-col bg-background pb-24"
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}

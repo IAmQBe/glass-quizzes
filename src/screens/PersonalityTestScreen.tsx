@@ -115,7 +115,7 @@ export const PersonalityTestScreen = ({ testId, onBack, onComplete }: Personalit
 
   return (
     <motion.div
-      className="min-h-screen flex flex-col"
+      className="min-h-screen flex flex-col pb-24"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

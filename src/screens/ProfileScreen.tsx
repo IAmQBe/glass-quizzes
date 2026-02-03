@@ -123,7 +123,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
     .map((f) => ({ ...f.personality_tests, type: 'test' as const }));
 
   // Combine and sort by created_at
-  const allSaved = [...savedQuizzes, ...savedTests].sort((a, b) => 
+  const allSaved = [...savedQuizzes, ...savedTests].sort((a, b) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 
