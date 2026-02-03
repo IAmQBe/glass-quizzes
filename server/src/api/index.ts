@@ -5,6 +5,7 @@ import { logger } from 'hono/logger';
 import { validateInitData, parseStartParam, type InitData } from '../lib/telegram.js';
 import { getQuizById, getPublishedQuizzes, getDailyQuiz } from '../lib/supabase.js';
 import { bot } from '../bot/index.js';
+import { analytics } from './analytics.js';
 
 const app = new Hono();
 
@@ -173,6 +174,35 @@ app.post('/api/shares', authMiddleware, async (c) => {
   
   return c.json({ success: true });
 });
+
+// ==================
+// Admin Routes (require admin check)
+// ==================
+
+const ADMIN_TELEGRAM_IDS = (process.env.ADMIN_TELEGRAM_IDS || '')
+  .split(',')
+  .map((id) => parseInt(id.trim(), 10))
+  .filter((id) => !isNaN(id));
+
+/**
+ * Admin middleware - checks if user is in admin list
+ */
+const adminMiddleware = async (c: any, next: any) => {
+  const initData = c.get('initData');
+  const userId = initData?.user?.id;
+  
+  if (!userId || !ADMIN_TELEGRAM_IDS.includes(userId)) {
+    return c.json({ error: 'Admin access required' }, 403);
+  }
+  
+  await next();
+};
+
+/**
+ * Mount analytics routes (protected)
+ */
+app.use('/api/admin/analytics/*', authMiddleware, adminMiddleware);
+app.route('/api/admin/analytics', analytics);
 
 // ==================
 // Webhook Route (for production)

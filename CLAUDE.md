@@ -213,6 +213,8 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2024-02-03 | Verdicts separate table | Flexible score→verdict mapping per quiz | DB schema |
 | 2024-02-03 | Synced remote UI updates | Onboarding, Leaderboard, Create, Live Quiz, Likes/Saves | Frontend |
 | 2024-02-03 | Live Quiz via Supabase Realtime | Already have Supabase, RLS works, no extra infra | `live_quizzes` tables |
+| 2024-02-03 | Admin Analytics first tab | Most useful for admins, metrics at glance | AdminPanel |
+| 2024-02-03 | Direct Supabase for analytics | Works without server running, simpler setup | AdminAnalytics |
 
 ## TODO / Backlog
 
@@ -231,9 +233,17 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 - [x] Create verdicts + shares tables migration
 - [x] Basic API endpoints (quizzes, auth, attempts, shares)
 
-### Milestone C: Integrate UI with Real Data
-- [ ] Connect screens to API
-- [ ] Use real verdicts from DB
+### Milestone C: UI Integration + Admin Analytics (IN PROGRESS)
+- [ ] Add Admin Analytics Dashboard:
+  - Total users, quizzes, attempts
+  - DAU/WAU/MAU metrics
+  - Avg quiz completion time
+  - Funnel: opens → starts → completes → shares
+  - Top quizzes by plays/likes/shares
+  - Recent activity feed
+- [ ] API endpoints for analytics
+- [ ] Connect screens to real data
+- [ ] Use verdicts from DB
 - [ ] Track attempts and shares
 
 ### Milestone D: Telegram Bot + Inline
@@ -317,6 +327,13 @@ See `.env.example` for required variables.
 2. **Лучше в**: empty states, loading, toast, error messages
 3. **Стиль**: лёгкий, как у Aviasales (но не про самолёты)
 4. **Без кринжа**: если сомневаешься — не шути
+
+### Аналитика (Admin Dashboard)
+1. **Метрики must-have**: DAU, WAU, total users/quizzes/attempts/shares
+2. **Воронка**: opens → starts → completes → shares
+3. **Top quizzes**: по plays, likes, saves
+4. **Обновление**: каждые 30 секунд (refetchInterval)
+5. **Fallback**: если API недоступен, запросы напрямую к Supabase
 
 ---
 

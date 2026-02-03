@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Trash2, Eye, EyeOff, Loader2, Trophy, Settings, Gift, ExternalLink } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Eye, EyeOff, Loader2, Trophy, Settings, Gift, ExternalLink, BarChart3 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { haptic } from "@/lib/telegram";
@@ -8,12 +8,13 @@ import { toast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useAllTasks, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
+import { AdminAnalytics } from "@/components/AdminAnalytics";
 
 interface AdminPanelProps {
   onBack: () => void;
 }
 
-type Tab = "quizzes" | "banners" | "tasks" | "seasons";
+type Tab = "analytics" | "quizzes" | "banners" | "tasks" | "seasons";
 
 interface LeaderboardConfig {
   season_duration_days: number;
@@ -27,7 +28,7 @@ interface LeaderboardConfig {
 const TASK_ICONS = ["🎯", "📢", "👥", "🎁", "⭐", "🔔", "💎", "🏆"];
 
 export const AdminPanel = ({ onBack }: AdminPanelProps) => {
-  const [activeTab, setActiveTab] = useState<Tab>("quizzes");
+  const [activeTab, setActiveTab] = useState<Tab>("analytics");
   const [showNewTask, setShowNewTask] = useState(false);
   const [newTask, setNewTask] = useState({
     title: "",
@@ -220,7 +221,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        {(["quizzes", "banners", "tasks", "seasons"] as Tab[]).map((tab) => (
+        {(["analytics", "quizzes", "banners", "tasks", "seasons"] as Tab[]).map((tab) => (
           <button
             key={tab}
             className={`py-2 px-3 rounded-xl font-medium transition-colors whitespace-nowrap text-sm flex items-center gap-1 ${
@@ -233,6 +234,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
               setActiveTab(tab);
             }}
           >
+            {tab === "analytics" && <><BarChart3 className="w-4 h-4" /> Stats</>}
             {tab === "quizzes" && `Quizzes (${quizzes.length})`}
             {tab === "banners" && `Banners (${banners.length})`}
             {tab === "tasks" && <><Gift className="w-4 h-4" /> Tasks ({tasks.length})</>}
@@ -243,6 +245,10 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
 
       {/* Content */}
       <div className="flex-1 space-y-3 overflow-y-auto">
+        {activeTab === "analytics" && (
+          <AdminAnalytics />
+        )}
+
         {activeTab === "quizzes" && (
           <>
             {quizzesLoading ? (
@@ -641,6 +647,22 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
           </>
         )}
       </div>
+      {/* Add Button */}
+      {activeTab !== "seasons" && activeTab !== "analytics" && activeTab !== "tasks" && (
+        <button
+          className="tg-button mt-4 flex items-center justify-center gap-2"
+          onClick={() => {
+            haptic.impact('medium');
+            toast({
+              title: "Coming soon",
+              description: `Create ${activeTab === "quizzes" ? "quiz" : "banner"} form will be added`,
+            });
+          }}
+        >
+          <Plus className="w-5 h-5" />
+          Add {activeTab === "quizzes" ? "Quiz" : "Banner"}
+        </button>
+      )}
     </motion.div>
   );
 };
