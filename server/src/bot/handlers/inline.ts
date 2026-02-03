@@ -1,4 +1,5 @@
-import { Context, InlineQueryResultArticle, InlineQueryResultPhoto } from 'grammy';
+import { Context } from 'grammy';
+import type { InlineQueryResultArticle, InlineQueryResultPhoto } from 'grammy/types';
 import { getPublishedQuizzes, getRandomQuiz, getDailyQuiz, Quiz, getPublishedPersonalityTests, PersonalityTest, getPersonalityTestById } from '../../lib/supabase.js';
 import { buildStartParam } from '../../lib/telegram.js';
 import { supabase } from '../../lib/supabase.js';
@@ -297,12 +298,27 @@ export async function handleInlineQuery(ctx: Context) {
     // Check for test result share format: test_result:testId:resultTitle
     if (rawQuery.startsWith('test_result:')) {
       const parts = rawQuery.split(':');
+      console.log('[Inline] test_result share, parts:', parts);
+      
       if (parts.length >= 3) {
         const testId = parts[1];
-        const resultTitleRaw = decodeURIComponent(parts.slice(2).join(':')).trim();
+        // Handle case where userId might be at the end (format: test_result:testId:title:userId)
+        let resultTitleRaw: string;
+        const lastPart = parts[parts.length - 1];
+        // Check if last part is a numeric userId
+        if (parts.length >= 4 && /^\d+$/.test(lastPart)) {
+          // title is between testId and userId
+          resultTitleRaw = decodeURIComponent(parts.slice(2, -1).join(':')).trim();
+        } else {
+          resultTitleRaw = decodeURIComponent(parts.slice(2).join(':')).trim();
+        }
+        
+        console.log('[Inline] testId:', testId, 'resultTitle:', resultTitleRaw);
 
         // Fetch test and result data
         const test = await getPersonalityTestById(testId);
+        console.log('[Inline] test found:', test ? test.title : 'NOT FOUND');
+        
         if (test) {
           // Fetch the result: exact match first, then prefix match (for truncated title from share flow)
           let resultData: { title: string; description?: string; image_url?: string } | null = null;
@@ -415,6 +431,30 @@ export async function handleInlineQuery(ctx: Context) {
               },
             });
           }
+        } else {
+          // Test not found - provide a fallback
+          console.log('[Inline] Test not found, providing fallback result');
+          results.push({
+            type: 'article',
+            id: `test_not_found_${Date.now()}`,
+            title: '🧪 Поделиться тестом',
+            description: 'Тест временно недоступен',
+            thumbnail_url: 'https://via.placeholder.com/100x100.png?text=Test',
+            input_message_content: {
+              message_text: `🧪 Пройди увлекательные тесты в Quipo!\n\nОткрой для себя что-то новое 👇`,
+              parse_mode: 'Markdown',
+            },
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: '🧪 Открыть Quipo',
+                    url: `https://t.me/${BOT_USERNAME}/app`,
+                  },
+                ],
+              ],
+            },
+          });
         }
       }
 
@@ -514,8 +554,6 @@ export async function handleInlineQuery(ctx: Context) {
     // Return empty results on error
     await ctx.answerInlineQuery([], {
       cache_time: 10,
-      switch_pm_text: 'Something went wrong. Tap to retry.',
-      switch_pm_parameter: 'retry',
     });
   }
 }
