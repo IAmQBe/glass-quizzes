@@ -147,6 +147,28 @@ export const challengeFriend = () => {
   }
 };
 
+// Share referral link to Telegram chat
+export const shareReferralLink = (referralCode: string, botUsername: string = 'MindTestBot') => {
+  const tg = getTelegram();
+  const referralUrl = `https://t.me/${botUsername}?start=${referralCode}`;
+  const shareText = `🧠 Присоединяйся к Mind Test!\n\nПроходи тесты, соревнуйся с друзьями и узнай себя лучше!\n\n${referralUrl}`;
+  
+  if (tg) {
+    tg.switchInlineQuery(shareText, ['users', 'groups', 'channels']);
+  } else {
+    // Fallback for non-Telegram environment
+    if (navigator.share) {
+      navigator.share({
+        title: 'Mind Test',
+        text: shareText,
+        url: referralUrl,
+      });
+    } else {
+      navigator.clipboard.writeText(referralUrl);
+    }
+  }
+};
+
 // Initialize Telegram WebApp
 export const initTelegramApp = () => {
   const tg = getTelegram();

@@ -245,24 +245,20 @@ const Index = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              {/* Header */}
-              <div className="flex items-center justify-between py-2">
-                <h1 className="text-xl font-bold text-foreground">Mind Test</h1>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      haptic.impact('medium');
-                      setCurrentScreen("pvp");
-                    }}
-                    className="p-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
-                  >
-                    <Swords className="w-5 h-5" />
-                  </button>
-                  <div className="flex items-center gap-1 bg-primary/10 px-3 py-1.5 rounded-full">
-                    <PopcornIcon className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-medium text-primary">12.5K</span>
-                  </div>
-                </div>
+              {/* Header - Challenge Button */}
+              <div className="flex items-center gap-2 py-2">
+                <button
+                  onClick={() => {
+                    haptic.impact('medium');
+                    setCurrentScreen("pvp");
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow-lg"
+                >
+                  <Swords className="w-5 h-5" />
+                  Challenge
+                </button>
+                {/* Popcorn counter - only show if > 0 */}
+                {/* TODO: Replace with real user popcorn count */}
               </div>
 
               {/* Banner Carousel */}

@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { UserStats } from "@/types/quiz";
-import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock } from "lucide-react";
-import { haptic, getTelegramUser } from "@/lib/telegram";
+import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Bell, BellOff } from "lucide-react";
+import { haptic, getTelegramUser, shareReferralLink } from "@/lib/telegram";
 import { useIsAdmin } from "@/hooks/useAuth";
 import { useMyQuizzes } from "@/hooks/useQuizzes";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useProfile, useUpdateProfile, useReferralCount } from "@/hooks/useProfile";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
+import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
 
 interface ProfileScreenProps {
   stats: UserStats;
@@ -25,13 +28,44 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
   const { data: isAdmin } = useIsAdmin();
   const { data: myQuizzes = [], isLoading: myQuizzesLoading } = useMyQuizzes();
   const { data: favorites = [], isLoading: favoritesLoading } = useFavorites();
+  const { data: profile, isLoading: profileLoading } = useProfile();
+  const { data: referralCount = 0 } = useReferralCount();
+  const updateProfile = useUpdateProfile();
   
   const [activeTab, setActiveTab] = useState<TabType>("my");
   const [sortBy, setSortBy] = useState<FilterType>("date");
+  const [copied, setCopied] = useState(false);
 
   const handleBack = () => {
     haptic.selection();
     onBack();
+  };
+
+  const handleCopyReferral = () => {
+    if (profile?.referral_code) {
+      const referralUrl = `https://t.me/MindTestBot?start=${profile.referral_code}`;
+      navigator.clipboard.writeText(referralUrl);
+      setCopied(true);
+      haptic.notification('success');
+      toast({ title: "Ссылка скопирована!" });
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleShareReferral = () => {
+    if (profile?.referral_code) {
+      haptic.impact('medium');
+      shareReferralLink(profile.referral_code);
+    }
+  };
+
+  const handleToggleNotifications = () => {
+    if (profile) {
+      haptic.selection();
+      updateProfile.mutate({ 
+        challenge_notifications_enabled: !profile.challenge_notifications_enabled 
+      });
+    }
   };
 
   const statItems = [
@@ -118,16 +152,81 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
           ))}
         </motion.div>
 
-        {/* Admin Button */}
-        {isAdmin && onOpenAdmin && (
-          <motion.div
-            className="tg-section"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.3 }}
-          >
+        {/* Referral Section */}
+        <motion.div
+          className="tg-section p-4 space-y-3"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.25 }}
+        >
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-primary" />
+            <span className="font-medium text-foreground">Пригласить друзей</span>
+            <span className="ml-auto text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+              {referralCount} приглашений
+            </span>
+          </div>
+          
+          {profile?.referral_code ? (
+            <div className="flex gap-2">
+              <div className="flex-1 bg-secondary rounded-lg px-3 py-2 font-mono text-sm text-foreground truncate">
+                t.me/MindTestBot?start={profile.referral_code}
+              </div>
+              <button
+                onClick={handleCopyReferral}
+                className="p-2 bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
+              >
+                {copied ? (
+                  <Check className="w-5 h-5 text-green-500" />
+                ) : (
+                  <Copy className="w-5 h-5 text-muted-foreground" />
+                )}
+              </button>
+              <button
+                onClick={handleShareReferral}
+                className="p-2 bg-primary rounded-lg text-primary-foreground"
+              >
+                <Share2 className="w-5 h-5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex justify-center py-2">
+              <Loader2 className="w-5 h-5 text-primary animate-spin" />
+            </div>
+          )}
+        </motion.div>
+
+        {/* Settings Section */}
+        <motion.div
+          className="tg-section"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.28 }}
+        >
+          {/* Challenge Notifications Toggle */}
+          <div className="flex items-center justify-between p-4 border-b border-border">
+            <div className="flex items-center gap-3">
+              {profile?.challenge_notifications_enabled ? (
+                <Bell className="w-5 h-5 text-primary" />
+              ) : (
+                <BellOff className="w-5 h-5 text-muted-foreground" />
+              )}
+              <div>
+                <span className="text-foreground font-medium">Уведомления о вызовах</span>
+                <p className="text-xs text-muted-foreground">Получать приглашения на челленджи</p>
+              </div>
+            </div>
+            <Switch
+              checked={profile?.challenge_notifications_enabled ?? true}
+              onCheckedChange={handleToggleNotifications}
+              disabled={profileLoading || updateProfile.isPending}
+            />
+          </div>
+
+          {/* Admin Button */}
+          {isAdmin && onOpenAdmin && (
             <button
-              className="tg-cell w-full justify-between"
+              className="w-full flex items-center justify-between p-4"
               onClick={() => {
                 haptic.impact('medium');
                 onOpenAdmin();
@@ -139,8 +238,8 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
               </div>
               <ChevronRight className="w-5 h-5 text-muted-foreground" />
             </button>
-          </motion.div>
-        )}
+          )}
+        </motion.div>
 
         {/* Tabs: My Quizzes / Saved */}
         <motion.div
