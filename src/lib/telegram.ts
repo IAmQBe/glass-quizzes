@@ -245,7 +245,7 @@ export const shareReferralLink = (referralCode: string, botUsername: string = 'Q
   if (tg) {
     // Use share URL which opens Telegram's share dialog
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralUrl)}&text=${encodeURIComponent(shareText)}`;
-    
+
     // Try openTelegramLink first (works in Mini Apps)
     if (tg.openTelegramLink) {
       tg.openTelegramLink(shareUrl);

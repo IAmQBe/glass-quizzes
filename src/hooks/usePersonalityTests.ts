@@ -120,7 +120,7 @@ export const usePublishedPersonalityTests = () => {
 
       // Get unique creator IDs
       const creatorIds = [...new Set(tests.map(t => t.created_by).filter(Boolean))];
-      
+
       // Fetch creators separately
       let creatorsMap: Record<string, CreatorInfo> = {};
       if (creatorIds.length > 0) {
@@ -139,13 +139,13 @@ export const usePublishedPersonalityTests = () => {
           // Get squad info for creators who have squads
           const squadIds = [...new Set(creators.map(c => c.squad_id).filter(Boolean))];
           let squadsMap: Record<string, { id: string; title: string; username: string | null }> = {};
-          
+
           if (squadIds.length > 0) {
             const { data: squads } = await supabase
               .from("squads")
               .select("id, title, username")
               .in("id", squadIds);
-            
+
             if (squads) {
               squadsMap = Object.fromEntries(squads.map(s => [s.id, s]));
             }

@@ -19,11 +19,36 @@ CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
 CREATE TABLE IF NOT EXISTS shares (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES profiles(id),
-  content_type TEXT NOT NULL, -- 'quiz' or 'personality_test'
-  content_id UUID NOT NULL,
+  content_type TEXT DEFAULT 'quiz', -- 'quiz' or 'personality_test'
+  content_id UUID,
   share_type TEXT DEFAULT 'inline', -- 'inline', 'link', 'direct'
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add missing columns to shares if they don't exist
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'shares' AND column_name = 'content_type') THEN
+    ALTER TABLE shares ADD COLUMN content_type TEXT DEFAULT 'quiz';
+  END IF;
+END $$;
+
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'shares' AND column_name = 'content_id') THEN
+    ALTER TABLE shares ADD COLUMN content_id UUID;
+  END IF;
+END $$;
+
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'shares' AND column_name = 'share_type') THEN
+    ALTER TABLE shares ADD COLUMN share_type TEXT DEFAULT 'inline';
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_shares_user_id ON shares(user_id);
 CREATE INDEX IF NOT EXISTS idx_shares_content ON shares(content_type, content_id);
@@ -173,9 +198,9 @@ BEGIN
     (SELECT COUNT(*) FROM quiz_results 
      WHERE created_at BETWEEN from_date AND to_date + INTERVAL '1 day')::BIGINT as completed,
     
-    -- Shared: count of shares in period
+    -- Shared: count of shares in period (safe check for content_type column)
     (SELECT COUNT(*) FROM shares 
-     WHERE content_type = 'quiz'
+     WHERE (content_type IS NULL OR content_type = 'quiz')
      AND created_at BETWEEN from_date AND to_date + INTERVAL '1 day')::BIGINT as shared;
 END;
 $$;
@@ -220,7 +245,8 @@ BEGIN
     COUNT(DISTINCT qr.id)::BIGINT as completions,
     COALESCE((
       SELECT COUNT(*) FROM shares s 
-      WHERE s.content_type = 'quiz' AND s.content_id = q.id
+      WHERE (s.content_type IS NULL OR s.content_type = 'quiz') 
+        AND s.content_id = q.id
     ), 0)::BIGINT as shares
   FROM quizzes q
   LEFT JOIN quiz_results qr ON qr.quiz_id = q.id
