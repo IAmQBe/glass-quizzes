@@ -74,7 +74,7 @@ export const PvpLobbyScreen = ({ onBack, onStartGame }: PvpLobbyScreenProps) => 
 
   return (
     <motion.div
-      className="min-h-screen bg-background p-4 pb-24 safe-bottom"
+      className="min-h-screen bg-background p-4 pb-32 safe-bottom"
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}

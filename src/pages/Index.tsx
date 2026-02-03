@@ -46,9 +46,11 @@ import { haptic } from "@/lib/telegram";
 import { SquadScreen } from "@/screens/SquadScreen";
 import { SquadListScreen } from "@/screens/SquadListScreen";
 import { CreateSquadGuide } from "@/screens/CreateSquadGuide";
+import { QuizPreviewScreen } from "@/screens/QuizPreviewScreen";
+import { PersonalityTestPreviewScreen } from "@/screens/PersonalityTestPreviewScreen";
 import { useMySquad, Squad } from "@/hooks/useSquads";
 
-type AppScreen = "home" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp" | "personality_test" | "personality_result" | "create_test" | "squad_list" | "squad_detail" | "create_squad";
+type AppScreen = "home" | "quiz_preview" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp" | "test_preview" | "personality_test" | "personality_result" | "create_test" | "squad_list" | "squad_detail" | "create_squad";
 type TabId = "home" | "gallery" | "create" | "leaderboard" | "profile";
 type QuizTab = "trending" | "all";
 type ContentType = "quizzes" | "tests";
@@ -164,17 +166,17 @@ const Index = () => {
             if (isTest) {
               console.log("Opening personality test:", id);
               setSelectedTestId(id);
-              setCurrentScreen("personality_test");
+              setCurrentScreen("test_preview");
             } else if (isQuest) {
               console.log("Opening quiz:", id);
               setSelectedQuizId(id);
-              setCurrentScreen("quiz");
+              setCurrentScreen("quiz_preview");
             } else {
               // Legacy format or unknown - try to determine by checking if it exists
               // For now, default to quiz
               console.log("Opening content (legacy format):", id);
               setSelectedQuizId(id);
-              setCurrentScreen("quiz");
+              setCurrentScreen("quiz_preview");
             }
           }, 100);
         }
@@ -193,11 +195,18 @@ const Index = () => {
 
     if (currentScreen !== "home") {
       backButton.show(() => {
-        if (currentScreen === "quiz") {
+        if (currentScreen === "quiz_preview") {
           setCurrentScreen("home");
           setSelectedQuizId(null);
+        } else if (currentScreen === "quiz") {
+          setCurrentScreen("quiz_preview");
           setCurrentQuestion(0);
           setAnswers([]);
+        } else if (currentScreen === "test_preview") {
+          setCurrentScreen("home");
+          setSelectedTestId(null);
+        } else if (currentScreen === "personality_test") {
+          setCurrentScreen("test_preview");
         } else if (currentScreen === "compare") {
           setCurrentScreen("result");
         } else if (currentScreen === "admin") {
@@ -247,12 +256,18 @@ const Index = () => {
     setSelectedQuizId(quizId);
     setCurrentQuestion(0);
     setAnswers([]);
-    setCurrentScreen("quiz");
+    setCurrentScreen("quiz_preview");
+  };
 
+  const handleStartQuiz = () => {
+    haptic.impact('medium');
+    setCurrentScreen("quiz");
     // Track quiz start
     quizStartTime.current = Date.now();
     questionStartTime.current = Date.now();
-    track('quiz_start', { quiz_id: quizId }, quizId);
+    if (selectedQuizId) {
+      track('quiz_start', { quiz_id: selectedQuizId }, selectedQuizId);
+    }
   };
 
   const handleAnswer = (answerIndex: number) => {
@@ -331,6 +346,11 @@ const Index = () => {
   const handleTestSelect = (testId: string) => {
     haptic.impact('light');
     setSelectedTestId(testId);
+    setCurrentScreen("test_preview");
+  };
+
+  const handleStartTest = () => {
+    haptic.impact('medium');
     setCurrentScreen("personality_test");
   };
 
@@ -416,7 +436,7 @@ const Index = () => {
           {currentScreen === "home" && (
             <motion.div
               key="home"
-              className="p-4 pb-24 safe-bottom space-y-4"
+              className="p-4 pb-32 safe-bottom space-y-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -740,6 +760,33 @@ const Index = () => {
             />
           )}
 
+          {currentScreen === "quiz_preview" && selectedQuizId && quizData?.quiz && (
+            <QuizPreviewScreen
+              key="quiz_preview"
+              quiz={{
+                id: quizData.quiz.id,
+                title: quizData.quiz.title,
+                description: quizData.quiz.description,
+                image_url: quizData.quiz.image_url,
+                question_count: quizData.quiz.question_count || quizData.questions?.length || 0,
+                duration_seconds: quizData.quiz.duration_seconds || 60,
+                participant_count: quizData.quiz.participant_count || 0,
+                like_count: quizData.quiz.like_count || 0,
+                save_count: quizData.quiz.save_count || 0,
+                creator: quizData.quiz.creator,
+              }}
+              isLiked={likeIds.has(selectedQuizId)}
+              isSaved={saveIds.has(selectedQuizId)}
+              onBack={() => {
+                setCurrentScreen("home");
+                setSelectedQuizId(null);
+              }}
+              onStart={handleStartQuiz}
+              onToggleLike={() => toggleLike.mutate(selectedQuizId)}
+              onToggleSave={() => toggleSave.mutate(selectedQuizId)}
+            />
+          )}
+
           {currentScreen === "quiz" && (
             <QuizScreen
               key="quiz"
@@ -764,6 +811,37 @@ const Index = () => {
               }}
             />
           )}
+
+          {currentScreen === "test_preview" && selectedTestId && (() => {
+            const selectedTest = personalityTests.find(t => t.id === selectedTestId);
+            if (!selectedTest) return null;
+            return (
+              <PersonalityTestPreviewScreen
+                key="test_preview"
+                test={{
+                  id: selectedTest.id,
+                  title: selectedTest.title,
+                  description: selectedTest.description,
+                  image_url: selectedTest.image_url,
+                  question_count: selectedTest.question_count || 0,
+                  result_count: selectedTest.result_count || 0,
+                  participant_count: selectedTest.participant_count || 0,
+                  like_count: selectedTest.like_count || 0,
+                  save_count: selectedTest.save_count || 0,
+                  creator: selectedTest.creator,
+                }}
+                isLiked={testLikeIds.has(selectedTestId)}
+                isSaved={testSaveIds.has(selectedTestId)}
+                onBack={() => {
+                  setCurrentScreen("home");
+                  setSelectedTestId(null);
+                }}
+                onStart={handleStartTest}
+                onToggleLike={() => toggleTestLike.mutate(selectedTestId)}
+                onToggleSave={() => toggleTestSave.mutate(selectedTestId)}
+              />
+            );
+          })()}
 
           {currentScreen === "personality_test" && selectedTestId && (
             <PersonalityTestScreen

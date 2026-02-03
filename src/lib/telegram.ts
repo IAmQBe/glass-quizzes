@@ -196,7 +196,7 @@ export const sharePersonalityTestResult = (
   // Format: test_result:testId:resultTitle:refUserId (inline handler expects this)
   const titlePart = resultTitle.slice(0, 30).replace(/:/g, ' ');
   // Include user ID as referrer for tracking
-  const inlineQuery = userId 
+  const inlineQuery = userId
     ? `test_result:${testId}:${encodeURIComponent(titlePart)}:${userId}`
     : `test_result:${testId}:${encodeURIComponent(titlePart)}`;
 

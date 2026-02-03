@@ -11,7 +11,7 @@ interface BottomNavProps {
 }
 
 // Tabs that are coming soon
-const COMING_SOON_TABS: TabId[] = ["gallery", "leaderboard"];
+const COMING_SOON_TABS: TabId[] = ["gallery"];
 
 export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
   const tabs = [

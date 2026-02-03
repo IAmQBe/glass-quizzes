@@ -337,7 +337,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
 
   return (
     <motion.div
-      className="min-h-screen flex flex-col p-5 safe-bottom pb-24"
+      className="min-h-screen flex flex-col p-5 safe-bottom pb-32"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

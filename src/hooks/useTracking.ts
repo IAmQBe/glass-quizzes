@@ -21,7 +21,7 @@ export const useTrackEvent = () => {
   return useMutation({
     mutationFn: async ({ eventType, eventData = {} }: { eventType: string; eventData?: Record<string, any> }) => {
       const userId = await getProfileId();
-      
+
       const { error } = await supabase
         .from("events")
         .insert({
@@ -42,17 +42,17 @@ export const useTrackShare = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ 
-      contentType, 
-      contentId, 
-      shareType = 'inline' 
-    }: { 
-      contentType: 'quiz' | 'personality_test'; 
+    mutationFn: async ({
+      contentType,
+      contentId,
+      shareType = 'inline'
+    }: {
+      contentType: 'quiz' | 'personality_test';
       contentId: string;
       shareType?: 'inline' | 'link' | 'direct';
     }) => {
       const userId = await getProfileId();
-      
+
       const { error } = await supabase
         .from("shares")
         .insert({

@@ -106,7 +106,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
 
   return (
     <motion.div
-      className="flex flex-col min-h-screen pb-24"
+      className="flex flex-col min-h-screen pb-32"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -133,9 +133,9 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
         >
           <div className="w-20 h-20 mb-3 rounded-full overflow-hidden bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border-2 border-primary/20">
             {user?.photo_url ? (
-              <img 
-                src={user.photo_url} 
-                alt={user.first_name || 'Avatar'} 
+              <img
+                src={user.photo_url}
+                alt={user.first_name || 'Avatar'}
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -260,7 +260,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
           </div>
 
           {/* Challenges - Coming Soon */}
-          <div 
+          <div
             className="flex items-center justify-between p-4 border-b border-border opacity-50"
             onClick={() => {
               haptic.selection();
@@ -448,13 +448,12 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                                 <Pencil className="w-4 h-4 text-purple-500" />
                               </button>
                             )}
-                            <span className={`text-xs px-2 py-1 rounded-full ${
-                              test.is_published 
-                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
+                            <span className={`text-xs px-2 py-1 rounded-full ${test.is_published
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                                 : isPending
-                                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
-                                : 'bg-secondary text-muted-foreground'
-                            }`}>
+                                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                                  : 'bg-secondary text-muted-foreground'
+                              }`}>
                               {test.is_published ? 'Live' : isPending ? 'На модерации' : 'Draft'}
                             </span>
                           </div>
@@ -592,7 +591,7 @@ const QuizListItem = ({ quiz, onClick, onEdit }: { quiz: any; onClick: () => voi
             </div>
           </div>
         </button>
-        
+
         <div className="flex items-center gap-2">
           {canEdit && (
             <button
@@ -607,13 +606,12 @@ const QuizListItem = ({ quiz, onClick, onEdit }: { quiz: any; onClick: () => voi
             </button>
           )}
           <span
-            className={`text-xs px-2 py-1 rounded-full ${
-              quiz.is_published
+            className={`text-xs px-2 py-1 rounded-full ${quiz.is_published
                 ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
                 : isPending
-                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-                : "bg-secondary text-muted-foreground"
-            }`}
+                  ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                  : "bg-secondary text-muted-foreground"
+              }`}
           >
             {quiz.is_published ? "Live" : isPending ? "На модерации" : "Draft"}
           </span>

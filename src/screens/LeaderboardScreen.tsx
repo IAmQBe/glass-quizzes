@@ -85,7 +85,7 @@ export const LeaderboardScreen = ({ onBack, onSquadSelect }: LeaderboardScreenPr
 
   return (
     <motion.div
-      className="flex flex-col min-h-screen pb-24"
+      className="flex flex-col min-h-screen pb-32"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
