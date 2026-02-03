@@ -1,21 +1,19 @@
-import { Context } from 'grammy';
-import type { InlineQueryResultArticle, InlineQueryResultPhoto } from 'grammy/types';
+import { Context, InlineKeyboard, InlineQueryResultBuilder } from 'grammy';
+import type { InlineQueryResultArticle, InlineQueryResult } from 'grammy/types';
 import { getPublishedQuizzes, getRandomQuiz, getDailyQuiz, Quiz, getPublishedPersonalityTests, PersonalityTest, getPersonalityTestById } from '../../lib/supabase.js';
 import { buildStartParam } from '../../lib/telegram.js';
 import { supabase } from '../../lib/supabase.js';
 
-const MINI_APP_URL = process.env.VITE_MINI_APP_URL || 'https://t.me/YourBotUsername/app';
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'QuipoBot';
 
 // Build URL for inline buttons - direct Mini App link with Short Name
-// Opens Mini App directly in one click
 function buildDeepLink(startParam: string): string {
   return `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`;
 }
 
-// Check if URL is a valid http(s) URL (not data URL)
+// Check if URL is a valid http(s) URL (not data URL, not empty)
 function isValidImageUrl(url: string | null | undefined): boolean {
-  if (!url) return false;
+  if (!url || url.length < 10) return false;
   return url.startsWith('http://') || url.startsWith('https://');
 }
 
@@ -248,79 +246,76 @@ export async function handleInlineQuery(ctx: Context) {
     }
 
     // Check for test result share format: test_result:testId:resultTitle:imageUrl:userId
-    // INSTANT RESPONSE - NO DATABASE CALLS!
     if (rawQuery.startsWith('test_result:')) {
       const parts = rawQuery.split(':');
+      console.log('[Inline] test_result query, parts:', parts.length);
 
       if (parts.length >= 3) {
         const testId = parts[1];
         const resultTitle = decodeURIComponent(parts[2]).trim();
 
-        // Parse imageUrl (part 3) and userId (part 4)
+        // Parse imageUrl (part 3) - check it's not a userId (all digits)
         let imageUrl = '';
         if (parts.length >= 4 && parts[3] && !/^\d+$/.test(parts[3])) {
           imageUrl = decodeURIComponent(parts[3]);
         }
+        console.log('[Inline] resultTitle:', resultTitle, '| imageUrl from query:', imageUrl ? imageUrl.slice(0, 50) + '...' : 'EMPTY');
 
         const startParam = buildStartParam({ testId, refUserId: userId, source: 'result_share' });
         const buttonUrl = buildDeepLink(startParam);
         const safeId = `tr${testId.replace(/-/g, '').slice(0, 12)}${Date.now()}`;
         const caption = `🎭 *Я — ${resultTitle}*\n\nА ты кто? Пройди тест и узнай! 👇`;
+        const keyboard = new InlineKeyboard().url('🧪 Пройти тест', buttonUrl);
 
-        // Use photo if we have a valid image URL
-        if (isValidImageUrl(imageUrl)) {
-          results.push({
-            type: 'photo',
-            id: safeId,
-            photo_url: imageUrl,
-            thumbnail_url: imageUrl,
+        // Try to get image URL - first from query, then from DB
+        let finalImageUrl = isValidImageUrl(imageUrl) ? imageUrl : null;
+
+        // If no image in query, try quick DB lookup
+        if (!finalImageUrl) {
+          console.log('[Inline] No image in query, trying DB lookup...');
+          try {
+            const { data } = await Promise.race([
+              supabase.from('personality_test_results').select('image_url').eq('test_id', testId).ilike('title', `%${resultTitle.slice(0, 15)}%`).limit(1).maybeSingle(),
+              new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 4000))
+            ]) as any;
+            if (data?.image_url && isValidImageUrl(data.image_url)) {
+              finalImageUrl = data.image_url;
+              console.log('[Inline] Got image from DB:', finalImageUrl?.slice(0, 50));
+            }
+          } catch (e) {
+            console.log('[Inline] DB lookup failed:', e);
+          }
+        }
+
+        // Build result using InlineQueryResultBuilder
+        let result: InlineQueryResult;
+        if (finalImageUrl) {
+          console.log('[Inline] Building PHOTO result with URL:', finalImageUrl.slice(0, 80));
+          // Use the builder for photo result
+          result = InlineQueryResultBuilder.photo(safeId, finalImageUrl, {
+            thumbnail_url: finalImageUrl,
+            photo_width: 400,
+            photo_height: 400,
             title: `🎭 Я — ${resultTitle}`,
             description: 'Пройди тест и узнай кто ты!',
             caption,
             parse_mode: 'Markdown',
-            reply_markup: { inline_keyboard: [[{ text: '🧪 Пройти тест', url: buttonUrl }]] },
-          } as any);
+            reply_markup: keyboard,
+          });
         } else {
-          // No image - try to fetch from DB quickly (with timeout)
-          let fetchedImageUrl: string | null = null;
-          try {
-            const { data } = await Promise.race([
-              supabase.from('personality_test_results').select('image_url').eq('test_id', testId).ilike('title', `%${resultTitle.slice(0, 10)}%`).limit(1).maybeSingle(),
-              new Promise<{data: null}>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
-            ]) as any;
-            if (data?.image_url && isValidImageUrl(data.image_url)) {
-              fetchedImageUrl = data.image_url;
-            }
-          } catch { /* ignore timeout */ }
-
-          if (fetchedImageUrl) {
-            results.push({
-              type: 'photo',
-              id: safeId,
-              photo_url: fetchedImageUrl,
-              thumbnail_url: fetchedImageUrl,
-              title: `🎭 Я — ${resultTitle}`,
-              description: 'Пройди тест и узнай кто ты!',
-              caption,
-              parse_mode: 'Markdown',
-              reply_markup: { inline_keyboard: [[{ text: '🧪 Пройти тест', url: buttonUrl }]] },
-            } as any);
-          } else {
-            results.push({
-              type: 'article',
-              id: safeId,
-              title: `🎭 Я — ${resultTitle}`,
-              description: 'Пройди тест и узнай кто ты!',
-              thumbnail_url: 'https://placehold.co/100x100/9333ea/white?text=%F0%9F%8E%AD',
-              input_message_content: { message_text: caption, parse_mode: 'Markdown' },
-              reply_markup: { inline_keyboard: [[{ text: '🧪 Пройти тест', url: buttonUrl }]] },
-            });
-          }
+          console.log('[Inline] Building ARTICLE result (no valid image)');
+          // Use the builder for article result
+          result = InlineQueryResultBuilder.article(safeId, `🎭 Я — ${resultTitle}`, {
+            description: 'Пройди тест и узнай кто ты!',
+            thumbnail_url: 'https://placehold.co/100x100/9333ea/white?text=Test',
+            reply_markup: keyboard,
+          }).text(caption, { parse_mode: 'Markdown' });
         }
-      }
 
-      await ctx.answerInlineQuery(results, { cache_time: 0, is_personal: true });
-      return;
+        console.log('[Inline] Answering with result type:', (result as any).type);
+        await ctx.answerInlineQuery([result], { cache_time: 0, is_personal: true });
+        return;
+      }
     }
 
     // Default results (no query or empty)

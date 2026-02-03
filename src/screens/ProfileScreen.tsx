@@ -595,7 +595,9 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                           sharePersonalityTestResult(
                             completion.result.title,
                             completion.result.share_text || completion.result.description,
-                            completion.test.id
+                            completion.test.id,
+                            completion.test.title,
+                            completion.result.image_url
                           );
                         }
                       }}
