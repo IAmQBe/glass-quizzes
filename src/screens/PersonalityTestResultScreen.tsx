@@ -22,7 +22,7 @@ export const PersonalityTestResultScreen = ({
 }: PersonalityTestResultScreenProps) => {
   const handleShare = () => {
     haptic.notification('success');
-    sharePersonalityTestResult(result.title, result.share_text || result.description, testId);
+    sharePersonalityTestResult(result.title, result.share_text || result.description, testId, testTitle, result.image_url);
   };
 
   const handleChallenge = () => {

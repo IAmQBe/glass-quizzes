@@ -188,32 +188,28 @@ export const sharePersonalityTestResult = (
   resultTitle: string,
   description: string,
   testId: string,
-  testTitle?: string
+  testTitle?: string,
+  imageUrl?: string
 ) => {
   const tg = window.Telegram?.WebApp;
   const userId = tg?.initDataUnsafe?.user?.id;
 
-  // Format: test_result:testId:resultTitle:refUserId (inline handler expects this)
+  // Format: test_result:testId:resultTitle:imageUrl:refUserId
   const titlePart = resultTitle.slice(0, 30).replace(/:/g, ' ');
-  // Include user ID as referrer for tracking
-  const inlineQuery = userId
-    ? `test_result:${testId}:${encodeURIComponent(titlePart)}:${userId}`
-    : `test_result:${testId}:${encodeURIComponent(titlePart)}`;
-
-  console.log('[Share] Attempting switchInlineQuery:', inlineQuery);
+  const imgPart = imageUrl ? encodeURIComponent(imageUrl) : '';
+  
+  // Build query with all data for instant response
+  const parts = ['test_result', testId, encodeURIComponent(titlePart), imgPart];
+  if (userId) parts.push(String(userId));
+  const inlineQuery = parts.join(':');
 
   if (tg?.switchInlineQuery) {
     try {
-      // Opens chat selector directly - user picks chat, rich card is sent
       tg.switchInlineQuery(inlineQuery, ['users', 'groups', 'channels']);
-      console.log('[Share] switchInlineQuery called successfully');
     } catch (err) {
-      console.error('[Share] switchInlineQuery error:', err);
-      // Fallback: open bot with share parameter
       fallbackShare(testId, titlePart, 'test', userId);
     }
   } else {
-    console.log('[Share] switchInlineQuery not available, using fallback');
     fallbackShare(testId, titlePart, 'test', userId);
   }
 };

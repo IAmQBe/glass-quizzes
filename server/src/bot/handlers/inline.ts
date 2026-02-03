@@ -247,35 +247,50 @@ export async function handleInlineQuery(ctx: Context) {
       return;
     }
 
-    // Check for test result share format: test_result:testId:resultTitle
+    // Check for test result share format: test_result:testId:resultTitle:imageUrl:userId
     // INSTANT RESPONSE - NO DATABASE CALLS!
     if (rawQuery.startsWith('test_result:')) {
       const parts = rawQuery.split(':');
 
       if (parts.length >= 3) {
         const testId = parts[1];
-        const lastPart = parts[parts.length - 1];
-        const resultTitle = parts.length >= 4 && /^\d+$/.test(lastPart)
-          ? decodeURIComponent(parts.slice(2, -1).join(':')).trim()
-          : decodeURIComponent(parts.slice(2).join(':')).trim();
+        const resultTitle = decodeURIComponent(parts[2]).trim();
+        
+        // Parse imageUrl (part 3) and userId (part 4)
+        let imageUrl = '';
+        if (parts.length >= 4 && parts[3] && !/^\d+$/.test(parts[3])) {
+          imageUrl = decodeURIComponent(parts[3]);
+        }
 
         const startParam = buildStartParam({ testId, refUserId: userId, source: 'result_share' });
         const buttonUrl = buildDeepLink(startParam);
         const safeId = `tr${testId.replace(/-/g, '').slice(0, 12)}${Date.now()}`;
+        const caption = `🎭 *Я — ${resultTitle}*\n\nА ты кто? Пройди тест и узнай! 👇`;
 
-        // Instant response without DB - all data is in the query
-        results.push({
-          type: 'article',
-          id: safeId,
-          title: `🎭 Я — ${resultTitle}`,
-          description: 'Пройди тест и узнай кто ты!',
-          thumbnail_url: 'https://placehold.co/100x100/9333ea/white?text=%F0%9F%8E%AD',
-          input_message_content: {
-            message_text: `🎭 *Я — ${resultTitle}*\n\nА ты кто? Пройди тест и узнай! 👇`,
+        // Use photo if we have a valid image URL, otherwise article
+        if (isValidImageUrl(imageUrl)) {
+          results.push({
+            type: 'photo',
+            id: safeId,
+            photo_url: imageUrl,
+            thumbnail_url: imageUrl,
+            title: `🎭 Я — ${resultTitle}`,
+            description: 'Пройди тест и узнай кто ты!',
+            caption,
             parse_mode: 'Markdown',
-          },
-          reply_markup: { inline_keyboard: [[{ text: '🧪 Пройти тест', url: buttonUrl }]] },
-        });
+            reply_markup: { inline_keyboard: [[{ text: '🧪 Пройти тест', url: buttonUrl }]] },
+          } as any);
+        } else {
+          results.push({
+            type: 'article',
+            id: safeId,
+            title: `🎭 Я — ${resultTitle}`,
+            description: 'Пройди тест и узнай кто ты!',
+            thumbnail_url: 'https://placehold.co/100x100/9333ea/white?text=%F0%9F%8E%AD',
+            input_message_content: { message_text: caption, parse_mode: 'Markdown' },
+            reply_markup: { inline_keyboard: [[{ text: '🧪 Пройти тест', url: buttonUrl }]] },
+          });
+        }
       }
 
       await ctx.answerInlineQuery(results, { cache_time: 0, is_personal: true });
