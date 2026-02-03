@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
-import { Users, Clock, HelpCircle, Sparkles, Check } from "lucide-react";
+import { Users, HelpCircle, Sparkles, Check } from "lucide-react";
+import { haptic, getTelegram } from "@/lib/telegram";
 import { PopcornIcon } from "./icons/PopcornIcon";
 import { BookmarkIcon } from "./icons/BookmarkIcon";
-import { haptic, getTelegram } from "@/lib/telegram";
 
 interface CreatorInfo {
   id: string;
@@ -53,6 +53,11 @@ export const PersonalityTestCard = ({
   onToggleLike,
   onToggleSave,
 }: PersonalityTestCardProps) => {
+  const handleClick = () => {
+    haptic.impact('light');
+    onClick();
+  };
+
   const handleLike = (e: React.MouseEvent) => {
     e.stopPropagation();
     haptic.impact('light');
@@ -79,120 +84,139 @@ export const PersonalityTestCard = ({
     }
   };
 
-  return (
-    <motion.div
-      className={`tg-card overflow-hidden cursor-pointer active:scale-[0.98] transition-transform rounded-2xl relative ${isCompleted ? 'opacity-70' : ''}`}
-      onClick={onClick}
-      whileTap={{ scale: 0.98 }}
-    >
-      {/* Completed overlay */}
-      {isCompleted && (
-        <div className="absolute top-2 right-2 z-10 px-2 py-1 rounded-full bg-green-500/90 text-white text-xs font-medium flex items-center gap-1">
-          <Check className="w-3 h-3" />
-          Пройден
-        </div>
-      )}
+  const formatCount = (count: number) => {
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+    return count.toString();
+  };
 
-      {/* Image with gradient overlay */}
-      {image_url && (
-        <div className="relative h-32 overflow-hidden rounded-t-xl -mx-4 -mt-4 mb-3">
+  return (
+    <motion.button
+      className={`tg-section w-full text-left overflow-hidden rounded-2xl ${isCompleted ? 'ring-2 ring-green-500/50' : ''}`}
+      onClick={handleClick}
+      whileTap={{ scale: 0.98 }}
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
+    >
+      {/* Image */}
+      <div className="relative aspect-[16/9] bg-purple-500/10 rounded-t-2xl overflow-hidden">
+        {image_url ? (
           <img
             src={image_url}
             alt={title}
-            className={`w-full h-full object-cover ${isCompleted ? 'grayscale-[30%]' : ''}`}
+            className={`w-full h-full object-cover ${isCompleted ? 'opacity-80' : ''}`}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-
-          {/* Badge */}
-          <div className="absolute top-2 left-2 px-2 py-1 rounded-full bg-purple-500/90 text-white text-xs font-medium flex items-center gap-1">
-            <Sparkles className="w-3 h-3" />
-            Тест личности
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-500/20 to-pink-500/20">
+            <Sparkles className="w-12 h-12 text-purple-500/30" />
           </div>
+        )}
 
-          {/* Results count badge */}
-          <div className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-black/50 text-white text-xs">
-            {result_count} результатов
+        {/* Top left - Badge */}
+        <div className="absolute top-2 left-2 bg-purple-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
+          <Sparkles className="w-3 h-3 text-white" />
+          <span className="text-xs text-white font-medium">Тест личности</span>
+        </div>
+
+        {/* Top right - Completed badge */}
+        {isCompleted && (
+          <div className="absolute top-2 right-12 bg-green-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
+            <Check className="w-3 h-3 text-white" />
+            <span className="text-xs text-white font-medium">Пройден</span>
+          </div>
+        )}
+
+        {/* Top right - Popcorn (like) */}
+        {onToggleLike && (
+          <button
+            onClick={handleLike}
+            className={`absolute top-2 right-2 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${isLiked
+                ? "bg-amber-500 text-white"
+                : "bg-black/40 text-white hover:bg-black/60"
+              }`}
+          >
+            <PopcornIcon className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* Bottom right - Save */}
+        {onToggleSave && (
+          <button
+            onClick={handleSave}
+            className={`absolute bottom-2 right-2 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${isSaved
+                ? "bg-purple-500 text-white"
+                : "bg-black/40 text-white hover:bg-black/60"
+              }`}
+          >
+            <BookmarkIcon className="w-4 h-4" filled={isSaved} />
+          </button>
+        )}
+
+        {/* Bottom left - Stats on image */}
+        <div className="absolute bottom-2 left-2 flex gap-1.5">
+          <div className="bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
+            <Users className="w-3 h-3 text-white" />
+            <span className="text-xs text-white font-medium">
+              {formatCount(participant_count)}
+            </span>
+          </div>
+          <div className="bg-purple-500/80 backdrop-blur-sm rounded-full px-2 py-1">
+            <span className="text-xs text-white font-medium">
+              {result_count} результ.
+            </span>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* No image - show badge inline */}
-      {!image_url && (
-        <div className="flex items-center gap-2 mb-2">
-          <span className="px-2 py-1 rounded-full bg-purple-500/20 text-purple-500 text-xs font-medium flex items-center gap-1">
-            <Sparkles className="w-3 h-3" />
-            Тест личности
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {result_count} результатов
-          </span>
-        </div>
-      )}
+      {/* Content */}
+      <div className="p-3">
+        <h3 className="font-semibold text-foreground text-base mb-1 line-clamp-1">
+          {title}
+        </h3>
 
-      {/* Title */}
-      <h3 className="font-semibold text-foreground text-lg mb-1 line-clamp-2">{title}</h3>
+        {description && (
+          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+            {description}
+          </p>
+        )}
 
-      {/* Description */}
-      {description && (
-        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{description}</p>
-      )}
+        {/* Creator info */}
+        {creator && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-muted-foreground">
+              от {creator.first_name || creator.username || 'Аноним'}
+            </span>
+            {creator.squad && (
+              <button
+                onClick={handleSquadClick}
+                className="text-xs text-purple-500 hover:underline flex items-center gap-1"
+              >
+                <PopcornIcon className="w-3 h-3" />
+                {creator.squad.title}
+              </button>
+            )}
+          </div>
+        )}
 
-      {/* Creator info */}
-      {creator && (
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs text-muted-foreground">
-            от {creator.first_name || creator.username || 'Аноним'}
-          </span>
-          {creator.squad && (
-            <button
-              onClick={handleSquadClick}
-              className="text-xs text-purple-500 hover:underline flex items-center gap-1"
-            >
-              <PopcornIcon className="w-3 h-3" />
-              {creator.squad.title}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Stats row */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <div className="flex items-center gap-3">
+        {/* Stats */}
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
             <HelpCircle className="w-3.5 h-3.5" />
             <span>{question_count} вопросов</span>
           </div>
-          <div className="flex items-center gap-1">
-            <Users className="w-3.5 h-3.5" />
-            <span>{participant_count}</span>
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-2">
-          {onToggleLike && (
-            <button
-              onClick={handleLike}
-              className={`flex items-center gap-1 p-1.5 rounded-lg transition-colors ${isLiked ? 'text-orange-500 bg-orange-500/10' : 'text-muted-foreground hover:text-orange-500'
-                }`}
-            >
-              <PopcornIcon className="w-4 h-4" filled={isLiked} />
-              {like_count > 0 && <span className="text-xs">{like_count}</span>}
-            </button>
+          {like_count > 0 && (
+            <div className="flex items-center gap-1">
+              <PopcornIcon className="w-3.5 h-3.5 text-amber-500" />
+              <span>{formatCount(like_count)}</span>
+            </div>
           )}
-
-          {onToggleSave && (
-            <button
-              onClick={handleSave}
-              className={`flex items-center gap-1 p-1.5 rounded-lg transition-colors ${isSaved ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-primary'
-                }`}
-            >
-              <BookmarkIcon className="w-4 h-4" filled={isSaved} />
-              {save_count > 0 && <span className="text-xs">{save_count}</span>}
-            </button>
+          {save_count > 0 && (
+            <div className="flex items-center gap-1">
+              <BookmarkIcon className="w-3.5 h-3.5" />
+              <span>{formatCount(save_count)}</span>
+            </div>
           )}
         </div>
       </div>
-    </motion.div>
+    </motion.button>
   );
 };

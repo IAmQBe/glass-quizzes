@@ -451,6 +451,43 @@ export const useSubmitQuizResult = () => {
 };
 
 /**
+ * Get IDs of quizzes the current user has completed
+ */
+export const useCompletedQuizIds = () => {
+  return useQuery({
+    queryKey: ["quizzes", "completedIds"],
+    queryFn: async (): Promise<Set<string>> => {
+      const { getTelegramUser } = await import("@/lib/telegram");
+      const tgUser = getTelegramUser();
+
+      if (!tgUser?.id) return new Set();
+
+      // Find profile
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("telegram_id", tgUser.id)
+        .maybeSingle();
+
+      if (!profile) return new Set();
+
+      // Get all quiz IDs that user has completed
+      const { data, error } = await supabase
+        .from("quiz_results")
+        .select("quiz_id")
+        .eq("user_id", profile.id);
+
+      if (error) {
+        console.error("Error fetching completed quiz IDs:", error);
+        return new Set();
+      }
+
+      return new Set(data?.map(r => r.quiz_id) || []);
+    },
+  });
+};
+
+/**
  * Get current user's completed quizzes (history)
  */
 export const useMyQuizResults = () => {

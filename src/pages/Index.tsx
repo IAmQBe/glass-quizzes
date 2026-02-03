@@ -6,7 +6,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { TasksBlock } from "@/components/TasksBlock";
 import { OnboardingCarousel } from "@/components/OnboardingCarousel";
 import { useBanners } from "@/hooks/useBanners";
-import { usePublishedQuizzes, useQuizWithQuestions } from "@/hooks/useQuizzes";
+import { usePublishedQuizzes, useQuizWithQuestions, useCompletedQuizIds } from "@/hooks/useQuizzes";
 import { useFavoriteIds, useToggleFavorite } from "@/hooks/useFavorites";
 import { useLikeIds, useToggleLike } from "@/hooks/useLikes";
 import { useUserStats } from "@/hooks/useUserStats";
@@ -62,6 +62,7 @@ const Index = () => {
   const { data: quizzes = [], isLoading: quizzesLoading } = usePublishedQuizzes();
   const { data: saveIds = new Set() } = useFavoriteIds();
   const { data: likeIds = new Set() } = useLikeIds();
+  const { data: completedQuizIds = new Set() } = useCompletedQuizIds();
   const toggleSave = useToggleFavorite();
   const toggleLike = useToggleLike();
 
@@ -675,6 +676,7 @@ const Index = () => {
                         onQuizSelect={handleQuizSelect}
                         likeIds={likeIds}
                         saveIds={saveIds}
+                        completedIds={completedQuizIds}
                         onToggleLike={handleToggleLike}
                         onToggleSave={handleToggleSave}
                       />

@@ -9,6 +9,7 @@ interface QuizShowcaseProps {
   onQuizSelect: (quizId: string) => void;
   likeIds?: Set<string>;
   saveIds?: Set<string>;
+  completedIds?: Set<string>;
   onToggleLike?: (quizId: string) => void;
   onToggleSave?: (quizId: string) => void;
 }
@@ -19,6 +20,7 @@ export const QuizShowcase = ({
   onQuizSelect,
   likeIds = new Set(),
   saveIds = new Set(),
+  completedIds = new Set(),
   onToggleLike,
   onToggleSave,
 }: QuizShowcaseProps) => {
@@ -55,6 +57,8 @@ export const QuizShowcase = ({
             save_count={(quiz as any).save_count ?? 0}
             isLiked={likeIds.has(quiz.id)}
             isSaved={saveIds.has(quiz.id)}
+            isCompleted={completedIds.has(quiz.id)}
+            creator={(quiz as any).creator}
             onClick={() => onQuizSelect(quiz.id)}
             onToggleLike={onToggleLike ? () => onToggleLike(quiz.id) : undefined}
             onToggleSave={onToggleSave ? () => onToggleSave(quiz.id) : undefined}

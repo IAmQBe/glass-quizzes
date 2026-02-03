@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Users, HelpCircle, Clock } from "lucide-react";
+import { Users, HelpCircle, Clock, Check } from "lucide-react";
 import { haptic, getTelegram } from "@/lib/telegram";
 import { PopcornIcon } from "./icons/PopcornIcon";
 import { BookmarkIcon } from "./icons/BookmarkIcon";
@@ -28,6 +28,7 @@ interface QuizCardProps {
   save_count?: number;
   isLiked?: boolean;
   isSaved?: boolean;
+  isCompleted?: boolean;
   creator?: CreatorInfo | null;
   onClick: () => void;
   onToggleLike?: () => void;
@@ -45,6 +46,7 @@ export const QuizCard = ({
   save_count = 0,
   isLiked = false,
   isSaved = false,
+  isCompleted = false,
   creator,
   onClick,
   onToggleLike,
@@ -94,7 +96,7 @@ export const QuizCard = ({
 
   return (
     <motion.button
-      className="tg-section w-full text-left overflow-hidden rounded-2xl"
+      className={`tg-section w-full text-left overflow-hidden rounded-2xl ${isCompleted ? 'ring-2 ring-green-500/50' : ''}`}
       onClick={handleClick}
       whileTap={{ scale: 0.98 }}
       transition={{ type: "spring", stiffness: 400, damping: 25 }}
@@ -105,7 +107,7 @@ export const QuizCard = ({
           <img
             src={image_url}
             alt={title}
-            className="w-full h-full object-cover"
+            className={`w-full h-full object-cover ${isCompleted ? 'opacity-80' : ''}`}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-accent/20">
@@ -120,6 +122,14 @@ export const QuizCard = ({
             {formatCount(participant_count)}
           </span>
         </div>
+
+        {/* Completed badge */}
+        {isCompleted && (
+          <div className="absolute top-2 right-12 bg-green-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
+            <Check className="w-3 h-3 text-white" />
+            <span className="text-xs text-white font-medium">Пройден</span>
+          </div>
+        )}
 
         {/* Top right - Popcorn (like) */}
         {onToggleLike && (
