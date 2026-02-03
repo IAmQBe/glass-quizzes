@@ -50,7 +50,7 @@ import { QuizPreviewScreen } from "@/screens/QuizPreviewScreen";
 import { PersonalityTestPreviewScreen } from "@/screens/PersonalityTestPreviewScreen";
 import { useMySquad, Squad } from "@/hooks/useSquads";
 
-type AppScreen = "home" | "quiz_preview" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp" | "test_preview" | "personality_test" | "personality_result" | "create_test" | "squad_list" | "squad_detail" | "create_squad";
+type AppScreen = "home" | "quiz_preview" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp" | "test_preview" | "personality_test" | "personality_result" | "create_test" | "squad_list" | "squad_detail" | "create_squad" | "create_select";
 type TabId = "home" | "gallery" | "create" | "leaderboard" | "profile";
 type QuizTab = "trending" | "all";
 type ContentType = "quizzes" | "tests";
@@ -212,6 +212,13 @@ const Index = () => {
           setCurrentScreen("result");
         } else if (currentScreen === "admin") {
           setCurrentScreen("profile");
+        } else if (currentScreen === "create_select") {
+          setCurrentScreen("home");
+          setActiveTab("home");
+        } else if (currentScreen === "create") {
+          setCurrentScreen("create_select");
+        } else if (currentScreen === "create_test") {
+          setCurrentScreen("create_select");
         } else if (currentScreen === "result") {
           setCurrentScreen("home");
           setSelectedQuizId(null);
@@ -235,7 +242,7 @@ const Index = () => {
 
   const handleTabChange = (tab: TabId) => {
     if (tab === "create") {
-      setCurrentScreen("create");
+      setCurrentScreen("create_select");
     } else if (tab === "leaderboard") {
       setCurrentScreen("leaderboard");
     } else if (tab === "profile") {
@@ -880,10 +887,10 @@ const Index = () => {
           {currentScreen === "create_test" && (
             <CreatePersonalityTestScreen
               key="create_test"
-              onBack={() => setCurrentScreen("home")}
+              onBack={() => setCurrentScreen("create_select")}
               onSuccess={() => {
-                setCurrentScreen("home");
-                setContentType("tests");
+                setCurrentScreen("profile");
+                setActiveTab("profile");
               }}
             />
           )}
@@ -988,12 +995,86 @@ const Index = () => {
             />
           )}
 
+          {currentScreen === "create_select" && (
+            <motion.div
+              key="create_select"
+              className="min-h-screen flex flex-col bg-background"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              {/* Header */}
+              <div className="sticky top-0 bg-background/80 backdrop-blur-lg z-10 px-4 py-3 border-b border-border">
+                <div className="flex items-center justify-between">
+                  <button
+                    className="p-2 -ml-2 text-primary"
+                    onClick={() => {
+                      haptic.selection();
+                      setCurrentScreen("home");
+                      setActiveTab("home");
+                    }}
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                  <h1 className="text-lg font-semibold text-foreground">Создать</h1>
+                  <div className="w-10" />
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 p-5 flex flex-col justify-center gap-4">
+                <motion.button
+                  className="tg-section p-6 flex items-center gap-4 text-left"
+                  onClick={() => {
+                    haptic.impact('medium');
+                    setCurrentScreen("create");
+                  }}
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+                    <TrendingUp className="w-7 h-7 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-foreground">Квиз</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Вопросы с правильными ответами и баллами
+                    </p>
+                  </div>
+                </motion.button>
+
+                <motion.button
+                  className="tg-section p-6 flex items-center gap-4 text-left"
+                  onClick={() => {
+                    haptic.impact('medium');
+                    setCurrentScreen("create_test");
+                  }}
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.15 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-purple-500/10 flex items-center justify-center">
+                    <Sparkles className="w-7 h-7 text-purple-500" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-foreground">Тест личности</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Узнай какой ты... с разными результатами
+                    </p>
+                  </div>
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+
           {currentScreen === "create" && (
             <CreateQuizScreen
               key="create"
               onBack={() => {
-                setCurrentScreen("home");
-                setActiveTab("home");
+                setCurrentScreen("create_select");
               }}
               onSuccess={() => {
                 setCurrentScreen("profile");

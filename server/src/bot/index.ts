@@ -186,6 +186,26 @@ bot.on('my_chat_member', async (ctx) => {
       .eq('telegram_chat_id', chatId)
       .maybeSingle();
 
+    // Helper to get and save avatar
+    const saveSquadAvatar = async (squadChatId: number) => {
+      try {
+        const chatInfo = await ctx.api.getChat(squadChatId);
+        if ('photo' in chatInfo && chatInfo.photo) {
+          const file = await ctx.api.getFile(chatInfo.photo.big_file_id);
+          const avatarUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
+          
+          await supabase
+            .from('squads')
+            .update({ avatar_url: avatarUrl })
+            .eq('telegram_chat_id', squadChatId);
+          
+          console.log(`🍿 Squad avatar saved for: ${chatTitle}`);
+        }
+      } catch (e) {
+        console.log('Could not get chat avatar:', e);
+      }
+    };
+
     if (existingSquad) {
       // Reactivate existing squad
       await supabase
@@ -201,6 +221,22 @@ bot.on('my_chat_member', async (ctx) => {
         .eq('id', existingSquad.id);
 
       console.log(`🍿 Squad reactivated: ${chatTitle}`);
+
+      // Update avatar on reactivation too
+      await saveSquadAvatar(chatId);
+
+      // Notify user about reactivation
+      try {
+        await ctx.api.sendMessage(
+          fromUser.id,
+          `🍿 *Попкорн-команда "${chatTitle}" реактивирована!*\n\n` +
+          'Команда снова активна в рейтинге.\n\n' +
+          '_Открой Quipo → на главной нажми "Вступить" в блоке Попкорн-команды_',
+          { parse_mode: 'Markdown' }
+        );
+      } catch (e) {
+        console.log('Could not send reactivation message:', e);
+      }
     } else {
       // Create new squad
       const { error } = await supabase
@@ -236,23 +272,8 @@ bot.on('my_chat_member', async (ctx) => {
           console.log('Could not send activation message to user:', e);
         }
 
-        // Try to get and save chat avatar
-        try {
-          const chat = await ctx.api.getChat(chatId);
-          if ('photo' in chat && chat.photo) {
-            const file = await ctx.api.getFile(chat.photo.big_file_id);
-            const avatarUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
-            
-            await supabase
-              .from('squads')
-              .update({ avatar_url: avatarUrl })
-              .eq('telegram_chat_id', chatId);
-            
-            console.log(`🍿 Squad avatar saved for: ${chatTitle}`);
-          }
-        } catch (e) {
-          console.log('Could not get chat avatar:', e);
-        }
+        // Save avatar for new squad
+        await saveSquadAvatar(chatId);
       }
     }
   }
