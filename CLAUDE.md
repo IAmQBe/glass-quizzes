@@ -314,6 +314,12 @@ glass-quizzes/
 10. **LiveQuizScreen** — Real-time quiz hosting (lobby → playing → results)
 11. **PvpLobbyScreen** — [NEW] PvP room creation/joining (menu → creating → waiting → joining)
 12. **CreatorsScreen** — [NEW] Top quiz creators (Gallery tab in BottomNav)
+13. **PersonalityTestScreen** — Прохождение теста личности (вопросы без правильных ответов)
+14. **PersonalityTestResultScreen** — Результат теста (персонаж + описание + share)
+15. **CreatePersonalityTestScreen** — Создание теста личности (результаты + вопросы)
+16. **SquadScreen** — [NEW] Детальная страница команды (stats, join button, channel link)
+17. **SquadListScreen** — [NEW] Список команд с поиском и рейтингом
+18. **CreateSquadGuide** — [NEW] Пошаговая инструкция создания команды
 
 ## Existing UI Components
 
@@ -379,6 +385,13 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | `useTasks*` | various | [NEW] Tasks system (list/complete/admin CRUD) |
 | `useProfile` | `{ data: Profile }` | [NEW] Current user profile with referral code |
 | `useReferralCount` | `{ data: number }` | [NEW] Count of referred users |
+| `useSquads` | `{ data: Squad[] }` | [NEW] Все активные сквады |
+| `useSquadLeaderboard(limit)` | `{ data: Squad[] }` | [NEW] Топ сквадов по попкорнам |
+| `useMySquad` | `{ data: Squad }` | [NEW] Текущий сквад пользователя |
+| `useCanChangeSquad` | `{ canChange, nextChangeAt }` | [NEW] Проверка возможности смены сквада (7 дней) |
+| `useJoinSquad` | mutation | [NEW] Вступление в сквад |
+| `useLeaveSquad` | mutation | [NEW] Выход из сквада |
+| `useCompletedTestIds` | `{ data: Set<string> }` | [NEW] ID пройденных тестов личности |
 
 ## Existing Data/Types
 
@@ -457,6 +470,21 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | Table | Key Fields | Description |
 |-------|------------|-------------|
 | `referrals` | referrer_id, referred_id, created_at | Referral tracking |
+
+### Squad Tables (NEW)
+| Table | Key Fields | Description |
+|-------|------------|-------------|
+| `squads` | id, telegram_chat_id, title, username, type, member_count, total_popcorns, invite_link, is_active | Попкорн-команды (Telegram каналы/группы) |
+| `squad_members` | squad_id, user_id, joined_at, left_at | Участники сквадов + история |
+| `profiles.squad_id` | squad_id, squad_joined_at | Текущий сквад пользователя |
+
+### Squad RPC Functions
+| Function | Description |
+|----------|-------------|
+| `can_change_squad(user_id)` | Проверка возможности смены сквада (7 дней) |
+| `join_squad(user_id, squad_id)` | Вступление с выходом из старого |
+| `leave_squad(user_id)` | Выход из текущего сквада |
+| `get_squad_leaderboard(limit)` | Топ сквадов по total_popcorns |
 
 ### Still Needed (Milestone B)
 - `verdicts` — score→verdict mapping per quiz
@@ -756,10 +784,19 @@ See `.env.example` for required variables.
 4. **RLS**: отключен, проверка админа на уровне приложения
 5. **Редактирование**: inline форма в админке с сохранением всех полей
 
+### Squads (Попкорн-команды)
+1. **Создание сквада**: добавь бота @QuipoBot админом в канал/группу
+2. **Bot handler**: my_chat_member event создаёт/деактивирует сквад автоматически
+3. **Смена команды**: раз в 7 дней (can_change_squad RPC)
+4. **Лидерборд**: отдельная вкладка "Команды" в LeaderboardScreen
+5. **На главной**: блок "Попкорн-команды" с кнопками "Вступить"/"Создать"
+6. **На карточках**: имя создателя + кликабельный сквад → открывает Telegram канал
+7. **Squad Screen**: stats (участники, попкорны), кнопка вступления, ссылка на канал
+
 ### Coming Soon Features
 1. **Gallery**: кнопка неактивна с badge "soon"
-2. **Leaderboard**: кнопка неактивна с badge "soon"  
-3. **Challenge (PvP)**: кнопка серая с badge "soon"
+2. **Challenge (PvP)**: кнопка серая с badge "soon"
+3. **Leaderboard tabs**: "Кубки" и "Челленджи" неактивны с badge "soon"
 4. **Toast**: при нажатии показывается "Скоро" / "В разработке"
 
 ---
