@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS public.banners (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Favorites table
+-- Favorites table (for quizzes)
 CREATE TABLE IF NOT EXISTS public.favorites (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL,
@@ -193,6 +193,15 @@ CREATE TABLE IF NOT EXISTS public.favorites (
     test_id UUID REFERENCES public.personality_tests(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(user_id, quiz_id),
+    UNIQUE(user_id, test_id)
+);
+
+-- Personality test favorites table (separate for compatibility)
+CREATE TABLE IF NOT EXISTS public.personality_test_favorites (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    test_id UUID NOT NULL REFERENCES public.personality_tests(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(user_id, test_id)
 );
 
@@ -484,6 +493,7 @@ ALTER TABLE public.personality_test_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_personality_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.banners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.favorites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.personality_test_favorites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.quiz_ratings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.quiz_likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personality_test_likes ENABLE ROW LEVEL SECURITY;
@@ -606,6 +616,19 @@ BEGIN
     SET participant_count = participant_count + 1
     WHERE id = NEW.test_id;
     RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Update personality test save count
+CREATE OR REPLACE FUNCTION public.update_personality_test_save_count()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE public.personality_tests SET save_count = save_count + 1 WHERE id = NEW.test_id;
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE public.personality_tests SET save_count = save_count - 1 WHERE id = OLD.test_id;
+    END IF;
+    RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
@@ -981,6 +1004,7 @@ DROP TRIGGER IF EXISTS on_question_change ON public.questions;
 DROP TRIGGER IF EXISTS update_quiz_likes_count ON public.quiz_likes;
 DROP TRIGGER IF EXISTS update_quiz_saves_count ON public.favorites;
 DROP TRIGGER IF EXISTS update_pt_likes_count ON public.personality_test_likes;
+DROP TRIGGER IF EXISTS update_pt_saves_count ON public.personality_test_favorites;
 DROP TRIGGER IF EXISTS on_personality_result_insert ON public.user_personality_results;
 DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
 DROP TRIGGER IF EXISTS update_quizzes_updated_at ON public.quizzes;
@@ -1007,6 +1031,10 @@ FOR EACH ROW EXECUTE FUNCTION public.update_quiz_save_count();
 CREATE TRIGGER update_pt_likes_count
 AFTER INSERT OR DELETE ON public.personality_test_likes
 FOR EACH ROW EXECUTE FUNCTION public.update_personality_test_like_count();
+
+CREATE TRIGGER update_pt_saves_count
+AFTER INSERT OR DELETE ON public.personality_test_favorites
+FOR EACH ROW EXECUTE FUNCTION public.update_personality_test_save_count();
 
 CREATE TRIGGER on_personality_result_insert
 AFTER INSERT ON public.user_personality_results
@@ -1108,6 +1136,11 @@ CREATE POLICY "Banners manage" ON public.banners FOR ALL USING (true);
 CREATE POLICY "Favorites viewable" ON public.favorites FOR SELECT USING (true);
 CREATE POLICY "Favorites insert" ON public.favorites FOR INSERT WITH CHECK (true);
 CREATE POLICY "Favorites delete" ON public.favorites FOR DELETE USING (true);
+
+-- Personality test favorites policies
+CREATE POLICY "PT Favorites viewable" ON public.personality_test_favorites FOR SELECT USING (true);
+CREATE POLICY "PT Favorites insert" ON public.personality_test_favorites FOR INSERT WITH CHECK (true);
+CREATE POLICY "PT Favorites delete" ON public.personality_test_favorites FOR DELETE USING (true);
 
 -- Quiz likes policies
 CREATE POLICY "Likes viewable" ON public.quiz_likes FOR SELECT USING (true);

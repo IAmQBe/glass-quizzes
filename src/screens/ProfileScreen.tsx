@@ -115,8 +115,17 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
   });
 
   const savedQuizzes = favorites
-    .map((f) => f.quizzes)
-    .filter((q): q is NonNullable<typeof q> => q !== null);
+    .filter((f) => f.quizzes)
+    .map((f) => ({ ...f.quizzes, type: 'quiz' as const }));
+
+  const savedTests = favorites
+    .filter((f) => f.personality_tests)
+    .map((f) => ({ ...f.personality_tests, type: 'test' as const }));
+
+  // Combine and sort by created_at
+  const allSaved = [...savedQuizzes, ...savedTests].sort((a, b) => 
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 
   return (
     <motion.div
@@ -489,17 +498,48 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 text-primary animate-spin" />
                 </div>
-              ) : savedQuizzes.length === 0 ? (
+              ) : allSaved.length === 0 ? (
                 <div className="tg-section p-6 text-center">
-                  <p className="text-muted-foreground">Нет сохранённых квизов</p>
+                  <BookmarkIcon className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground">Нет сохранённого контента</p>
+                  <p className="text-xs text-muted-foreground mt-1">Нажми закладку на квизе или тесте чтобы сохранить</p>
                 </div>
               ) : (
-                savedQuizzes.map((quiz: any) => (
-                  <QuizListItem
-                    key={quiz.id}
-                    quiz={quiz}
-                    onClick={() => onQuizSelect?.(quiz.id)}
-                  />
+                allSaved.map((item: any) => (
+                  <div key={item.id} className="tg-section p-4">
+                    <div className="flex items-center gap-3">
+                      {item.image_url ? (
+                        <img src={item.image_url} alt={item.title} className="w-14 h-14 rounded-xl object-cover" />
+                      ) : (
+                        <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${item.type === 'test' ? 'bg-purple-500/20' : 'bg-primary/20'}`}>
+                          {item.type === 'test' ? (
+                            <Sparkles className="w-6 h-6 text-purple-500" />
+                          ) : (
+                            <Target className="w-6 h-6 text-primary" />
+                          )}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${item.type === 'test' ? 'bg-purple-500/20 text-purple-500' : 'bg-primary/20 text-primary'}`}>
+                            {item.type === 'test' ? 'Тест' : 'Квиз'}
+                          </span>
+                        </div>
+                        <h3 className="font-medium text-foreground truncate">{item.title}</h3>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                          <span className="flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            {item.participant_count || 0}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <PopcornIcon className="w-3 h-3 text-orange-500" />
+                            {item.like_count || 0}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                  </div>
                 ))
               )}
             </>

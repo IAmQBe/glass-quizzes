@@ -649,39 +649,17 @@ export const useTogglePersonalityTestFavorite = () => {
       if (!profileId) throw new Error("Нужно открыть через Telegram");
 
       if (isFavorite) {
+        // Remove favorite - trigger will decrement save_count
         await supabase
           .from("personality_test_favorites")
           .delete()
           .eq("test_id", testId)
           .eq("user_id", profileId);
-
-        // Decrement
-        const { data: test } = await supabase
-          .from("personality_tests")
-          .select("save_count")
-          .eq("id", testId)
-          .single();
-
-        await supabase
-          .from("personality_tests")
-          .update({ save_count: Math.max(0, (test?.save_count || 1) - 1) })
-          .eq("id", testId);
       } else {
+        // Add favorite - trigger will increment save_count
         await supabase
           .from("personality_test_favorites")
           .insert({ test_id: testId, user_id: profileId });
-
-        // Increment
-        const { data: test } = await supabase
-          .from("personality_tests")
-          .select("save_count")
-          .eq("id", testId)
-          .single();
-
-        await supabase
-          .from("personality_tests")
-          .update({ save_count: (test?.save_count || 0) + 1 })
-          .eq("id", testId);
       }
     },
     onMutate: async ({ testId, isFavorite }) => {
