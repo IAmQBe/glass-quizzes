@@ -16,6 +16,7 @@ import { ProfileScreen } from "@/screens/ProfileScreen";
 import { AdminPanel } from "@/screens/AdminPanel";
 import { LeaderboardScreen } from "@/screens/LeaderboardScreen";
 import { CreateQuizScreen } from "@/screens/CreateQuizScreen";
+import { CreatorsScreen } from "@/screens/CreatorsScreen";
 import { toast } from "@/hooks/use-toast";
 import { UserStats, QuizResult } from "@/types/quiz";
 import { initTelegramApp, backButton, isTelegramWebApp, shareResult, getTelegramUserData } from "@/lib/telegram";
@@ -26,8 +27,8 @@ import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Input } from "@/components/ui/input";
 import { haptic } from "@/lib/telegram";
 
-type AppScreen = "home" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create";
-type TabId = "home" | "leaderboard" | "create" | "profile";
+type AppScreen = "home" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery";
+type TabId = "home" | "gallery" | "create" | "leaderboard" | "profile";
 type QuizTab = "trending" | "all";
 type SortType = "popular" | "saves" | "newest";
 
@@ -130,6 +131,8 @@ const Index = () => {
       setCurrentScreen("leaderboard");
     } else if (tab === "profile") {
       setCurrentScreen("profile");
+    } else if (tab === "gallery") {
+      setCurrentScreen("gallery");
     } else {
       setCurrentScreen("home");
     }
@@ -229,7 +232,7 @@ const Index = () => {
     options: q.options.map(opt => opt.text),
   })) || [];
 
-  const showBottomNav = ["home", "leaderboard", "profile"].includes(currentScreen);
+  const showBottomNav = ["home", "gallery", "leaderboard", "profile"].includes(currentScreen);
   const displayQuizzes = quizTab === "trending" ? trendingQuizzes : sortedQuizzes;
 
   // Show onboarding
@@ -450,6 +453,16 @@ const Index = () => {
                 )}
               </motion.div>
             </motion.div>
+          )}
+
+          {currentScreen === "gallery" && (
+            <CreatorsScreen
+              key="gallery"
+              onBack={() => {
+                setCurrentScreen("home");
+                setActiveTab("home");
+              }}
+            />
           )}
 
           {currentScreen === "quiz" && (

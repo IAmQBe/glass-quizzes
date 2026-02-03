@@ -1,8 +1,8 @@
-import { Home, Trophy, Plus, User } from "lucide-react";
+import { Home, Trophy, Plus, User, LayoutGrid } from "lucide-react";
 import { motion } from "framer-motion";
 import { haptic } from "@/lib/telegram";
 
-type TabId = "home" | "leaderboard" | "create" | "profile";
+type TabId = "home" | "gallery" | "create" | "leaderboard" | "profile";
 
 interface BottomNavProps {
   activeTab: TabId;
@@ -12,8 +12,9 @@ interface BottomNavProps {
 export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
   const tabs = [
     { id: "home" as TabId, icon: Home, label: "Home" },
-    { id: "leaderboard" as TabId, icon: Trophy, label: "Top" },
+    { id: "gallery" as TabId, icon: LayoutGrid, label: "Gallery" },
     { id: "create" as TabId, icon: Plus, label: "Create", isCenter: true },
+    { id: "leaderboard" as TabId, icon: Trophy, label: "Top" },
     { id: "profile" as TabId, icon: User, label: "Profile" },
   ];
 
@@ -28,7 +29,7 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
         {tabs.map((tab) => (
           <motion.button
             key={tab.id}
-            className={`flex flex-col items-center justify-center py-1 px-4 ${
+            className={`flex flex-col items-center justify-center py-1 px-3 ${
               tab.isCenter ? "" : "flex-1"
             }`}
             onClick={() => handleTabClick(tab.id)}
@@ -41,14 +42,14 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
             ) : (
               <>
                 <tab.icon
-                  className={`w-6 h-6 ${
+                  className={`w-5 h-5 ${
                     activeTab === tab.id
                       ? "text-primary"
                       : "text-muted-foreground"
                   }`}
                 />
                 <span
-                  className={`text-[10px] mt-1 ${
+                  className={`text-[10px] mt-0.5 ${
                     activeTab === tab.id
                       ? "text-primary font-medium"
                       : "text-muted-foreground"
@@ -64,3 +65,5 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     </div>
   );
 };
+
+export type { TabId };
