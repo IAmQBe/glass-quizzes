@@ -60,7 +60,9 @@ glass-quizzes/
 7. **AdminPanel** — tabs (Quizzes/Banners/Stats), CRUD with publish/unpublish/delete
 8. **LeaderboardScreen** — Top-3 podium + full leaderboard list with premium badges
 9. **CreateQuizScreen** — 3-step wizard (info → questions → preview) with form validation
-10. **LiveQuizScreen** — [NEW] Real-time quiz hosting (lobby → playing → results)
+10. **LiveQuizScreen** — Real-time quiz hosting (lobby → playing → results)
+11. **PvpLobbyScreen** — [NEW] PvP room creation/joining (menu → creating → waiting → joining)
+12. **CreatorsScreen** — [NEW] Top quiz creators (Gallery tab in BottomNav)
 
 ## Existing UI Components
 
@@ -88,9 +90,11 @@ glass-quizzes/
 | `BannerCarousel` | `banners[]` | Auto-swipe carousel with dots, swipe gestures |
 | `QuizCard` | `id, title, ..., likeCount, saveCount, isLiked, isSaved, onLike, onSave` | Quiz card with like/save buttons |
 | `QuizShowcase` | `quizzes[], isLoading, onQuizSelect, likeIds, saveIds, onToggleLike, onToggleSave` | Grid of QuizCards with interactions |
-| `BottomNav` | `activeTab, onTabChange` | Bottom navigation (Home, Top, Create, Profile) |
+| `BottomNav` | `activeTab, onTabChange` | Bottom nav (Home, Gallery, Create, Top, Profile) — Create=center floating |
 | `LeaderboardPreview` | `entries[], onViewAll` | Compact leaderboard widget for home |
 | `OnboardingCarousel` | `onComplete` | 5-slide swipeable onboarding flow |
+| `TasksBlock` | — | [NEW] Tasks list with rewards (popcorns), completed tracking |
+| `AdminAnalytics` | — | Admin stats dashboard (overview, funnel, top quizzes) |
 | `NavLink` | react-router NavLink wrapper | Adds activeClassName support |
 
 ### Custom Icons (`components/icons/`)
@@ -120,6 +124,10 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | `useLikeIds()` | `{ data: Set<string> }` | Set of liked quiz IDs |
 | `useToggleLike()` | mutation | Like/unlike quiz (optimistic update) |
 | `useLiveQuiz()` | `{ ... }` | Live quiz state management (host/join/play) |
+| `usePvp*` | various | [NEW] PvP challenges & rooms (create/join/subscribe/update) |
+| `useTasks*` | various | [NEW] Tasks system (list/complete/admin CRUD) |
+| `useProfile` | `{ data: Profile }` | [NEW] Current user profile with referral code |
+| `useReferralCount` | `{ data: number }` | [NEW] Count of referred users |
 
 ## Existing Data/Types
 
@@ -182,6 +190,23 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | `leaderboard_seasons` | id, name, start_date, end_date, is_active | Seasonal leaderboards |
 | `app_settings` | key, value JSONB | Global app configuration |
 
+### PvP Tables (NEW)
+| Table | Key Fields | Description |
+|-------|------------|-------------|
+| `challenges` | id, challenger_id, opponent_id, status, scores, winner_id, expires_at | 1v1 challenges |
+| `pvp_rooms` | id, code, host_id, guest_id, status, scores, current_question | Real-time PvP rooms |
+
+### Tasks Tables (NEW)
+| Table | Key Fields | Description |
+|-------|------------|-------------|
+| `tasks` | id, title, description, reward_amount, task_type, action_url, icon, is_active | Admin-managed tasks |
+| `user_tasks` | user_id, task_id, completed_at | Completed tasks tracking |
+
+### Referral Tables (NEW)
+| Table | Key Fields | Description |
+|-------|------------|-------------|
+| `referrals` | referrer_id, referred_id, created_at | Referral tracking |
+
 ### Still Needed (Milestone B)
 - `verdicts` — score→verdict mapping per quiz
 - `shares` — share event tracking for viral metrics
@@ -215,6 +240,10 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2024-02-03 | Live Quiz via Supabase Realtime | Already have Supabase, RLS works, no extra infra | `live_quizzes` tables |
 | 2024-02-03 | Admin Analytics first tab | Most useful for admins, metrics at glance | AdminPanel |
 | 2024-02-03 | Direct Supabase for analytics | Works without server running, simpler setup | AdminAnalytics |
+| 2024-02-03 | PvP Rooms with codes | Easy sharing, real-time via Supabase subscriptions | PvpLobbyScreen |
+| 2024-02-03 | Tasks replace Leaderboard preview | More engaging, earn rewards | TasksBlock |
+| 2024-02-03 | Referral system | Growth through referrals, profiles.referral_code | ProfileScreen |
+| 2024-02-03 | Challenge cooldown (1h) | Prevent spam, can_challenge_user RPC function | usePvp |
 
 ## TODO / Backlog
 
@@ -333,6 +362,26 @@ See `.env.example` for required variables.
 3. **Top quizzes**: по plays, likes, saves
 4. **Обновление**: каждые 30 секунд (refetchInterval)
 5. **Fallback**: если API недоступен, запросы напрямую к Supabase
+
+### PvP (Challenges & Rooms)
+1. **Challenge cooldown**: 1 час между вызовами одному и тому же игроку
+2. **Room codes**: 6 символов, генерация через `generate_room_code` RPC
+3. **Real-time**: Supabase subscriptions для обновлений комнаты
+4. **Статусы room**: waiting → selecting → playing → finished
+5. **Статусы challenge**: pending → accepted/declined → completed
+
+### Tasks (Задания)
+1. **Reward type**: пока только popcorns
+2. **Task types**: link (внешняя ссылка), internal, social
+3. **Иконки**: эмодзи (🎯📢👥🎁⭐🔔💎🏆)
+4. **Admin CRUD**: create/update/delete через useTasks хуки
+5. **Completion**: один раз, дубликаты блокируются unique constraint
+
+### Referrals (Рефералы)
+1. **Referral code**: автогенерация в profiles
+2. **Tracking**: referrals таблица (referrer_id → referred_id)
+3. **Stats**: useReferralCount для отображения в профиле
+4. **Share**: copyReferralLink через telegram.ts
 
 ---
 
