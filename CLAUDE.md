@@ -51,23 +51,85 @@ glass-quizzes/
 
 ## Existing Screens (Lovable UI)
 
-1. **Home** (`pages/Index.tsx`) — banner carousel + quiz showcase
-2. **WelcomeScreen** — quiz intro with start CTA
-3. **QuizScreen** — 1 question per screen, progress bar
-4. **ResultScreen** — score + percentile + verdict + share/challenge
-5. **CompareScreen** — user vs friend comparison
-6. **ProfileScreen** — user stats + history
-7. **AdminPanel** — quizzes/banners management
+1. **Home** (`pages/Index.tsx`) — banner carousel + quiz showcase + profile button
+2. **WelcomeScreen** — quiz intro card (5 questions • 60 sec • public) + "Start test" CTA
+3. **QuizScreen** — 1 question per screen, progress bar, animated transitions
+4. **ResultScreen** — score display + percentile + verdict emoji + share/challenge/retry/profile buttons
+5. **CompareScreen** — You vs Friend cards with VS badge, waiting state if friend hasn't completed
+6. **ProfileScreen** — avatar, name, stats grid (4 cols), admin button (if admin), Pro features teaser
+7. **AdminPanel** — tabs (Quizzes/Banners), list items with publish/delete actions
 
 ## Existing UI Components
 
-- `tg-section` — glass card container
-- `tg-button` / `tg-button-secondary` / `tg-button-text` — buttons
-- `tg-option` — quiz answer option
-- `tg-progress` — progress bar
-- `tg-avatar` — circle icon/avatar
-- `tg-score` — large score display
-- Full shadcn/ui library in `components/ui/`
+### Custom Telegram-style Classes (`index.css`)
+| Class | Description |
+|-------|-------------|
+| `tg-section` | Glass card container with shadow |
+| `tg-cell` | Row item (44px min-height) with active state |
+| `tg-button` | Primary button (17px font, rounded-xl) |
+| `tg-button-secondary` | Secondary button (bg-secondary, text-primary) |
+| `tg-button-text` | Text-only button |
+| `tg-option` | Quiz answer option (section + border on select) |
+| `tg-progress` / `tg-progress-fill` | Progress bar |
+| `tg-avatar` | Circle container for icons/avatars |
+| `tg-score` | Large score number (6xl, primary color) |
+| `tg-stat` | Stat card for grid layout |
+| `tg-separator` | Horizontal line |
+| `tg-header` | Section header (uppercase, small) |
+| `tg-hint` | Hint text (muted) |
+| `safe-bottom` / `safe-top` | Safe area padding |
+
+### Reusable Components
+| Component | Props | Description |
+|-----------|-------|-------------|
+| `BannerCarousel` | `banners[]` | Auto-swipe carousel with dots, swipe gestures |
+| `QuizCard` | `id, title, description, image_url, participant_count, question_count, duration_seconds, onClick` | Quiz list item card |
+| `QuizShowcase` | `quizzes[], isLoading, onQuizSelect` | Grid of QuizCards with loading state |
+| `NavLink` | react-router NavLink wrapper | Adds activeClassName support |
+
+### shadcn/ui Components (`components/ui/`)
+Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkbox, switch, progress, skeleton, avatar, badge, tooltip, popover, dropdown-menu, etc.
+
+## Existing Hooks
+
+| Hook | Returns | Description |
+|------|---------|-------------|
+| `usePublishedQuizzes()` | `{ data: Quiz[], isLoading }` | Fetch published quizzes |
+| `useQuizWithQuestions(id)` | `{ data: { quiz, questions } }` | Fetch quiz + questions |
+| `useMyQuizzes()` | `{ data: Quiz[] }` | Current user's quizzes |
+| `useCreateQuiz()` | mutation | Create new quiz |
+| `useSubmitQuizResult()` | mutation | Submit quiz result |
+| `useBanners()` | `{ data: Banner[] }` | Fetch active banners |
+| `useIsAdmin()` | `{ data: boolean }` | Check if current user is admin |
+| `useQuiz()` | quiz state machine | Local quiz flow state (welcome→quiz→result) |
+
+## Existing Data/Types
+
+### Types (`types/quiz.ts`)
+- `Question` — `{ id, text, options[] }`
+- `QuizResult` — `{ score, maxScore, percentile, verdict, verdictEmoji }`
+- `UserStats` — `{ bestScore, testsCompleted, globalRank, activeChallenges }`
+- `Friend` — `{ id, name, avatar?, score?, hasCompleted }`
+
+### Mock Data (`data/quizData.ts`)
+- `sampleQuestions[]` — 5 demo questions
+- `verdicts[]` — score ranges → verdict text + emoji
+- `getVerdict(score)` — lookup function
+- `calculateResult(answers)` — scoring logic (currently mock)
+
+## Telegram Integration (`lib/telegram.ts`)
+
+| Function | Description |
+|----------|-------------|
+| `getTelegram()` | Get WebApp instance |
+| `isTelegramWebApp()` | Check if in Telegram |
+| `getTelegramUser()` | Get current user info |
+| `haptic.impact/notification/selection()` | Haptic feedback |
+| `shareResult(score, percentile, verdict)` | Share via switchInlineQuery |
+| `challengeFriend()` | Challenge via switchInlineQuery |
+| `initTelegramApp()` | Initialize: ready(), expand(), theme |
+| `mainButton.show/hide/setText()` | MainButton control |
+| `backButton.show/hide()` | BackButton control |
 
 ## Database Schema (Supabase)
 
@@ -175,4 +237,43 @@ See `.env.example` for required variables.
 
 ---
 
-**Rule**: All decisions go in CLAUDE.md first, then code.
+## Rules (обязательные)
+
+### Дизайн и UI
+1. **НЕ переписывать существующие компоненты** — только расширять/использовать
+2. **Новые экраны** — строить из существующих `tg-*` классов и shadcn/ui
+3. **Стиль** — Liquid Glass (прозрачность, blur, градиенты) уже в Tailwind конфиге
+4. **Анимации** — использовать framer-motion как в существующих экранах
+5. **Haptic feedback** — вызывать `haptic.*` на все интерактивные элементы
+
+### Код и архитектура
+1. **Решения → CLAUDE.md → Код** — сначала запись, потом реализация
+2. **Маленькие шаги** — каждый milestone = коммит
+3. **Типизация** — строгий TypeScript, без `any`
+4. **Хуки** — новая логика = новый хук в `hooks/`
+5. **API** — все запросы через react-query
+
+### База данных
+1. **Supabase** — основная БД, миграции в `supabase/migrations/`
+2. **RLS** — все таблицы защищены Row Level Security
+3. **Типы** — после миграции обновить `integrations/supabase/types.ts`
+
+### Telegram
+1. **initData** — ВСЕГДА валидировать на сервере, НИКОГДА не доверять клиенту
+2. **WebApp SDK** — использовать `lib/telegram.ts` обёртки
+3. **Inline mode** — payload без персональных данных (только IDs, refs)
+
+### Бэкапы и деплой
+1. **Перед milestone** — `npm run backup` + `npm run snapshot`
+2. **Секреты** — НИКОГДА в репо, только `.env.example`
+3. **Docker** — локальная разработка через `docker-compose`
+
+### Микроюмор (UI копирайтинг)
+1. **Максимум 1 короткая шутка на экран**
+2. **Лучше в**: empty states, loading, toast, error messages
+3. **Стиль**: лёгкий, как у Aviasales (но не про самолёты)
+4. **Без кринжа**: если сомневаешься — не шути
+
+---
+
+**Golden Rule**: All decisions go in CLAUDE.md first, then code.
