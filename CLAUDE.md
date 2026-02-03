@@ -233,18 +233,17 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 - [x] Create verdicts + shares tables migration
 - [x] Basic API endpoints (quizzes, auth, attempts, shares)
 
-### Milestone C: UI Integration + Admin Analytics (IN PROGRESS)
-- [ ] Add Admin Analytics Dashboard:
-  - Total users, quizzes, attempts
-  - DAU/WAU/MAU metrics
+### Milestone C: UI Integration + Admin Analytics ✅
+- [x] Admin Analytics Dashboard:
+  - Total users, quizzes, attempts, shares
+  - DAU/WAU metrics with auto-refresh
   - Avg quiz completion time
-  - Funnel: opens → starts → completes → shares
-  - Top quizzes by plays/likes/shares
-  - Recent activity feed
-- [ ] API endpoints for analytics
-- [ ] Connect screens to real data
-- [ ] Use verdicts from DB
-- [ ] Track attempts and shares
+  - Funnel visualization (7 days)
+  - Top quizzes by plays/likes/saves
+  - Micro-humor based on stats
+- [x] API endpoints for analytics (server/src/api/analytics.ts)
+- [ ] Connect screens to real verdict data from DB
+- [ ] Track attempts and shares in real-time
 
 ### Milestone D: Telegram Bot + Inline
 - [ ] Set up grammY bot
