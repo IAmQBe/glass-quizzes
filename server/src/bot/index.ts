@@ -220,11 +220,11 @@ bot.on('my_chat_member', async (ctx) => {
       } else {
         console.log(`🍿 Squad created: ${chatTitle}`);
 
-        // Notify the chat
+        // Notify the user who added the bot (NOT the channel!)
         try {
           await ctx.api.sendMessage(
-            chatId,
-            '🍿 *Попкорн-команда активирована!*\n\n' +
+            fromUser.id,
+            `🍿 *Попкорн-команда "${chatTitle}" активирована!*\n\n` +
             'Теперь участники вашего сообщества могут вступить в эту команду через Quipo.\n\n' +
             '• Все лайки (попкорны) участников суммируются\n' +
             '• Команда появится в общем рейтинге\n' +
@@ -233,7 +233,7 @@ bot.on('my_chat_member', async (ctx) => {
             { parse_mode: 'Markdown' }
           );
         } catch (e) {
-          console.log('Could not send activation message:', e);
+          console.log('Could not send activation message to user:', e);
         }
       }
     }
