@@ -353,36 +353,42 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          challenge_notifications_enabled: boolean | null
           created_at: string
           first_name: string | null
           has_telegram_premium: boolean | null
           id: string
           last_name: string | null
           onboarding_completed: boolean
+          referral_code: string | null
           telegram_id: number | null
           updated_at: string
           username: string | null
         }
         Insert: {
           avatar_url?: string | null
+          challenge_notifications_enabled?: boolean | null
           created_at?: string
           first_name?: string | null
           has_telegram_premium?: boolean | null
           id: string
           last_name?: string | null
           onboarding_completed?: boolean
+          referral_code?: string | null
           telegram_id?: number | null
           updated_at?: string
           username?: string | null
         }
         Update: {
           avatar_url?: string | null
+          challenge_notifications_enabled?: boolean | null
           created_at?: string
           first_name?: string | null
           has_telegram_premium?: boolean | null
           id?: string
           last_name?: string | null
           onboarding_completed?: boolean
+          referral_code?: string | null
           telegram_id?: number | null
           updated_at?: string
           username?: string | null
@@ -642,6 +648,27 @@ export type Database = {
           save_count?: number
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      referrals: {
+        Row: {
+          created_at: string
+          id: string
+          referred_id: string
+          referrer_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          referred_id: string
+          referrer_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          referred_id?: string
+          referrer_id?: string
         }
         Relationships: []
       }
