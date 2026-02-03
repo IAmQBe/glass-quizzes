@@ -54,16 +54,19 @@ export const QuizScreen = ({ questions, currentQuestion, onAnswer }: QuizScreenP
         <motion.div
           key={question.id}
           className="flex-1 flex flex-col"
-          initial={{ x: 40, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: -40, opacity: 0 }}
-          transition={{ duration: 0.25 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{
+            duration: 0.4,
+            ease: [0.25, 0.46, 0.45, 0.94]
+          }}
         >
           <motion.h2
             className="text-xl font-semibold text-center text-foreground mb-8 px-2"
-            initial={{ y: 15, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
           >
             {question.text}
           </motion.h2>
@@ -72,10 +75,15 @@ export const QuizScreen = ({ questions, currentQuestion, onAnswer }: QuizScreenP
             {question.options.map((option, index) => (
               <motion.button
                 key={index}
-                className="tg-option w-full text-left"
-                initial={{ y: 15, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.12 + index * 0.04 }}
+                className="tg-option w-full text-left touch-manipulation"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ 
+                  duration: 0.35,
+                  delay: 0.15 + index * 0.08,
+                  ease: [0.25, 0.46, 0.45, 0.94]
+                }}
+                whileTap={{ scale: 0.97 }}
                 onClick={() => handleAnswer(index)}
               >
                 <span className="text-foreground font-medium">{option}</span>

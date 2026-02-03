@@ -140,25 +140,29 @@ const Index = () => {
       if (startParam) {
         console.log("Deep link start_param:", startParam);
 
-        // Parse start_param format: testId_refUserId_source or questId_refUserId_source
-        const parts = startParam.split('_');
+        // Parse start_param format: test_UUID_ref_userId_src_source or quest_UUID_ref_userId_src_source
+        // Extract UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+        const uuidMatch = startParam.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+        const isTest = startParam.startsWith('test_');
+        const isQuest = startParam.startsWith('quest_');
 
-        // Check for test ID (UUID format)
-        if (parts[0] && parts[0].includes('-') && parts[0].length > 30) {
-          // Looks like a test or quest UUID
-          const id = parts[0];
-          const source = parts[2] || 'deeplink';
+        if (uuidMatch) {
+          const id = uuidMatch[1];
 
           // Delay screen change to allow React to render first
           setTimeout(() => {
-            // Check if it's a personality test
-            if (source.includes('test') || source === 'result_share') {
+            if (isTest) {
               console.log("Opening personality test:", id);
               setSelectedTestId(id);
               setCurrentScreen("personality_test");
-            } else {
-              // Assume it's a quiz
+            } else if (isQuest) {
               console.log("Opening quiz:", id);
+              setSelectedQuizId(id);
+              setCurrentScreen("quiz");
+            } else {
+              // Legacy format or unknown - try to determine by checking if it exists
+              // For now, default to quiz
+              console.log("Opening content (legacy format):", id);
               setSelectedQuizId(id);
               setCurrentScreen("quiz");
             }

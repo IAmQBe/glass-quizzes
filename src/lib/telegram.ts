@@ -140,10 +140,48 @@ export const shareQuizResult = (
   verdict?: string
 ) => {
   const tg = getTelegram();
+  const botUsername = 'QuipoBot';
+  const percentage = Math.round((score / totalQuestions) * 100);
+
+  // Format: quiz_result:quizId:score:total:title - bot will parse this
+  const shareQuery = `quiz_result:${quizId}:${score}:${totalQuestions}:${encodeURIComponent(quizTitle)}`;
+  
+  console.log('Sharing quiz result:', { quizId, score, totalQuestions, shareQuery, tgAvailable: !!tg });
+
   if (tg) {
-    // Format: quiz_result:quizId:score:total:title - bot will parse this
-    const shareQuery = `quiz_result:${quizId}:${score}:${totalQuestions}:${encodeURIComponent(quizTitle)}`;
-    tg.switchInlineQuery(shareQuery, ['users', 'groups', 'channels']);
+    // Method 1: Try switchInlineQuery
+    if (typeof tg.switchInlineQuery === 'function') {
+      console.log('Using switchInlineQuery for quiz');
+      tg.switchInlineQuery(shareQuery, ['users', 'groups', 'channels']);
+      return;
+    }
+    
+    // Method 2: Try opening share URL directly
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(`https://t.me/${botUsername}/app?startapp=quest_${quizId}`)}&text=${encodeURIComponent(`🧠 ${quizTitle}\n✅ Мой результат: ${score}/${totalQuestions} (${percentage}%)\nСможешь лучше? 👇`)}`;
+    
+    if (typeof tg.openTelegramLink === 'function') {
+      tg.openTelegramLink(shareUrl);
+      return;
+    }
+    
+    if (typeof tg.openLink === 'function') {
+      tg.openLink(shareUrl);
+      return;
+    }
+  }
+  
+  // Fallback
+  const shareUrl = `https://t.me/${botUsername}/app?startapp=quest_${quizId}`;
+  if (navigator.share) {
+    navigator.share({
+      title: `🧠 ${quizTitle}`,
+      text: `✅ Мой результат: ${score}/${totalQuestions} (${percentage}%)\nСможешь лучше?`,
+      url: shareUrl,
+    }).catch(() => {
+      navigator.clipboard?.writeText(`🧠 ${quizTitle}\n✅ ${score}/${totalQuestions}\n${shareUrl}`);
+    });
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(`🧠 ${quizTitle}\n✅ ${score}/${totalQuestions}\n${shareUrl}`);
   }
 };
 
@@ -172,18 +210,52 @@ export const sharePersonalityTestResult = (
   testTitle?: string
 ) => {
   const tg = getTelegram();
+  const botUsername = 'QuipoBot';
 
-  // Short description (first sentence or 80 chars)
-  const shortDesc = description.split('.')[0].slice(0, 80);
-
-  // Format: test_result:testId:resultTitle - bot will parse this
+  // Format: test_result:testId:resultTitle - bot will parse this  
   const shareQuery = `test_result:${testId}:${encodeURIComponent(resultTitle)}`;
-
-  // Fallback text for inline (bot will format properly)
-  const shareText = `🎭 Я — ${resultTitle}\n${shortDesc}.\nА ты кто? Пройди тест 👇`;
+  
+  console.log('Sharing test result:', { resultTitle, testId, shareQuery, tgAvailable: !!tg });
 
   if (tg) {
-    tg.switchInlineQuery(shareQuery, ['users', 'groups', 'channels']);
+    // Method 1: Try switchInlineQuery (opens chat picker with inline query)
+    if (typeof tg.switchInlineQuery === 'function') {
+      console.log('Using switchInlineQuery');
+      tg.switchInlineQuery(shareQuery, ['users', 'groups', 'channels']);
+      return;
+    }
+    
+    // Method 2: Try opening share URL directly
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(`https://t.me/${botUsername}/app?startapp=test_${testId}`)}&text=${encodeURIComponent(`🎭 Я — ${resultTitle}!\nА ты кто? Пройди тест 👇`)}`;
+    console.log('Using openTelegramLink:', shareUrl);
+    
+    if (typeof tg.openTelegramLink === 'function') {
+      tg.openTelegramLink(shareUrl);
+      return;
+    }
+    
+    // Method 3: Open link externally
+    if (typeof tg.openLink === 'function') {
+      tg.openLink(shareUrl);
+      return;
+    }
+  }
+  
+  // Fallback for web browser or if Telegram methods fail
+  const shareUrl = `https://t.me/${botUsername}/app?startapp=test_${testId}_ref_share`;
+  console.log('Using fallback share');
+  
+  if (navigator.share) {
+    navigator.share({
+      title: `🎭 Я — ${resultTitle}!`,
+      text: description,
+      url: shareUrl,
+    }).catch(() => {
+      // If share fails, copy to clipboard
+      navigator.clipboard?.writeText(`🎭 Я — ${resultTitle}!\nПройди тест: ${shareUrl}`);
+    });
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(`🎭 Я — ${resultTitle}!\nПройди тест: ${shareUrl}`);
   }
 };
 

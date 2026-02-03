@@ -202,11 +202,21 @@
 
   /* Option Card - Quiz Answer */
   .tg-option {
-    @apply tg-section p-4 cursor-pointer transition-all duration-150 border-2 border-transparent;
+    @apply tg-section p-4 cursor-pointer transition-colors duration-150 border-2 border-transparent;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
   }
 
   .tg-option:active {
     @apply bg-secondary scale-[0.98];
+  }
+  
+  /* Disable hover on touch devices */
+  @media (hover: hover) {
+    .tg-option:hover {
+      @apply bg-secondary/50;
+    }
   }
 
   .tg-option.selected {

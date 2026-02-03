@@ -151,27 +151,40 @@ export const PersonalityTestScreen = ({ testId, onBack, onComplete }: Personalit
         <AnimatePresence mode="wait">
           <motion.div
             key={currentQuestionIndex}
-            initial={{ x: 50, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: -50, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ 
+              duration: 0.4, 
+              ease: [0.25, 0.46, 0.45, 0.94] // easeOutQuad
+            }}
             className="space-y-6"
           >
             {/* Question image */}
             {currentQuestion.image_url && (
-              <div className="rounded-xl overflow-hidden">
+              <motion.div 
+                className="rounded-xl overflow-hidden"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, delay: 0.1 }}
+              >
                 <img
                   src={currentQuestion.image_url}
                   alt=""
                   className="w-full h-48 object-cover"
                 />
-              </div>
+              </motion.div>
             )}
 
             {/* Question text */}
-            <h2 className="text-xl font-semibold text-foreground text-center">
+            <motion.h2 
+              className="text-xl font-semibold text-foreground text-center"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.15 }}
+            >
               {currentQuestion.question_text}
-            </h2>
+            </motion.h2>
 
             {/* Answers */}
             <div className="space-y-3">
@@ -179,14 +192,18 @@ export const PersonalityTestScreen = ({ testId, onBack, onComplete }: Personalit
                 <motion.button
                   key={answer.id}
                   className="w-full p-4 rounded-xl bg-card border border-border text-left
-                    hover:border-purple-500 hover:bg-purple-500/5 
-                    active:scale-[0.98] transition-all"
+                    active:border-purple-500 active:bg-purple-500/5 
+                    active:scale-[0.98] transition-colors touch-manipulation"
                   onClick={() => handleAnswer(index)}
                   disabled={isSubmitting}
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                  whileTap={{ scale: 0.98 }}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ 
+                    duration: 0.35,
+                    delay: 0.2 + index * 0.08,
+                    ease: [0.25, 0.46, 0.45, 0.94]
+                  }}
+                  whileTap={{ scale: 0.97 }}
                 >
                   <span className="text-foreground">{answer.answer_text}</span>
                 </motion.button>

@@ -18,7 +18,7 @@ interface ResultScreenProps {
 export const ResultScreen = ({ result, quizId, quizTitle, onShare, onChallenge, onRestart, onNavigate, onHome }: ResultScreenProps) => {
   const handleShare = () => {
     haptic.notification('success');
-    
+
     // Use new quiz result share if we have quiz info
     if (quizId && quizTitle) {
       shareQuizResult(quizId, quizTitle, result.score, result.maxScore);

@@ -526,6 +526,11 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2026-02-03 | Inline result ID без дефисов | Telegram требует alphanumeric ID, убраны дефисы из UUID | inline.ts |
 | 2026-02-03 | Quiz result sharing | shareQuizResult() для шаринга результатов квизов с картинкой | telegram.ts, ResultScreen |
 | 2026-02-03 | quiz_result: inline query | Обработка результатов квизов в inline mode (quiz_result:id:score:total:title) | inline.ts |
+| 2026-02-03 | Mini App Short Name "app" | Создан Mini App в BotFather с Short Name для прямых ссылок t.me/QuipoBot/app | BotFather |
+| 2026-02-03 | Direct Mini App links | buildDeepLink() теперь генерирует t.me/QuipoBot/app?startapp=... | inline.ts |
+| 2026-02-03 | Sharing fallbacks | sharePersonalityTestResult/shareQuizResult: switchInlineQuery → openTelegramLink → openLink → navigator.share | telegram.ts |
+| 2026-02-03 | Smooth animations | Плавные анимации вопросов/ответов: duration 0.4s, easeOutQuad, последовательное появление | QuizScreen, PersonalityTestScreen |
+| 2026-02-03 | Touch-friendly options | Убрали hover на тач-устройствах, добавили touch-manipulation, -webkit-tap-highlight-color: transparent | index.css |
 
 ## TODO / Backlog
 

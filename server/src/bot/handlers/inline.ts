@@ -6,6 +6,12 @@ import { supabase } from '../../lib/supabase.js';
 const MINI_APP_URL = process.env.VITE_MINI_APP_URL || 'https://t.me/YourBotUsername/app';
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'QuipoBot';
 
+// Build URL for inline buttons - direct Mini App link with Short Name
+// Opens Mini App directly in one click
+function buildDeepLink(startParam: string): string {
+  return `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`;
+}
+
 // Check if URL is a valid http(s) URL (not data URL)
 function isValidImageUrl(url: string | null | undefined): boolean {
   if (!url) return false;
@@ -49,7 +55,7 @@ function buildQuizResult(
         [
           {
             text: '🎯 Take the Quiz',
-            url: `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`,
+            url: buildDeepLink(startParam),
           },
         ],
         [
@@ -96,7 +102,7 @@ function buildPersonalityTestResult(
         [
           {
             text: '🧪 Пройти тест',
-            url: `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`,
+            url: buildDeepLink(startParam),
           },
         ],
         [
@@ -146,7 +152,7 @@ function buildTestResultShare(
         [
           {
             text: '🧪 Пройти тест',
-            url: `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`,
+            url: buildDeepLink(startParam),
           },
         ],
       ],
@@ -181,7 +187,7 @@ function buildProfileResult(userId: number): InlineQueryResultArticle {
         [
           {
             text: '👀 View Profile',
-            url: `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`,
+            url: buildDeepLink(startParam),
           },
         ],
         [
@@ -248,7 +254,7 @@ export async function handleInlineQuery(ctx: Context) {
                   [
                     {
                       text: '🎯 Пройти квиз',
-                      url: `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`,
+                      url: buildDeepLink(startParam),
                     },
                   ],
                 ],
@@ -274,7 +280,7 @@ export async function handleInlineQuery(ctx: Context) {
                   [
                     {
                       text: '🎯 Пройти квиз',
-                      url: `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`,
+                      url: buildDeepLink(startParam),
                     },
                   ],
                 ],
@@ -314,11 +320,28 @@ export async function handleInlineQuery(ctx: Context) {
 
           const resultImage = resultData?.image_url || test.image_url;
           const resultDesc = resultData?.description || '';
-          const shortDesc = resultDesc.split('.')[0];
+
+          // Get description without repeating the title
+          // Split by sentences and skip if first sentence contains the result title
+          const sentences = resultDesc.split(/[.!?]+/).filter(s => s.trim());
+          let shortDesc = '';
+          for (const sentence of sentences) {
+            const cleanSentence = sentence.trim().toLowerCase();
+            const cleanTitle = resultTitle.toLowerCase();
+            // Skip sentences that just repeat the title
+            if (!cleanSentence.includes(cleanTitle) && cleanSentence.length > 10) {
+              shortDesc = sentence.trim();
+              break;
+            }
+          }
 
           // Use photo result if we have a valid image URL
           // Note: Telegram requires ID to be alphanumeric only (no dashes), max 64 chars
           const safeTestId = testId.replace(/-/g, '');
+          const buttonUrl = buildDeepLink(startParam);
+          console.log('Inline share button URL:', buttonUrl);
+          console.log('startParam:', startParam);
+
           if (isValidImageUrl(resultImage)) {
             const photoResult: InlineQueryResultPhoto = {
               type: 'photo',
@@ -327,14 +350,16 @@ export async function handleInlineQuery(ctx: Context) {
               thumbnail_url: resultImage!,
               title: `🎭 Я — ${resultTitle}`,
               description: `${test.title} • Пройди и узнай кто ты!`,
-              caption: `🎭 *Я — ${resultTitle}*\n${shortDesc}.\n\nА ты кто? Пройди тест 👇`,
+              caption: shortDesc
+                ? `🎭 *Я — ${resultTitle}*\n\n${shortDesc}.\n\nА ты кто? Пройди тест 👇`
+                : `🎭 *Я — ${resultTitle}*\n\nА ты кто? Пройди тест "${test.title}" 👇`,
               parse_mode: 'Markdown',
               reply_markup: {
                 inline_keyboard: [
                   [
                     {
                       text: `🧪 ${test.title}`,
-                      url: `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`,
+                      url: buttonUrl,
                     },
                   ],
                 ],
@@ -350,10 +375,9 @@ export async function handleInlineQuery(ctx: Context) {
               description: `${test.title} • Пройди и узнай кто ты!`,
               thumbnail_url: 'https://via.placeholder.com/100x100.png?text=Result',
               input_message_content: {
-                message_text:
-                  `🎭 *Я — ${resultTitle}*\n` +
-                  `${shortDesc}.\n\n` +
-                  `А ты кто? Пройди тест 👇`,
+                message_text: shortDesc
+                  ? `🎭 *Я — ${resultTitle}*\n\n${shortDesc}.\n\nА ты кто? Пройди тест 👇`
+                  : `🎭 *Я — ${resultTitle}*\n\nА ты кто? Пройди тест "${test.title}" 👇`,
                 parse_mode: 'Markdown',
               },
               reply_markup: {
@@ -361,7 +385,7 @@ export async function handleInlineQuery(ctx: Context) {
                   [
                     {
                       text: `🧪 ${test.title}`,
-                      url: `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`,
+                      url: buildDeepLink(startParam),
                     },
                   ],
                 ],
