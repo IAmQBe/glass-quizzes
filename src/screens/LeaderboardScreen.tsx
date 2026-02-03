@@ -241,62 +241,62 @@ export const LeaderboardScreen = ({ onBack }: LeaderboardScreenProps) => {
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.1 }}
             >
-              <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center mb-2">
-                <span className="text-2xl">🥈</span>
-              </div>
-              <div className="bg-gray-200 rounded-t-lg w-20 h-16 flex flex-col items-center justify-center">
-                <span className="font-bold text-foreground text-sm truncate max-w-[72px]">
-                  {top3[1]?.username.slice(0, 8)}
-                </span>
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  {sortBy === "popcorns" && <PopcornIcon className="w-3 h-3" />}
-                  {formatNumber(getDisplayValue(top3[1]).value)}
-                </span>
-              </div>
-            </motion.div>
+            <div className="w-16 h-16 rounded-full bg-secondary dark:bg-secondary flex items-center justify-center mb-2">
+              <span className="text-2xl">🥈</span>
+            </div>
+            <div className="bg-secondary dark:bg-secondary rounded-t-lg w-20 h-16 flex flex-col items-center justify-center">
+              <span className="font-bold text-foreground text-sm truncate max-w-[72px]">
+                {top3[1]?.username.slice(0, 8)}
+              </span>
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                {sortBy === "popcorns" && <PopcornIcon className="w-3 h-3" />}
+                {formatNumber(getDisplayValue(top3[1]).value)}
+              </span>
+            </div>
+          </motion.div>
 
-            {/* 1st Place */}
-            <motion.div
-              className="flex flex-col items-center"
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.05 }}
-            >
-              <Crown className="w-6 h-6 text-yellow-500 mb-1" />
-              <div className="w-20 h-20 rounded-full bg-yellow-100 border-4 border-yellow-400 flex items-center justify-center mb-2">
-                <span className="text-3xl">🏆</span>
-              </div>
-              <div className="bg-yellow-100 rounded-t-lg w-24 h-20 flex flex-col items-center justify-center">
-                <span className="font-bold text-foreground truncate max-w-[88px]">
-                  {top3[0]?.username.slice(0, 10)}
-                </span>
-                <span className="text-sm text-muted-foreground flex items-center gap-1">
-                  {sortBy === "popcorns" && <PopcornIcon className="w-3.5 h-3.5" />}
-                  {formatNumber(getDisplayValue(top3[0]).value)}
-                </span>
-              </div>
-            </motion.div>
+          {/* 1st Place */}
+          <motion.div
+            className="flex flex-col items-center"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.05 }}
+          >
+            <Crown className="w-6 h-6 text-yellow-500 mb-1" />
+            <div className="w-20 h-20 rounded-full bg-yellow-100 dark:bg-yellow-900/30 border-4 border-yellow-400 dark:border-yellow-500 flex items-center justify-center mb-2">
+              <span className="text-3xl">🏆</span>
+            </div>
+            <div className="bg-yellow-100 dark:bg-yellow-900/30 rounded-t-lg w-24 h-20 flex flex-col items-center justify-center">
+              <span className="font-bold text-foreground truncate max-w-[88px]">
+                {top3[0]?.username.slice(0, 10)}
+              </span>
+              <span className="text-sm text-muted-foreground flex items-center gap-1">
+                {sortBy === "popcorns" && <PopcornIcon className="w-3.5 h-3.5" />}
+                {formatNumber(getDisplayValue(top3[0]).value)}
+              </span>
+            </div>
+          </motion.div>
 
-            {/* 3rd Place */}
-            <motion.div
-              className="flex flex-col items-center"
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.15 }}
-            >
-              <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mb-2">
-                <span className="text-2xl">🥉</span>
-              </div>
-              <div className="bg-amber-100 rounded-t-lg w-20 h-14 flex flex-col items-center justify-center">
-                <span className="font-bold text-foreground text-sm truncate max-w-[72px]">
-                  {top3[2]?.username.slice(0, 8)}
-                </span>
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  {sortBy === "popcorns" && <PopcornIcon className="w-3 h-3" />}
-                  {formatNumber(getDisplayValue(top3[2]).value)}
-                </span>
-              </div>
-            </motion.div>
+          {/* 3rd Place */}
+          <motion.div
+            className="flex flex-col items-center"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.15 }}
+          >
+            <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-2">
+              <span className="text-2xl">🥉</span>
+            </div>
+            <div className="bg-amber-100 dark:bg-amber-900/30 rounded-t-lg w-20 h-14 flex flex-col items-center justify-center">
+              <span className="font-bold text-foreground text-sm truncate max-w-[72px]">
+                {top3[2]?.username.slice(0, 8)}
+              </span>
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                {sortBy === "popcorns" && <PopcornIcon className="w-3 h-3" />}
+                {formatNumber(getDisplayValue(top3[2]).value)}
+              </span>
+            </div>
+          </motion.div>
           </div>
         </motion.div>
       </AnimatePresence>
