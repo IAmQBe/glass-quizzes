@@ -585,6 +585,14 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2026-02-03 | Squad block on home | Кнопки "Вступить" и "Создать команду" на главной | Index.tsx |
 | 2026-02-03 | Completed tests display | Пройденные тесты показываются с бейджем "Пройден" и затемнением | PersonalityTestCard, useCompletedTestIds |
 | 2026-02-03 | LEFT JOIN for creators | Исправлен запрос creator info (тесты с null created_by теперь показываются) | useQuizzes, usePersonalityTests |
+| 2026-02-03 | Analytics RPC functions | SQL миграция с DAU/WAU/MAU, funnel, top quizzes, shares tracking | 20260203_analytics_and_fixes.sql |
+| 2026-02-03 | Events & Shares tables | Таблицы для трекинга событий и шаров с RLS | migration |
+| 2026-02-03 | Real avatars in profile | Telegram photo_url или смешные эмодзи-аватарки | ProfileScreen |
+| 2026-02-03 | Invite Friends button | Полноценная кнопка "Пригласить друга" вместо загрузки | ProfileScreen |
+| 2026-02-03 | Challenges soon badge | Убрали notifications toggle, добавили Challenges как "soon" | ProfileScreen |
+| 2026-02-03 | Draft editing | Редактирование драфтов в профиле (не для pending) | ProfileScreen, QuizListItem |
+| 2026-02-03 | Referral tracking v2 | refUserId в share links, улучшенный парсинг | telegram.ts, useCurrentProfile |
+| 2026-02-03 | useTracking hook | Трекинг событий и шаров | useTracking.ts |
 
 ## TODO / Backlog
 
