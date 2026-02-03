@@ -133,6 +133,167 @@ export type Database = {
         }
         Relationships: []
       }
+      live_quiz_answers: {
+        Row: {
+          answer_index: number
+          answered_at: string
+          id: string
+          is_correct: boolean
+          live_quiz_id: string
+          question_index: number
+          time_ms: number
+          user_id: string
+        }
+        Insert: {
+          answer_index: number
+          answered_at?: string
+          id?: string
+          is_correct: boolean
+          live_quiz_id: string
+          question_index: number
+          time_ms: number
+          user_id: string
+        }
+        Update: {
+          answer_index?: number
+          answered_at?: string
+          id?: string
+          is_correct?: boolean
+          live_quiz_id?: string
+          question_index?: number
+          time_ms?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_quiz_answers_live_quiz_id_fkey"
+            columns: ["live_quiz_id"]
+            isOneToOne: false
+            referencedRelation: "live_quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      live_quiz_participants: {
+        Row: {
+          correct_answers: number
+          id: string
+          joined_at: string
+          live_quiz_id: string
+          score: number
+          total_time_ms: number
+          user_id: string
+        }
+        Insert: {
+          correct_answers?: number
+          id?: string
+          joined_at?: string
+          live_quiz_id: string
+          score?: number
+          total_time_ms?: number
+          user_id: string
+        }
+        Update: {
+          correct_answers?: number
+          id?: string
+          joined_at?: string
+          live_quiz_id?: string
+          score?: number
+          total_time_ms?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_quiz_participants_live_quiz_id_fkey"
+            columns: ["live_quiz_id"]
+            isOneToOne: false
+            referencedRelation: "live_quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      live_quiz_reactions: {
+        Row: {
+          created_at: string
+          emoji: string
+          id: string
+          live_quiz_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          emoji: string
+          id?: string
+          live_quiz_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          id?: string
+          live_quiz_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_quiz_reactions_live_quiz_id_fkey"
+            columns: ["live_quiz_id"]
+            isOneToOne: false
+            referencedRelation: "live_quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      live_quizzes: {
+        Row: {
+          created_at: string
+          current_question: number
+          finished_at: string | null
+          host_user_id: string
+          id: string
+          is_paid: boolean
+          max_participants: number | null
+          price_stars: number | null
+          quiz_id: string
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          current_question?: number
+          finished_at?: string | null
+          host_user_id: string
+          id?: string
+          is_paid?: boolean
+          max_participants?: number | null
+          price_stars?: number | null
+          quiz_id: string
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          current_question?: number
+          finished_at?: string | null
+          host_user_id?: string
+          id?: string
+          is_paid?: boolean
+          max_participants?: number | null
+          price_stars?: number | null
+          quiz_id?: string
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "live_quizzes_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -141,6 +302,7 @@ export type Database = {
           has_telegram_premium: boolean | null
           id: string
           last_name: string | null
+          onboarding_completed: boolean
           telegram_id: number | null
           updated_at: string
           username: string | null
@@ -152,6 +314,7 @@ export type Database = {
           has_telegram_premium?: boolean | null
           id: string
           last_name?: string | null
+          onboarding_completed?: boolean
           telegram_id?: number | null
           updated_at?: string
           username?: string | null
@@ -163,6 +326,7 @@ export type Database = {
           has_telegram_premium?: boolean | null
           id?: string
           last_name?: string | null
+          onboarding_completed?: boolean
           telegram_id?: number | null
           updated_at?: string
           username?: string | null
@@ -203,6 +367,35 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "questions_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_likes: {
+        Row: {
+          created_at: string
+          id: string
+          quiz_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          quiz_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          quiz_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_likes_quiz_id_fkey"
             columns: ["quiz_id"]
             isOneToOne: false
             referencedRelation: "quizzes"
@@ -292,10 +485,12 @@ export type Database = {
           id: string
           image_url: string | null
           is_published: boolean
+          like_count: number
           participant_count: number
           question_count: number
           rating: number | null
           rating_count: number | null
+          save_count: number
           title: string
           updated_at: string
         }
@@ -307,10 +502,12 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_published?: boolean
+          like_count?: number
           participant_count?: number
           question_count?: number
           rating?: number | null
           rating_count?: number | null
+          save_count?: number
           title: string
           updated_at?: string
         }
@@ -322,10 +519,12 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_published?: boolean
+          like_count?: number
           participant_count?: number
           question_count?: number
           rating?: number | null
           rating_count?: number | null
+          save_count?: number
           title?: string
           updated_at?: string
         }

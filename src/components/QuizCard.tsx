@@ -1,7 +1,8 @@
 import { motion } from "framer-motion";
-import { Users, HelpCircle, Clock, Star, Heart } from "lucide-react";
+import { Users, HelpCircle, Clock } from "lucide-react";
 import { haptic } from "@/lib/telegram";
 import { PopcornIcon } from "./icons/PopcornIcon";
+import { BookmarkIcon } from "./icons/BookmarkIcon";
 
 interface QuizCardProps {
   id: string;
@@ -11,12 +12,13 @@ interface QuizCardProps {
   participant_count: number;
   question_count: number;
   duration_seconds: number;
-  rating?: number;
-  rating_count?: number;
-  isFavorite?: boolean;
-  showFavoriteButton?: boolean;
+  like_count?: number;
+  save_count?: number;
+  isLiked?: boolean;
+  isSaved?: boolean;
   onClick: () => void;
-  onToggleFavorite?: () => void;
+  onToggleLike?: () => void;
+  onToggleSave?: () => void;
 }
 
 export const QuizCard = ({
@@ -26,22 +28,29 @@ export const QuizCard = ({
   participant_count,
   question_count,
   duration_seconds,
-  rating = 0,
-  rating_count = 0,
-  isFavorite = false,
-  showFavoriteButton = false,
+  like_count = 0,
+  save_count = 0,
+  isLiked = false,
+  isSaved = false,
   onClick,
-  onToggleFavorite,
+  onToggleLike,
+  onToggleSave,
 }: QuizCardProps) => {
   const handleClick = () => {
     haptic.impact('light');
     onClick();
   };
 
-  const handleFavorite = (e: React.MouseEvent) => {
+  const handleLike = (e: React.MouseEvent) => {
     e.stopPropagation();
     haptic.impact('light');
-    onToggleFavorite?.();
+    onToggleLike?.();
+  };
+
+  const handleSave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    haptic.impact('light');
+    onToggleSave?.();
   };
 
   const formatDuration = (seconds: number) => {
@@ -49,7 +58,7 @@ export const QuizCard = ({
     return `${Math.floor(seconds / 60)}m`;
   };
 
-  const formatParticipants = (count: number) => {
+  const formatCount = (count: number) => {
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
     return count.toString();
@@ -76,38 +85,61 @@ export const QuizCard = ({
           </div>
         )}
         
-        {/* Badges */}
-        <div className="absolute top-2 right-2 flex gap-2">
-          {showFavoriteButton && (
-            <button
-              onClick={handleFavorite}
-              className={`w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center ${
-                isFavorite 
-                  ? "bg-red-500 text-white" 
-                  : "bg-black/40 text-white"
-              }`}
-            >
-              <Heart className={`w-4 h-4 ${isFavorite ? "fill-current" : ""}`} />
-            </button>
-          )}
-        </div>
-
+        {/* Top left - Participants */}
         <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
           <Users className="w-3 h-3 text-white" />
           <span className="text-xs text-white font-medium">
-            {formatParticipants(participant_count)}
+            {formatCount(participant_count)}
           </span>
         </div>
 
-        {/* Rating Badge */}
-        {rating_count > 0 && (
-          <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
-            <PopcornIcon className="w-3 h-3 text-yellow-400" />
-            <span className="text-xs text-white font-medium">
-              {rating.toFixed(1)}
-            </span>
-          </div>
+        {/* Top right - Popcorn (like) */}
+        {onToggleLike && (
+          <button
+            onClick={handleLike}
+            className={`absolute top-2 right-2 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
+              isLiked 
+                ? "bg-amber-500 text-white" 
+                : "bg-black/40 text-white hover:bg-black/60"
+            }`}
+          >
+            <PopcornIcon className="w-4 h-4" />
+          </button>
         )}
+
+        {/* Bottom right - Save */}
+        {onToggleSave && (
+          <button
+            onClick={handleSave}
+            className={`absolute bottom-2 right-2 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
+              isSaved 
+                ? "bg-primary text-white" 
+                : "bg-black/40 text-white hover:bg-black/60"
+            }`}
+          >
+            <BookmarkIcon className="w-4 h-4" filled={isSaved} />
+          </button>
+        )}
+
+        {/* Bottom left - Stats */}
+        <div className="absolute bottom-2 left-2 flex gap-1.5">
+          {like_count > 0 && (
+            <div className="bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
+              <PopcornIcon className="w-3 h-3 text-amber-400" />
+              <span className="text-xs text-white font-medium">
+                {formatCount(like_count)}
+              </span>
+            </div>
+          )}
+          {save_count > 0 && (
+            <div className="bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
+              <BookmarkIcon className="w-3 h-3 text-white" />
+              <span className="text-xs text-white font-medium">
+                {formatCount(save_count)}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Content */}
@@ -132,12 +164,6 @@ export const QuizCard = ({
             <Clock className="w-3.5 h-3.5" />
             <span>{formatDuration(duration_seconds)}</span>
           </div>
-          {rating_count > 0 && (
-            <div className="flex items-center gap-1">
-              <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
-              <span>{rating_count} ratings</span>
-            </div>
-          )}
         </div>
       </div>
     </motion.button>

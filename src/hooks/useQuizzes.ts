@@ -14,6 +14,8 @@ export interface Quiz {
   created_at: string;
   rating: number;
   rating_count: number;
+  like_count: number;
+  save_count: number;
 }
 
 export interface QuestionOption {
