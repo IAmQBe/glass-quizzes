@@ -20,7 +20,7 @@ const categories: { id: LeaderboardCategory; label: string; icon: React.ReactNod
 export const LeaderboardScreen = ({ onBack }: LeaderboardScreenProps) => {
   const [sortBy, setSortBy] = useState<LeaderboardCategory>("score");
   const [challengedUsers, setChallengedUsers] = useState<Set<string>>(new Set());
-  
+
   const { data: leaderboard = [], isLoading, error } = useLeaderboard(sortBy);
 
   const getDisplayValue = (entry: LeaderboardEntry) => {
@@ -133,11 +133,10 @@ export const LeaderboardScreen = ({ onBack }: LeaderboardScreenProps) => {
                 haptic.selection();
                 setSortBy(cat.id);
               }}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
-                sortBy === cat.id
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${sortBy === cat.id
                   ? "bg-primary text-primary-foreground"
                   : "bg-secondary text-muted-foreground"
-              }`}
+                }`}
             >
               {cat.icon}
               {cat.label}
@@ -312,11 +311,10 @@ export const LeaderboardScreen = ({ onBack }: LeaderboardScreenProps) => {
                   <button
                     onClick={() => handleChallenge(entry)}
                     disabled={challengedUsers.has(entry.user_id)}
-                    className={`p-2 rounded-lg transition-colors ${
-                      challengedUsers.has(entry.user_id)
+                    className={`p-2 rounded-lg transition-colors ${challengedUsers.has(entry.user_id)
                         ? "bg-muted text-muted-foreground"
                         : "bg-primary/10 text-primary hover:bg-primary/20"
-                    }`}
+                      }`}
                   >
                     <Swords className="w-4 h-4" />
                   </button>

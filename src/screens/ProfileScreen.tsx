@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { UserStats } from "@/types/quiz";
-import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Bell, BellOff, Sun, Moon } from "lucide-react";
-import { haptic, getTelegramUser, shareReferralLink } from "@/lib/telegram";
+import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Bell, BellOff, Sun, Moon, Sparkles, History } from "lucide-react";
+import { haptic, getTelegramUser, shareReferralLink, sharePersonalityTestResult } from "@/lib/telegram";
 import { useIsAdmin } from "@/hooks/useAuth";
-import { useMyQuizzes } from "@/hooks/useQuizzes";
+import { useMyQuizzes, useMyQuizResults } from "@/hooks/useQuizzes";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useProfile, useUpdateProfile, useReferralCount } from "@/hooks/useProfile";
+import { useMyPersonalityTestCompletions, useMyPersonalityTests } from "@/hooks/usePersonalityTests";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Switch } from "@/components/ui/switch";
@@ -22,12 +23,15 @@ interface ProfileScreenProps {
 }
 
 type FilterType = "date" | "popularity";
-type TabType = "my" | "saved";
+type TabType = "my" | "saved" | "history";
 
 export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: ProfileScreenProps) => {
   const user = getTelegramUser();
   const { data: isAdmin } = useIsAdmin();
   const { data: myQuizzes = [], isLoading: myQuizzesLoading } = useMyQuizzes();
+  const { data: myTests = [], isLoading: myTestsLoading } = useMyPersonalityTests();
+  const { data: quizResults = [], isLoading: quizResultsLoading } = useMyQuizResults();
+  const { data: testCompletions = [], isLoading: completionsLoading } = useMyPersonalityTestCompletions();
   const { data: favorites = [], isLoading: favoritesLoading } = useFavorites();
   const { data: profile, isLoading: profileLoading } = useProfile();
   const { data: referralCount = 0 } = useReferralCount();
@@ -73,6 +77,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
   const statItems = [
     { icon: Trophy, label: "Best", value: stats.bestScore, color: "text-yellow-500" },
     { icon: Target, label: "Tests", value: stats.testsCompleted, color: "text-primary" },
+    { icon: PopcornIcon, label: "Popcorn", value: stats.totalPopcorns || 0, color: "text-orange-500" },
     { icon: Globe, label: "Rank", value: `#${stats.globalRank}`, color: "text-green-500" },
     { icon: Swords, label: "Challenges", value: stats.activeChallenges, color: "text-purple-500" },
   ];
@@ -134,7 +139,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
 
         {/* Stats Grid */}
         <motion.div
-          className="grid grid-cols-4 gap-1.5"
+          className="grid grid-cols-5 gap-1"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
@@ -271,7 +276,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
           )}
         </motion.div>
 
-        {/* Tabs: My Quizzes / Saved */}
+        {/* Tabs: My / Saved / Results */}
         <motion.div
           className="flex gap-2"
           initial={{ y: 20, opacity: 0 }}
@@ -279,30 +284,43 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
           transition={{ delay: 0.35 }}
         >
           <button
-            className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${activeTab === "my"
-                ? "bg-primary text-primary-foreground"
-                : "bg-secondary text-foreground"
+            className={`flex-1 py-2 rounded-xl font-medium transition-colors flex items-center justify-center gap-1 text-sm ${activeTab === "my"
+              ? "bg-primary text-primary-foreground"
+              : "bg-secondary text-foreground"
               }`}
             onClick={() => {
               haptic.selection();
               setActiveTab("my");
             }}
           >
-            <Target className="w-4 h-4" />
-            Мои ({myQuizzes.length})
+            <Target className="w-3.5 h-3.5" />
+            Мои ({(myQuizzes?.length || 0) + (myTests?.length || 0)})
           </button>
           <button
-            className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${activeTab === "saved"
-                ? "bg-primary text-primary-foreground"
-                : "bg-secondary text-foreground"
+            className={`flex-1 py-2 rounded-xl font-medium transition-colors flex items-center justify-center gap-1 text-sm ${activeTab === "history"
+              ? "bg-purple-500 text-white"
+              : "bg-secondary text-foreground"
+              }`}
+            onClick={() => {
+              haptic.selection();
+              setActiveTab("history");
+            }}
+          >
+            <History className="w-3.5 h-3.5" />
+            История ({(quizResults?.length || 0) + (testCompletions?.length || 0)})
+          </button>
+          <button
+            className={`flex-1 py-2 rounded-xl font-medium transition-colors flex items-center justify-center gap-1 text-sm ${activeTab === "saved"
+              ? "bg-primary text-primary-foreground"
+              : "bg-secondary text-foreground"
               }`}
             onClick={() => {
               haptic.selection();
               setActiveTab("saved");
             }}
           >
-            <BookmarkIcon className="w-4 h-4" />
-            Saved ({favorites.length})
+            <BookmarkIcon className="w-3.5 h-3.5" />
+            Saved
           </button>
         </motion.div>
 
@@ -315,8 +333,8 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
           >
             <button
               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-colors ${sortBy === "date"
-                  ? "bg-primary/10 text-primary"
-                  : "bg-secondary text-muted-foreground"
+                ? "bg-primary/10 text-primary"
+                : "bg-secondary text-muted-foreground"
                 }`}
               onClick={() => {
                 haptic.selection();
@@ -328,8 +346,8 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
             </button>
             <button
               className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-colors ${sortBy === "popularity"
-                  ? "bg-primary/10 text-primary"
-                  : "bg-secondary text-muted-foreground"
+                ? "bg-primary/10 text-primary"
+                : "bg-secondary text-muted-foreground"
                 }`}
               onClick={() => {
                 haptic.selection();
@@ -351,22 +369,51 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
         >
           {activeTab === "my" && (
             <>
-              {myQuizzesLoading ? (
+              {(myQuizzesLoading || myTestsLoading) ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 text-primary animate-spin" />
                 </div>
-              ) : sortedMyQuizzes.length === 0 ? (
+              ) : (sortedMyQuizzes.length === 0 && myTests.length === 0) ? (
                 <div className="tg-section p-6 text-center">
-                  <p className="text-muted-foreground">Ты ещё не создал ни одного квиза</p>
+                  <p className="text-muted-foreground">Ты ещё ничего не создал</p>
                 </div>
               ) : (
-                sortedMyQuizzes.map((quiz) => (
-                  <QuizListItem
-                    key={quiz.id}
-                    quiz={quiz}
-                    onClick={() => onQuizSelect?.(quiz.id)}
-                  />
-                ))
+                <>
+                  {/* My Quizzes */}
+                  {sortedMyQuizzes.map((quiz) => (
+                    <QuizListItem
+                      key={quiz.id}
+                      quiz={quiz}
+                      onClick={() => onQuizSelect?.(quiz.id)}
+                    />
+                  ))}
+                  {/* My Tests */}
+                  {myTests.map((test: any) => (
+                    <div key={test.id} className="tg-section p-4">
+                      <div className="flex items-center gap-3">
+                        {test.image_url ? (
+                          <img src={test.image_url} alt={test.title} className="w-12 h-12 rounded-lg object-cover" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                            <Sparkles className="w-6 h-6 text-purple-500" />
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-500">Тест</span>
+                            <h3 className="font-medium text-foreground">{test.title}</h3>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {test.question_count} вопросов · {test.participant_count || 0} участий
+                          </p>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-full ${test.is_published ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'}`}>
+                          {test.is_published ? 'Live' : 'Draft'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </>
               )}
             </>
           )}
@@ -389,6 +436,67 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
                     onClick={() => onQuizSelect?.(quiz.id)}
                   />
                 ))
+              )}
+            </>
+          )}
+
+          {activeTab === "history" && (
+            <>
+              {(quizResultsLoading || completionsLoading) ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+                </div>
+              ) : (quizResults.length === 0 && testCompletions.length === 0) ? (
+                <div className="tg-section p-6 text-center">
+                  <History className="w-10 h-10 text-purple-500 mx-auto mb-3" />
+                  <p className="text-muted-foreground">Ты ещё ничего не прошёл</p>
+                </div>
+              ) : (
+                <>
+                  {/* Quiz Results */}
+                  {quizResults.map((result: any) => (
+                    <div key={result.id} className="tg-section p-4">
+                      <div className="flex items-center gap-3">
+                        {result.quiz?.image_url ? (
+                          <img src={result.quiz.image_url} alt={result.quiz.title} className="w-12 h-12 rounded-lg object-cover" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-primary/20 flex items-center justify-center">
+                            <Trophy className="w-6 h-6 text-primary" />
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-primary/20 text-primary">Квиз</span>
+                            <h3 className="font-medium text-foreground">{result.quiz?.title || 'Квиз'}</h3>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {result.score}/{result.max_score} правильных · {result.percentile}%
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-lg font-bold text-primary">{Math.round((result.score / result.max_score) * 100)}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Personality Test Completions */}
+                  {testCompletions.map((completion: any) => (
+                    <TestResultItem
+                      key={completion.id}
+                      completion={completion}
+                      onShare={() => {
+                        if (completion.result && completion.test) {
+                          haptic.notification('success');
+                          sharePersonalityTestResult(
+                            completion.result.title,
+                            completion.result.share_text || completion.result.description,
+                            completion.test.id
+                          );
+                        }
+                      }}
+                    />
+                  ))}
+                </>
               )}
             </>
           )}
@@ -430,8 +538,8 @@ const QuizListItem = ({ quiz, onClick }: { quiz: any; onClick: () => void }) => 
       </div>
       <span
         className={`text-xs px-2 py-1 rounded-full ${quiz.is_published
-            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-            : "bg-secondary text-muted-foreground"
+          ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+          : "bg-secondary text-muted-foreground"
           }`}
       >
         {quiz.is_published ? "Live" : "Draft"}
@@ -439,3 +547,46 @@ const QuizListItem = ({ quiz, onClick }: { quiz: any; onClick: () => void }) => 
     </div>
   </button>
 );
+
+// Test Result Item Component
+const TestResultItem = ({ completion, onShare }: { completion: any; onShare: () => void }) => {
+  const result = completion.result;
+  const test = completion.test;
+
+  if (!result || !test) return null;
+
+  return (
+    <div className="tg-section p-4">
+      <div className="flex items-center gap-3">
+        {/* Result Image */}
+        <div className="w-14 h-14 rounded-xl bg-purple-500/10 flex items-center justify-center overflow-hidden">
+          {result.image_url ? (
+            <img src={result.image_url} alt={result.title} className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-2xl">🎭</span>
+          )}
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-foreground line-clamp-1">{result.title}</h3>
+          <p className="text-xs text-purple-500 font-medium mt-0.5">{test.title}</p>
+          <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+            {result.description}
+          </p>
+        </div>
+
+        {/* Share Button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onShare();
+          }}
+          className="p-2 rounded-lg bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors"
+        >
+          <Share2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};

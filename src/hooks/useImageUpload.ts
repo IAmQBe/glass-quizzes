@@ -41,32 +41,45 @@ export const useImageUpload = (): UseImageUploadReturn => {
 
       setProgress(30);
 
-      // Upload to Supabase Storage
-      const { data, error: uploadError } = await supabase.storage
-        .from('quiz-images')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
+      // Try to upload to Supabase Storage
+      try {
+        const { data, error: uploadError } = await supabase.storage
+          .from('quiz-images')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false,
+          });
 
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        throw new Error(uploadError.message || 'Ошибка загрузки изображения');
+        if (uploadError) {
+          // Check if bucket doesn't exist
+          if (uploadError.message?.includes('Bucket not found') ||
+            uploadError.message?.includes('bucket') ||
+            uploadError.message?.includes('not found')) {
+            console.warn('Storage bucket not found, falling back to data URL');
+            // Fall back to data URL
+            return await fileToDataUrl(file);
+          }
+          throw uploadError;
+        }
+
+        setProgress(80);
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('quiz-images')
+          .getPublicUrl(fileName);
+
+        if (!urlData?.publicUrl) {
+          throw new Error('Не удалось получить URL изображения');
+        }
+
+        setProgress(100);
+        return urlData.publicUrl;
+      } catch (storageError: any) {
+        console.warn('Storage upload failed, using data URL:', storageError);
+        // Fall back to data URL if storage fails
+        return await fileToDataUrl(file);
       }
-
-      setProgress(80);
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('quiz-images')
-        .getPublicUrl(fileName);
-
-      if (!urlData?.publicUrl) {
-        throw new Error('Не удалось получить URL изображения');
-      }
-
-      setProgress(100);
-      return urlData.publicUrl;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Ошибка загрузки';
       setError(message);
@@ -78,6 +91,24 @@ export const useImageUpload = (): UseImageUploadReturn => {
 
   return { uploadImage, isUploading, progress, error };
 };
+
+/**
+ * Convert file to data URL (fallback when storage is unavailable)
+ */
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Failed to read file'));
+      }
+    };
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
 
 // Helper to resize image before upload (optional optimization)
 export const resizeImage = (file: File, maxWidth: number = 1200): Promise<File> => {

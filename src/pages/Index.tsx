@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BannerCarousel } from "@/components/BannerCarousel";
 import { QuizShowcase } from "@/components/QuizShowcase";
@@ -10,6 +10,8 @@ import { usePublishedQuizzes, useQuizWithQuestions } from "@/hooks/useQuizzes";
 import { useFavoriteIds, useToggleFavorite } from "@/hooks/useFavorites";
 import { useLikeIds, useToggleLike } from "@/hooks/useLikes";
 import { useUserStats } from "@/hooks/useUserStats";
+import { useEnsureProfile } from "@/hooks/useCurrentProfile";
+import { useTrackEvent } from "@/hooks/useTrackEvent";
 import { QuizScreen } from "@/screens/QuizScreen";
 import { ResultScreen } from "@/screens/ResultScreen";
 import { CompareScreen } from "@/screens/CompareScreen";
@@ -19,9 +21,21 @@ import { LeaderboardScreen } from "@/screens/LeaderboardScreen";
 import { CreateQuizScreen } from "@/screens/CreateQuizScreen";
 import { CreatorsScreen } from "@/screens/CreatorsScreen";
 import { PvpLobbyScreen } from "@/screens/PvpLobbyScreen";
+import { PersonalityTestScreen } from "@/screens/PersonalityTestScreen";
+import { PersonalityTestResultScreen } from "@/screens/PersonalityTestResultScreen";
+import { CreatePersonalityTestScreen } from "@/screens/CreatePersonalityTestScreen";
+import { PersonalityTestCard } from "@/components/PersonalityTestCard";
+import {
+  usePublishedPersonalityTests,
+  usePersonalityTestLikeIds,
+  usePersonalityTestFavoriteIds,
+  useTogglePersonalityTestLike,
+  useTogglePersonalityTestFavorite,
+  PersonalityTestResult
+} from "@/hooks/usePersonalityTests";
 import { toast } from "@/hooks/use-toast";
 import { UserStats, QuizResult } from "@/types/quiz";
-import { initTelegramApp, backButton, isTelegramWebApp, shareResult, getTelegramUserData } from "@/lib/telegram";
+import { initTelegramApp, backButton, isTelegramWebApp, shareResult, getTelegramUserData, getTelegram } from "@/lib/telegram";
 import { calculateResult } from "@/data/quizData";
 import { TrendingUp, Sparkles, Search, X, Swords } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
@@ -29,9 +43,10 @@ import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Input } from "@/components/ui/input";
 import { haptic } from "@/lib/telegram";
 
-type AppScreen = "home" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp";
+type AppScreen = "home" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp" | "personality_test" | "personality_result" | "create_test";
 type TabId = "home" | "gallery" | "create" | "leaderboard" | "profile";
 type QuizTab = "trending" | "all";
+type ContentType = "quizzes" | "tests";
 type SortType = "popular" | "saves" | "newest";
 
 
@@ -43,12 +58,26 @@ const Index = () => {
   const toggleSave = useToggleFavorite();
   const toggleLike = useToggleLike();
 
+  // Personality tests hooks
+  const { data: personalityTests = [], isLoading: testsLoading } = usePublishedPersonalityTests();
+  const { data: testLikeIds = new Set() } = usePersonalityTestLikeIds();
+  const { data: testSaveIds = new Set() } = usePersonalityTestFavoriteIds();
+  const toggleTestLike = useTogglePersonalityTestLike();
+  const toggleTestSave = useTogglePersonalityTestFavorite();
+
   const [currentScreen, setCurrentScreen] = useState<AppScreen>("home");
   const [activeTab, setActiveTab] = useState<TabId>("home");
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
   const [result, setResult] = useState<QuizResult | null>(null);
+
+  // Personality test state
+  const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<PersonalityTestResult | null>(null);
+  const [testResultTitle, setTestResultTitle] = useState("");
+  const [testResultTestId, setTestResultTestId] = useState("");
+  const [contentType, setContentType] = useState<ContentType>("quizzes");
 
   const [quizTab, setQuizTab] = useState<QuizTab>("trending");
   const [sortBy, setSortBy] = useState<SortType>("popular");
@@ -57,6 +86,11 @@ const Index = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   const { data: quizData } = useQuizWithQuestions(selectedQuizId);
+
+  // Profile and tracking
+  const ensureProfile = useEnsureProfile();
+  const { track, trackScreen } = useTrackEvent();
+  const profileInitialized = useRef(false);
 
   useEffect(() => {
     const onboardingCompleted = localStorage.getItem("onboarding_completed");
@@ -71,23 +105,71 @@ const Index = () => {
     haptic.notification('success');
   };
 
+  // Initialize app: Telegram + Profile + Tracking
   useEffect(() => {
     const init = async () => {
+      // 1. Initialize Telegram WebApp
       initTelegramApp();
+
+      // 2. Log Telegram user data
       const userData = getTelegramUserData();
       if (userData) {
         console.log("Telegram user data:", userData);
       }
 
-      // Initialize anonymous session for Supabase operations
-      const { supabase } = await import("@/integrations/supabase/client");
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        await supabase.auth.signInAnonymously();
+      // 3. Ensure profile exists (creates or updates)
+      if (!profileInitialized.current && isTelegramWebApp()) {
+        profileInitialized.current = true;
+        try {
+          await ensureProfile.mutateAsync();
+          console.log("Profile initialized");
+        } catch (e) {
+          console.error("Profile initialization failed:", e);
+        }
+      }
+
+      // 4. Track app open
+      track('app_open', {
+        source: userData ? 'telegram' : 'web',
+        referrer: document.referrer || null,
+      });
+
+      // 5. Handle deep link start_param
+      const tg = getTelegram();
+      const startParam = tg?.initDataUnsafe?.start_param;
+      if (startParam) {
+        console.log("Deep link start_param:", startParam);
+
+        // Parse start_param format: testId_refUserId_source or questId_refUserId_source
+        const parts = startParam.split('_');
+
+        // Check for test ID (UUID format)
+        if (parts[0] && parts[0].includes('-') && parts[0].length > 30) {
+          // Looks like a test or quest UUID
+          const id = parts[0];
+          const source = parts[2] || 'deeplink';
+
+          // Check if it's a personality test
+          if (source.includes('test') || source === 'result_share') {
+            console.log("Opening personality test:", id);
+            setSelectedTestId(id);
+            setCurrentScreen("personality_test");
+          } else {
+            // Assume it's a quiz
+            console.log("Opening quiz:", id);
+            setSelectedQuizId(id);
+            setCurrentScreen("quiz");
+          }
+        }
       }
     };
     init();
   }, []);
+
+  // Track screen changes
+  useEffect(() => {
+    trackScreen(currentScreen);
+  }, [currentScreen, trackScreen]);
 
   useEffect(() => {
     if (!isTelegramWebApp()) return;
@@ -139,17 +221,39 @@ const Index = () => {
     setActiveTab(tab);
   };
 
+  // Track quiz start time for duration calculation
+  const quizStartTime = useRef<number>(Date.now());
+  const questionStartTime = useRef<number>(Date.now());
+
   const handleQuizSelect = (quizId: string) => {
     haptic.impact('medium');
     setSelectedQuizId(quizId);
     setCurrentQuestion(0);
     setAnswers([]);
     setCurrentScreen("quiz");
+
+    // Track quiz start
+    quizStartTime.current = Date.now();
+    questionStartTime.current = Date.now();
+    track('quiz_start', { quiz_id: quizId }, quizId);
   };
 
   const handleAnswer = (answerIndex: number) => {
     const questions = quizData?.questions || [];
     const totalQuestions = questions.length > 0 ? questions.length : 5;
+
+    // Track answer time
+    const answerTimeMs = Date.now() - questionStartTime.current;
+    const correctAnswer = questions[currentQuestion]?.correct_answer;
+    const isCorrect = answerIndex === correctAnswer;
+
+    // Track this answer
+    track('quiz_answer', {
+      question_index: currentQuestion,
+      answer_index: answerIndex,
+      is_correct: isCorrect,
+      time_ms: answerTimeMs,
+    }, selectedQuizId || undefined);
 
     const newAnswers = [...answers, answerIndex];
     setAnswers(newAnswers);
@@ -157,12 +261,22 @@ const Index = () => {
     if (currentQuestion < totalQuestions - 1) {
       setTimeout(() => {
         setCurrentQuestion((prev) => prev + 1);
+        questionStartTime.current = Date.now(); // Reset for next question
       }, 300);
     } else {
       setTimeout(() => {
         const quizResult = calculateResult(newAnswers);
         setResult(quizResult);
         setCurrentScreen("result");
+
+        // Track quiz completion
+        const totalTimeMs = Date.now() - quizStartTime.current;
+        track('quiz_complete', {
+          score: quizResult.score,
+          max_score: 100,
+          time_total_ms: totalTimeMs,
+          percentile: quizResult.percentile,
+        }, selectedQuizId || undefined);
       }, 500);
     }
   };
@@ -170,6 +284,8 @@ const Index = () => {
   const handleShare = () => {
     if (result) {
       shareResult(result.score, result.percentile, result.verdict);
+      // Track share event
+      track('quiz_share', { share_type: 'inline' }, selectedQuizId || undefined);
     }
   };
 
@@ -194,9 +310,33 @@ const Index = () => {
     toggleLike.mutate({ quizId, isLiked });
   };
 
+  // Personality test handlers
+  const handleTestSelect = (testId: string) => {
+    haptic.impact('light');
+    setSelectedTestId(testId);
+    setCurrentScreen("personality_test");
+  };
+
+  const handleTestComplete = (result: PersonalityTestResult, testTitle: string, testId: string) => {
+    setTestResult(result);
+    setTestResultTitle(testTitle);
+    setTestResultTestId(testId);
+    setCurrentScreen("personality_result");
+  };
+
+  const handleToggleTestLike = (testId: string) => {
+    const isLiked = testLikeIds.has(testId);
+    toggleTestLike.mutate({ testId, isLiked });
+  };
+
+  const handleToggleTestSave = (testId: string) => {
+    const isSaved = testSaveIds.has(testId);
+    toggleTestSave.mutate({ testId, isFavorite: isSaved });
+  };
+
   // Fetch real user stats from database
   const { data: fetchedStats } = useUserStats();
-  
+
   const userStats: UserStats = {
     bestScore: fetchedStats?.bestScore ?? result?.score ?? 0,
     testsCompleted: fetchedStats?.testsCompleted ?? 0,
@@ -226,11 +366,24 @@ const Index = () => {
     .sort((a, b) => ((b as any).like_count ?? 0) - ((a as any).like_count ?? 0))
     .slice(0, 10);
 
-  const mappedQuestions = quizData?.questions?.map((q, i) => ({
-    id: i + 1,
-    text: q.question_text,
-    options: q.options.map(opt => opt.text),
-  })) || [];
+  // Shuffle questions for quiz (memoized to keep same order during session)
+  const mappedQuestions = useMemo(() => {
+    if (!quizData?.questions) return [];
+
+    // Fisher-Yates shuffle
+    const questions = quizData.questions.map((q, i) => ({
+      id: i + 1,
+      text: q.question_text,
+      options: q.options.map(opt => opt.text),
+    }));
+
+    for (let i = questions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [questions[i], questions[j]] = [questions[j], questions[i]];
+    }
+
+    return questions;
+  }, [quizData?.questions, selectedQuizId]); // Re-shuffle when quiz changes
 
   const showBottomNav = ["home", "gallery", "leaderboard", "profile"].includes(currentScreen);
   const displayQuizzes = quizTab === "trending" ? trendingQuizzes : sortedQuizzes;
@@ -251,20 +404,21 @@ const Index = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              {/* Header - Challenge Button */}
+              {/* Header - Challenge Button (Coming Soon) */}
               <div className="flex items-center gap-2 py-2">
                 <button
                   onClick={() => {
-                    haptic.impact('medium');
-                    setCurrentScreen("pvp");
+                    haptic.impact('light');
+                    toast({ title: "Скоро", description: "PvP режим уже в разработке!" });
                   }}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow-lg"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gray-400 text-white font-medium opacity-60 relative"
                 >
                   <Swords className="w-5 h-5" />
                   Challenge
+                  <span className="absolute -top-1 -right-1 text-[10px] bg-primary px-1.5 py-0.5 rounded-full font-medium">
+                    soon
+                  </span>
                 </button>
-                {/* Popcorn counter - only show if > 0 */}
-                {/* TODO: Replace with real user popcorn count */}
               </div>
 
               {/* Banner Carousel */}
@@ -294,7 +448,7 @@ const Index = () => {
                 <TasksBlock />
               </motion.div>
 
-              {/* Tabs: Trending / All */}
+              {/* Content Type Tabs: Quizzes / Tests */}
               <motion.div
                 className="flex gap-2"
                 initial={{ y: 20, opacity: 0 }}
@@ -302,34 +456,35 @@ const Index = () => {
                 transition={{ delay: 0.14 }}
               >
                 <button
-                  className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${quizTab === "trending"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-foreground"
+                  className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${contentType === "quizzes"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-foreground"
                     }`}
                   onClick={() => {
                     haptic.selection();
-                    setQuizTab("trending");
+                    setContentType("quizzes");
                   }}
                 >
                   <TrendingUp className="w-4 h-4" />
-                  Trending
+                  Квизы
                 </button>
                 <button
-                  className={`flex-1 py-2.5 rounded-xl font-medium transition-colors ${quizTab === "all"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-foreground"
+                  className={`flex-1 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 ${contentType === "tests"
+                    ? "bg-purple-500 text-white"
+                    : "bg-secondary text-foreground"
                     }`}
                   onClick={() => {
                     haptic.selection();
-                    setQuizTab("all");
+                    setContentType("tests");
                   }}
                 >
-                  Все квизы
+                  <Sparkles className="w-4 h-4" />
+                  Тесты
                 </button>
               </motion.div>
 
-              {/* Sort chips + Search button (only for All tab) */}
-              {quizTab === "all" && (
+              {/* Sort chips + Search button (only for quizzes) */}
+              {contentType === "quizzes" && (
                 <motion.div
                   className="space-y-3"
                   initial={{ opacity: 0 }}
@@ -346,7 +501,7 @@ const Index = () => {
                         <div className="relative flex-1">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                           <Input
-                            placeholder="Поиск квизов..."
+                            placeholder="Поиск..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="pl-9 bg-secondary border-0"
@@ -375,8 +530,8 @@ const Index = () => {
                           setSortBy(sort);
                         }}
                         className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${sortBy === sort
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-secondary text-muted-foreground"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary text-muted-foreground"
                           }`}
                       >
                         {sort === "popular" && <><PopcornIcon className="w-3 h-3" /> Лайки</>}
@@ -401,48 +556,100 @@ const Index = () => {
                 </motion.div>
               )}
 
-              {/* Quizzes List */}
+              {/* Content List */}
               <motion.div
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.16 }}
               >
-                {!quizzesLoading && displayQuizzes.length === 0 ? (
-                  <div className="tg-section p-6 text-center">
-                    <Sparkles className="w-10 h-10 text-primary mx-auto mb-3" />
-                    <h3 className="font-semibold text-foreground mb-2">
-                      {searchQuery ? "Ничего не найдено" : "Нет квизов"}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      {searchQuery
-                        ? "Попробуй изменить поисковый запрос"
-                        : "Стань первым создателем квиза!"}
-                    </p>
-                    {!searchQuery && (
-                      <button
-                        className="tg-button"
-                        onClick={() => {
-                          haptic.impact('medium');
-                          setSelectedQuizId(null);
-                          setCurrentQuestion(0);
-                          setAnswers([]);
-                          setCurrentScreen("quiz");
-                        }}
-                      >
-                        Start Demo Quiz
-                      </button>
+                {contentType === "quizzes" ? (
+                  // Quizzes List
+                  <>
+                    {!quizzesLoading && displayQuizzes.length === 0 ? (
+                      <div className="tg-section p-6 text-center">
+                        <Sparkles className="w-10 h-10 text-primary mx-auto mb-3" />
+                        <h3 className="font-semibold text-foreground mb-2">
+                          {searchQuery ? "Ничего не найдено" : "Нет квизов"}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          {searchQuery
+                            ? "Попробуй изменить поисковый запрос"
+                            : "Стань первым создателем квиза!"}
+                        </p>
+                        {!searchQuery && (
+                          <button
+                            className="tg-button"
+                            onClick={() => {
+                              haptic.impact('medium');
+                              setCurrentScreen("create");
+                            }}
+                          >
+                            Создать квиз
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <QuizShowcase
+                        quizzes={displayQuizzes}
+                        isLoading={quizzesLoading}
+                        onQuizSelect={handleQuizSelect}
+                        likeIds={likeIds}
+                        saveIds={saveIds}
+                        onToggleLike={handleToggleLike}
+                        onToggleSave={handleToggleSave}
+                      />
                     )}
-                  </div>
+                  </>
                 ) : (
-                  <QuizShowcase
-                    quizzes={displayQuizzes}
-                    isLoading={quizzesLoading}
-                    onQuizSelect={handleQuizSelect}
-                    likeIds={likeIds}
-                    saveIds={saveIds}
-                    onToggleLike={handleToggleLike}
-                    onToggleSave={handleToggleSave}
-                  />
+                  // Personality Tests List
+                  <>
+                    {!testsLoading && personalityTests.length === 0 ? (
+                      <div className="tg-section p-6 text-center">
+                        <Sparkles className="w-10 h-10 text-purple-500 mx-auto mb-3" />
+                        <h3 className="font-semibold text-foreground mb-2">Нет тестов</h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Создай первый тест личности!
+                        </p>
+                        <button
+                          className="tg-button bg-purple-500 hover:bg-purple-600"
+                          onClick={() => {
+                            haptic.impact('medium');
+                            setCurrentScreen("create_test");
+                          }}
+                        >
+                          Создать тест
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {personalityTests.map((test, index) => (
+                          <motion.div
+                            key={test.id}
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: index * 0.05 }}
+                          >
+                            <PersonalityTestCard
+                              id={test.id}
+                              title={test.title}
+                              description={test.description || undefined}
+                              image_url={test.image_url || undefined}
+                              participant_count={test.participant_count}
+                              question_count={test.question_count}
+                              result_count={test.result_count}
+                              like_count={test.like_count}
+                              save_count={test.save_count}
+                              isLiked={testLikeIds.has(test.id)}
+                              isSaved={testSaveIds.has(test.id)}
+                              onClick={() => handleTestSelect(test.id)}
+                              onToggleLike={() => handleToggleTestLike(test.id)}
+                              onToggleSave={() => handleToggleTestSave(test.id)}
+                            />
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </motion.div>
             </motion.div>
@@ -480,6 +687,49 @@ const Index = () => {
             />
           )}
 
+          {currentScreen === "personality_test" && selectedTestId && (
+            <PersonalityTestScreen
+              key="personality_test"
+              testId={selectedTestId}
+              onBack={() => {
+                setCurrentScreen("home");
+                setSelectedTestId(null);
+              }}
+              onComplete={handleTestComplete}
+            />
+          )}
+
+          {currentScreen === "personality_result" && testResult && (
+            <PersonalityTestResultScreen
+              key="personality_result"
+              result={testResult}
+              testTitle={testResultTitle}
+              testId={testResultTestId}
+              onHome={() => {
+                setCurrentScreen("home");
+                setSelectedTestId(null);
+                setTestResult(null);
+              }}
+              onRetry={() => {
+                setCurrentScreen("personality_test");
+              }}
+              onChallenge={() => {
+                toast({ title: "Функция в разработке" });
+              }}
+            />
+          )}
+
+          {currentScreen === "create_test" && (
+            <CreatePersonalityTestScreen
+              key="create_test"
+              onBack={() => setCurrentScreen("home")}
+              onSuccess={() => {
+                setCurrentScreen("home");
+                setContentType("tests");
+              }}
+            />
+          )}
+
           {currentScreen === "result" && result && (
             <ResultScreen
               key="result"
@@ -488,6 +738,13 @@ const Index = () => {
               onChallenge={handleChallenge}
               onRestart={handleRestart}
               onNavigate={(screen) => setCurrentScreen(screen as AppScreen)}
+              onHome={() => {
+                setCurrentScreen("home");
+                setSelectedQuizId(null);
+                setCurrentQuestion(0);
+                setAnswers([]);
+                setResult(null);
+              }}
             />
           )}
 

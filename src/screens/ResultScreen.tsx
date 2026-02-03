@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { QuizResult } from "@/types/quiz";
-import { Share2, Users, RotateCcw, User, Trophy } from "lucide-react";
+import { Share2, Users, RotateCcw, User, Trophy, Home } from "lucide-react";
 import { QuizScreen as QuizScreenType } from "@/hooks/useQuiz";
 import { haptic, shareResult } from "@/lib/telegram";
 
@@ -10,9 +10,10 @@ interface ResultScreenProps {
   onChallenge: () => void;
   onRestart: () => void;
   onNavigate: (screen: QuizScreenType) => void;
+  onHome?: () => void;
 }
 
-export const ResultScreen = ({ result, onShare, onChallenge, onRestart, onNavigate }: ResultScreenProps) => {
+export const ResultScreen = ({ result, onShare, onChallenge, onRestart, onNavigate, onHome }: ResultScreenProps) => {
   const handleShare = () => {
     haptic.notification('success');
     shareResult(result.score, result.percentile, result.verdict);
@@ -41,12 +42,12 @@ export const ResultScreen = ({ result, onShare, onChallenge, onRestart, onNaviga
         <div className="tg-avatar w-20 h-20 mb-6">
           <span className="text-4xl">{result.verdictEmoji}</span>
         </div>
-        
+
         <div className="text-center mb-2">
           <span className="tg-score">{result.score}</span>
           <span className="text-2xl text-muted-foreground ml-1">/ {result.maxScore}</span>
         </div>
-        
+
         <motion.div
           className="flex items-center gap-2 mb-4"
           initial={{ y: 10, opacity: 0 }}
@@ -56,7 +57,7 @@ export const ResultScreen = ({ result, onShare, onChallenge, onRestart, onNaviga
           <Trophy className="w-4 h-4 text-primary" />
           <span className="text-primary font-semibold">Top {result.percentile}%</span>
         </motion.div>
-        
+
         <motion.p
           className="text-lg font-medium text-foreground text-center"
           initial={{ y: 10, opacity: 0 }}
@@ -74,22 +75,38 @@ export const ResultScreen = ({ result, onShare, onChallenge, onRestart, onNaviga
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.5 }}
       >
+        {/* Main Home button */}
         <button
           className="tg-button flex items-center justify-center gap-2"
-          onClick={handleShare}
+          onClick={() => {
+            haptic.selection();
+            onHome?.();
+          }}
         >
-          <Share2 className="w-5 h-5" />
-          Share result
+          <Home className="w-5 h-5" />
+          На главную
         </button>
 
-        <button
-          className="tg-button-secondary flex items-center justify-center gap-2"
-          onClick={handleChallenge}
-        >
-          <Users className="w-5 h-5" />
-          Challenge a friend
-        </button>
+        {/* Share and Challenge buttons in row */}
+        <div className="flex gap-3">
+          <button
+            className="tg-button-secondary flex-1 flex items-center justify-center gap-2"
+            onClick={handleShare}
+          >
+            <Share2 className="w-4 h-4" />
+            Поделиться
+          </button>
 
+          <button
+            className="tg-button-secondary flex-1 flex items-center justify-center gap-2"
+            onClick={handleChallenge}
+          >
+            <Users className="w-4 h-4" />
+            Вызвать
+          </button>
+        </div>
+
+        {/* Retry and Profile */}
         <div className="flex gap-3">
           <button
             className="tg-button-secondary flex-1 flex items-center justify-center gap-2"
@@ -99,9 +116,9 @@ export const ResultScreen = ({ result, onShare, onChallenge, onRestart, onNaviga
             }}
           >
             <RotateCcw className="w-4 h-4" />
-            Retry
+            Заново
           </button>
-          
+
           <button
             className="tg-button-secondary flex-1 flex items-center justify-center gap-2"
             onClick={() => {
@@ -110,7 +127,7 @@ export const ResultScreen = ({ result, onShare, onChallenge, onRestart, onNaviga
             }}
           >
             <User className="w-4 h-4" />
-            Profile
+            Профиль
           </button>
         </div>
       </motion.div>

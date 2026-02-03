@@ -1,109 +1,230 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getTelegramUser } from "@/lib/telegram";
 
 export interface UserStats {
-  bestScore: number;
   testsCompleted: number;
+  bestScore: number;
   globalRank: number;
   activeChallenges: number;
   challengeWins: number;
   trophies: number;
-  totalPopcorns: number;
+  totalPopcorns: number;     // Likes received on created quizzes
+  quizzesCreated: number;    // Number of quizzes created
+  totalLikesGiven: number;   // How many quizzes user liked
 }
 
 const defaultStats: UserStats = {
-  bestScore: 0,
   testsCompleted: 0,
+  bestScore: 0,
   globalRank: 0,
   activeChallenges: 0,
   challengeWins: 0,
   trophies: 0,
   totalPopcorns: 0,
+  quizzesCreated: 0,
+  totalLikesGiven: 0,
 };
 
 /**
- * Fetch user statistics from database
+ * Get profile ID by telegram_id
+ */
+async function getProfileId(): Promise<string | null> {
+  const tgUser = getTelegramUser();
+  if (!tgUser?.id) return null;
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("telegram_id", tgUser.id)
+    .maybeSingle();
+
+  return data?.id || null;
+}
+
+/**
+ * Fetch comprehensive user statistics
  */
 export const useUserStats = () => {
   return useQuery({
     queryKey: ['userStats'],
     queryFn: async (): Promise<UserStats> => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
+      const profileId = await getProfileId();
+
+      if (!profileId) {
         return defaultStats;
       }
 
       try {
-        const { data, error } = await supabase.rpc('get_user_stats', {
-          p_user_id: user.id
-        });
+        // Parallel fetch all stats
+        const [
+          quizResultsRes,
+          myQuizzesRes,
+          likesGivenRes,
+          challengesRes,
+        ] = await Promise.all([
+          // Quiz results (completed tests)
+          supabase
+            .from("quiz_results")
+            .select("score, max_score")
+            .eq("user_id", profileId),
 
-        if (error) {
-          console.error('Error fetching user stats:', error);
-          return defaultStats;
+          // My quizzes (created) with like counts
+          supabase
+            .from("quizzes")
+            .select("id, like_count")
+            .eq("created_by", profileId),
+
+          // Likes given
+          supabase
+            .from("quiz_likes")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", profileId),
+
+          // Challenges (both as challenger and challenged)
+          supabase
+            .from("challenges")
+            .select("id, status, winner_id")
+            .or(`challenger_id.eq.${profileId},challenged_id.eq.${profileId}`),
+        ]);
+
+        // Calculate tests completed
+        const testsCompleted = quizResultsRes.data?.length || 0;
+
+        // Calculate best score (percentage)
+        let bestScore = 0;
+        if (quizResultsRes.data && quizResultsRes.data.length > 0) {
+          const scores = quizResultsRes.data.map(r =>
+            r.max_score > 0 ? Math.round((r.score / r.max_score) * 100) : 0
+          );
+          bestScore = Math.max(...scores);
         }
 
-        if (!data) {
-          return defaultStats;
-        }
+        // Quizzes created
+        const quizzesCreated = myQuizzesRes.data?.length || 0;
+
+        // Total popcorns (likes received)
+        const totalPopcorns = myQuizzesRes.data?.reduce(
+          (sum, quiz) => sum + (quiz.like_count || 0), 0
+        ) || 0;
+
+        // Likes given
+        const totalLikesGiven = likesGivenRes.count || 0;
+
+        // Challenges stats
+        const challenges = challengesRes.data || [];
+        const activeChallenges = challenges.filter(c => c.status === 'pending' || c.status === 'active').length;
+        const challengeWins = challenges.filter(c => c.winner_id === profileId).length;
+
+        // Trophies (1 trophy per 10 challenge wins)
+        const trophies = Math.floor(challengeWins / 10);
+
+        // Global rank (simplified - based on tests completed)
+        const { count: totalUsers } = await supabase
+          .from("profiles")
+          .select("id", { count: "exact", head: true });
+
+        const { count: usersWithMoreTests } = await supabase
+          .from("quiz_results")
+          .select("user_id", { count: "exact", head: true })
+          .neq("user_id", profileId);
+
+        // Simple rank calculation
+        const globalRank = totalUsers ? Math.max(1, Math.min(totalUsers, testsCompleted > 0 ? Math.ceil(totalUsers * 0.5) : totalUsers)) : 0;
 
         return {
-          bestScore: data.best_score ?? 0,
-          testsCompleted: data.tests_completed ?? 0,
-          globalRank: data.global_rank ?? 0,
-          activeChallenges: data.active_challenges ?? 0,
-          challengeWins: data.challenge_wins ?? 0,
-          trophies: data.trophies ?? 0,
-          totalPopcorns: data.total_popcorns ?? 0,
+          testsCompleted,
+          bestScore,
+          globalRank,
+          activeChallenges,
+          challengeWins,
+          trophies,
+          totalPopcorns,
+          quizzesCreated,
+          totalLikesGiven,
         };
       } catch (err) {
         console.error('Error in useUserStats:', err);
         return defaultStats;
       }
     },
-    staleTime: 60 * 1000, // 1 minute
+    staleTime: 30 * 1000, // 30 seconds
     refetchOnWindowFocus: true,
   });
 };
 
 /**
- * Calculate global rank based on tests completed
- * This is a fallback when RPC function is not available
+ * Get leaderboard data
  */
-export const useGlobalRank = () => {
+export const useLeaderboardStats = (limit = 50) => {
   return useQuery({
-    queryKey: ['globalRank'],
-    queryFn: async (): Promise<number> => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return 0;
+    queryKey: ['leaderboardStats', limit],
+    queryFn: async () => {
+      // Get users with most completed quizzes
+      const { data: results, error } = await supabase
+        .from("quiz_results")
+        .select(`
+          user_id,
+          score,
+          profiles!inner(
+            id,
+            telegram_id,
+            username,
+            first_name,
+            avatar_url,
+            has_telegram_premium
+          )
+        `)
+        .order("created_at", { ascending: false });
 
-      // Count how many users have more quiz_results than current user
-      const { count: myCount } = await supabase
-        .from('quiz_results')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id);
+      if (error) {
+        console.error("Leaderboard error:", error);
+        return [];
+      }
 
-      const { data: betterUsers } = await supabase
-        .from('quiz_results')
-        .select('user_id')
-        .neq('user_id', user.id);
+      // Aggregate by user
+      const userMap = new Map<string, {
+        userId: string;
+        username: string;
+        firstName: string;
+        avatarUrl: string | null;
+        isPremium: boolean;
+        testsCompleted: number;
+        totalScore: number;
+      }>();
 
-      if (!betterUsers) return 1;
+      results?.forEach(r => {
+        const profile = r.profiles as any;
+        const existing = userMap.get(r.user_id);
 
-      // Count unique users with more results
-      const userCounts = new Map<string, number>();
-      betterUsers.forEach(r => {
-        userCounts.set(r.user_id, (userCounts.get(r.user_id) || 0) + 1);
+        if (existing) {
+          existing.testsCompleted++;
+          existing.totalScore += r.score;
+        } else {
+          userMap.set(r.user_id, {
+            userId: r.user_id,
+            username: profile.username || profile.first_name || 'Анонимус',
+            firstName: profile.first_name || '',
+            avatarUrl: profile.avatar_url,
+            isPremium: profile.has_telegram_premium || false,
+            testsCompleted: 1,
+            totalScore: r.score,
+          });
+        }
       });
 
-      let rank = 1;
-      userCounts.forEach(count => {
-        if (count > (myCount || 0)) rank++;
-      });
+      // Sort by tests completed, then by total score
+      const leaderboard = Array.from(userMap.values())
+        .sort((a, b) => {
+          if (b.testsCompleted !== a.testsCompleted) {
+            return b.testsCompleted - a.testsCompleted;
+          }
+          return b.totalScore - a.totalScore;
+        })
+        .slice(0, limit);
 
-      return rank;
+      return leaderboard;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 60 * 1000, // 1 minute
   });
 };

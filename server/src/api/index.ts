@@ -29,19 +29,19 @@ declare module 'hono' {
  */
 const authMiddleware = async (c: any, next: any) => {
   const authHeader = c.req.header('Authorization');
-  
+
   if (!authHeader?.startsWith('tma ')) {
     return c.json({ error: 'Missing or invalid Authorization header' }, 401);
   }
-  
+
   const initDataString = authHeader.slice(4); // Remove "tma " prefix
-  
+
   try {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
       return c.json({ error: 'Server configuration error' }, 500);
     }
-    
+
     const initData = validateInitData(initDataString, botToken);
     c.set('initData', initData);
     await next();
@@ -99,11 +99,11 @@ app.get('/api/quizzes/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const quiz = await getQuizById(id);
-    
+
     if (!quiz) {
       return c.json({ error: 'Quiz not found' }, 404);
     }
-    
+
     return c.json({ quiz });
   } catch (error) {
     console.error('Get quiz error:', error);
@@ -121,7 +121,7 @@ app.get('/api/quizzes/:id', async (c) => {
 app.post('/api/auth/validate', authMiddleware, (c) => {
   const initData = c.get('initData');
   const startParam = parseStartParam(initData.start_param);
-  
+
   return c.json({
     valid: true,
     user: initData.user,
@@ -136,18 +136,18 @@ app.post('/api/attempts/start', authMiddleware, async (c) => {
   const initData = c.get('initData');
   const body = await c.req.json();
   const { quizId } = body;
-  
+
   if (!quizId) {
     return c.json({ error: 'quizId is required' }, 400);
   }
-  
+
   // TODO: Create attempt in database
   // For now, just validate and return
   const quiz = await getQuizById(quizId);
   if (!quiz) {
     return c.json({ error: 'Quiz not found' }, 404);
   }
-  
+
   return c.json({
     attemptId: crypto.randomUUID(),
     quiz,
@@ -163,7 +163,7 @@ app.post('/api/shares', authMiddleware, async (c) => {
   const initData = c.get('initData');
   const body = await c.req.json();
   const { attemptId, chatType, source } = body;
-  
+
   // TODO: Log share in database
   console.log('Share event:', {
     userId: initData.user?.id,
@@ -172,7 +172,7 @@ app.post('/api/shares', authMiddleware, async (c) => {
     source,
     timestamp: new Date().toISOString(),
   });
-  
+
   return c.json({ success: true });
 });
 
@@ -183,24 +183,24 @@ app.post('/api/quizzes/submit-for-review', authMiddleware, async (c) => {
   const initData = c.get('initData');
   const body = await c.req.json();
   const { quizId } = body;
-  
+
   if (!quizId) {
     return c.json({ error: 'quizId is required' }, 400);
   }
-  
+
   try {
     // Get quiz details
     const quiz = await getQuizById(quizId);
     if (!quiz) {
       return c.json({ error: 'Quiz not found' }, 404);
     }
-    
+
     // Get author info
     const user = initData.user;
     if (!user) {
       return c.json({ error: 'User not found' }, 400);
     }
-    
+
     // Send notification to admins
     await notifyAdminsNewQuiz({
       quizId: quiz.id,
@@ -211,13 +211,13 @@ app.post('/api/quizzes/submit-for-review', authMiddleware, async (c) => {
       authorName: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
       authorUsername: user.username,
     });
-    
+
     console.log('Quiz submitted for review:', {
       quizId,
       authorId: user.id,
       timestamp: new Date().toISOString(),
     });
-    
+
     return c.json({ success: true, message: 'Quiz submitted for review' });
   } catch (error) {
     console.error('Submit for review error:', error);
@@ -240,11 +240,11 @@ const ADMIN_TELEGRAM_IDS = (process.env.ADMIN_TELEGRAM_IDS || '')
 const adminMiddleware = async (c: any, next: any) => {
   const initData = c.get('initData');
   const userId = initData?.user?.id;
-  
+
   if (!userId || !ADMIN_TELEGRAM_IDS.includes(userId)) {
     return c.json({ error: 'Admin access required' }, 403);
   }
-  
+
   await next();
 };
 
@@ -260,11 +260,11 @@ app.route('/api/admin/analytics', analytics);
 
 app.post('/api/bot/webhook', async (c) => {
   const secret = c.req.header('X-Telegram-Bot-Api-Secret-Token');
-  
+
   if (secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
-  
+
   try {
     const update = await c.req.json();
     await bot.handleUpdate(update);
@@ -280,12 +280,12 @@ app.post('/api/bot/webhook', async (c) => {
  */
 export async function startApi(port: number) {
   console.log('🌐 Starting API server...');
-  
+
   serve({
     fetch: app.fetch,
     port,
   });
-  
+
   console.log(`✅ API server running on http://localhost:${port}`);
 }
 

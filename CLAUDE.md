@@ -501,11 +501,27 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2024-02-03 | Profile stats compact | grid-cols-4 gap-1.5, text-base, whitespace-nowrap | ProfileScreen.tsx |
 | 2024-02-03 | Rank без toLocaleString | Убрал пробелы в числе для компактности | ProfileScreen.tsx |
 | 2024-02-03 | Quiz moderation system | status field (draft/pending/published/rejected), admin notifications via bot | migrations, API, bot |
+| 2026-02-03 | Personality Tests feature | Тесты типа "Кто ты из Симпсонов", отличаются от квизов логикой подсчёта | personality_tests tables, hooks, screens |
+| 2026-02-03 | result_points JSONB | Каждый ответ даёт очки к нескольким результатам, гибко | personality_test_answers.result_points |
+| 2026-02-03 | Tabs Квизы/Тесты на главной | Переключение между типами контента, тесты = purple accent | Index.tsx contentType state |
+| 2026-02-03 | Bot moderation notifications | Уведомления админам при создании контента с inline кнопками | notifications.ts, moderation.ts |
+| 2026-02-03 | Inline test: prefix | Поиск только тестов через test: или тест: в inline mode | inline.ts |
 | 2024-02-03 | Image upload for quizzes | Supabase Storage bucket 'quiz-images', useImageUpload hook | CreateQuizScreen |
 | 2024-02-03 | Real leaderboard | RPC functions get_leaderboard_by_*, useLeaderboard hook | LeaderboardScreen |
 | 2024-02-03 | Real user stats | RPC function get_user_stats, useUserStats hook | Index.tsx, ProfileScreen |
 | 2024-02-03 | Bot moderation handlers | approve_quiz/reject_quiz callbacks, notifyAdmins, notifyAuthor | server/bot/ |
 | 2024-02-03 | CreatorsScreen real data | Replaced mock data with useLeaderboard('popcorns') | CreatorsScreen |
+| 2026-02-03 | Рандомизация вопросов | Вопросы перемешиваются при старте квиза/теста (Fisher-Yates shuffle) | Index.tsx, PersonalityTestScreen |
+| 2026-02-03 | Inline шаринг с картинкой | InlineQueryResultPhoto для результатов тестов с image_url | inline.ts |
+| 2026-02-03 | Profile tabs: Мои/История/Saved | "Мои" = созданное, "История" = пройденное (квизы + тесты), "Saved" = сохранённое | ProfileScreen |
+| 2026-02-03 | useMyQuizResults hook | История пройденных квизов пользователя (quiz_results join quizzes) | useQuizzes.ts |
+| 2026-02-03 | Challenge & Gallery "soon" | Неактивные кнопки с badge "soon", toast при нажатии | BottomNav, Index.tsx |
+| 2026-02-03 | Banner edit in admin | Полное редактирование баннеров (title, image, link, is_active) | AdminPanel |
+| 2026-02-03 | Banners RLS fix | DISABLE RLS для banners таблицы (admin check на уровне приложения) | migrations/fix_banners_rls.sql |
+| 2026-02-03 | Deep link start_param | Парсинг startParam при открытии Mini App, автооткрытие теста/квиза | Index.tsx |
+| 2026-02-03 | Inline cache_time=0 | Отключили кэширование inline results для персонализации (refUserId) | inline.ts |
+| 2026-02-03 | Уникальные inline result IDs | Добавили userId в ID inline результатов для избежания конфликтов | inline.ts |
+| 2026-02-03 | Bot auto-start | startBot() вызывается автоматически при запуске bot/index.ts | server/bot/index.ts |
 
 ## TODO / Backlog
 
@@ -668,6 +684,48 @@ See `.env.example` for required variables.
 2. **`DESIGN_SYSTEM.md`** — Full design system documentation
 3. **`src/index.css`** — CSS variables and Telegram theme
 4. **`tailwind.config.ts`** — Tailwind config with colors and animations
+
+### Personality Tests (Тесты личности)
+1. **Отличие от Quiz**: нет правильных ответов, каждый ответ дает очки к результату
+2. **Результат**: персонаж/тип с картинкой и описанием (не score)
+3. **DB таблицы**: personality_tests, personality_test_questions, personality_test_answers, personality_test_results, personality_test_completions, personality_test_likes, personality_test_favorites
+4. **Подсчёт результата**: суммируем очки из result_points (JSONB), берём результат с max очками
+5. **UI Flow**: Cover → Questions (выбор без "правильно/неправильно") → Character Result
+6. **Шаринг**: "Я — Гомер Симпсон! Пройди тест и узнай кто ты!"
+7. **Inline mode**: test: или тест: префикс для поиска только тестов
+8. **Модерация**: как у квизов (is_published: false → true)
+9. **Admin Panel**: таб "Tests" для модерации pending тестов
+
+### Moderation Notifications
+1. **При создании**: уведомление админам в бота с кнопками Approve/Reject
+2. **При решении**: уведомление автору о результате модерации
+3. **ADMIN_TELEGRAM_IDS**: env переменная со списком ID админов
+4. **Handlers**: server/src/bot/handlers/notifications.ts, moderation.ts
+
+### Deep Links (start_param)
+1. **Формат**: `{testId|questId}_{refUserId}_{source}` (e.g., `abc-123_456_result_share`)
+2. **Парсинг**: Index.tsx при инициализации проверяет tg.initDataUnsafe.start_param
+3. **Логика**: UUID-like первый параметр → открываем тест (если source содержит "test") или квиз
+4. **Referral**: refUserId сохраняется для аналитики (кто привёл пользователя)
+
+### Inline Query Results
+1. **cache_time**: 0-5 сек для персонализированных результатов
+2. **is_personal**: true — результаты уникальны для каждого пользователя
+3. **ID формат**: `{type}_{contentId}_{userId}_{timestamp}` для уникальности
+4. **Шаринг теста**: test_result:testId:resultTitle → InlineQueryResultPhoto с картинкой результата
+
+### Баннеры (Admin)
+1. **CRUD**: создание, редактирование, скрытие/показ, удаление
+2. **is_active**: true показывает на главной, false скрывает
+3. **Карусель**: автосвайп каждые 3.5 сек, ручной свайп сбрасывает таймер
+4. **RLS**: отключен, проверка админа на уровне приложения
+5. **Редактирование**: inline форма в админке с сохранением всех полей
+
+### Coming Soon Features
+1. **Gallery**: кнопка неактивна с badge "soon"
+2. **Leaderboard**: кнопка неактивна с badge "soon"  
+3. **Challenge (PvP)**: кнопка серая с badge "soon"
+4. **Toast**: при нажатии показывается "Скоро" / "В разработке"
 
 ---
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Trash2, Eye, EyeOff, Loader2, Trophy, Settings, Gift, ExternalLink, BarChart3 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Eye, EyeOff, Loader2, Trophy, Settings, Gift, ExternalLink, BarChart3, Sparkles, Pencil } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { haptic } from "@/lib/telegram";
@@ -9,12 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useAllTasks, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
 import { AdminAnalytics } from "@/components/AdminAnalytics";
+import { usePendingPersonalityTests, useModeratePersonalityTest } from "@/hooks/usePersonalityTests";
 
 interface AdminPanelProps {
   onBack: () => void;
 }
 
-type Tab = "analytics" | "quizzes" | "banners" | "tasks" | "seasons";
+type Tab = "analytics" | "quizzes" | "tests" | "banners" | "tasks" | "seasons";
 
 interface LeaderboardConfig {
   season_duration_days: number;
@@ -47,6 +48,15 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     is_published: false,
   });
   const [newBanner, setNewBanner] = useState({
+    title: "",
+    description: "",
+    image_url: "",
+    link_url: "",
+    link_type: "external" as "external" | "internal",
+    is_active: true,
+  });
+  const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
+  const [editBanner, setEditBanner] = useState({
     title: "",
     description: "",
     image_url: "",
@@ -87,6 +97,10 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
+
+  // Personality Tests
+  const { data: pendingTests = [], isLoading: testsLoading } = usePendingPersonalityTests();
+  const moderateTest = useModeratePersonalityTest();
 
   // Fetch leaderboard config
   const { data: leaderboardConfig, isLoading: configLoading } = useQuery({
@@ -236,6 +250,48 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     },
   });
 
+  // Update banner
+  const updateBanner = useMutation({
+    mutationFn: async ({ id, banner }: { id: string; banner: typeof editBanner }) => {
+      const { data, error } = await supabase
+        .from("banners")
+        .update({
+          title: banner.title,
+          description: banner.description || null,
+          image_url: banner.image_url,
+          link_url: banner.link_url || null,
+          link_type: banner.link_type,
+          is_active: banner.is_active,
+        })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "banners"] });
+      queryClient.invalidateQueries({ queryKey: ["banners"] });
+      toast({ title: "Banner updated! ✅" });
+      setEditingBannerId(null);
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const startEditBanner = (banner: any) => {
+    setEditingBannerId(banner.id);
+    setEditBanner({
+      title: banner.title,
+      description: banner.description || "",
+      image_url: banner.image_url,
+      link_url: banner.link_url || "",
+      link_type: banner.link_type,
+      is_active: banner.is_active,
+    });
+  };
+
   const handleBack = () => {
     haptic.selection();
     onBack();
@@ -243,9 +299,9 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
 
   const handleSaveConfig = (field: keyof LeaderboardConfig | string, value: number) => {
     if (!leaderboardConfig) return;
-    
+
     let newConfig = { ...leaderboardConfig };
-    
+
     if (field === "season_duration_days") {
       newConfig.season_duration_days = value;
     } else if (field.startsWith("cup_")) {
@@ -255,7 +311,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
         [cupType]: value,
       };
     }
-    
+
     updateConfig.mutate(newConfig);
   };
 
@@ -298,14 +354,13 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        {(["analytics", "quizzes", "banners", "tasks", "seasons"] as Tab[]).map((tab) => (
+        {(["analytics", "quizzes", "tests", "banners", "tasks", "seasons"] as Tab[]).map((tab) => (
           <button
             key={tab}
-            className={`py-2 px-3 rounded-xl font-medium transition-colors whitespace-nowrap text-sm flex items-center gap-1 ${
-              activeTab === tab
-                ? "bg-primary text-primary-foreground"
+            className={`py-2 px-3 rounded-xl font-medium transition-colors whitespace-nowrap text-sm flex items-center gap-1 ${activeTab === tab
+                ? tab === "tests" ? "bg-purple-500 text-white" : "bg-primary text-primary-foreground"
                 : "bg-secondary text-foreground"
-            }`}
+              }`}
             onClick={() => {
               haptic.selection();
               setActiveTab(tab);
@@ -313,6 +368,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
           >
             {tab === "analytics" && <><BarChart3 className="w-4 h-4" /> Stats</>}
             {tab === "quizzes" && `Quizzes (${quizzes.length})`}
+            {tab === "tests" && <><Sparkles className="w-4 h-4" /> Tests</>}
             {tab === "banners" && `Banners (${banners.length})`}
             {tab === "tasks" && <><Gift className="w-4 h-4" /> Tasks ({tasks.length})</>}
             {tab === "seasons" && <><Trophy className="w-4 h-4" /> Seasons</>}
@@ -374,11 +430,10 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                       <button
                         key={d}
                         onClick={() => setNewQuiz({ ...newQuiz, duration_seconds: d })}
-                        className={`flex-1 py-2 rounded-lg font-medium text-sm transition-colors ${
-                          newQuiz.duration_seconds === d
+                        className={`flex-1 py-2 rounded-lg font-medium text-sm transition-colors ${newQuiz.duration_seconds === d
                             ? "bg-primary text-primary-foreground"
                             : "bg-secondary text-foreground"
-                        }`}
+                          }`}
                       >
                         {d}s
                       </button>
@@ -445,11 +500,10 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                       </p>
                     </div>
                     <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        quiz.is_published
+                      className={`text-xs px-2 py-1 rounded-full ${quiz.is_published
                           ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
                           : "bg-secondary text-muted-foreground"
-                      }`}
+                        }`}
                     >
                       {quiz.is_published ? "Published" : "Draft"}
                     </span>
@@ -484,6 +538,69 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                       }}
                     >
                       <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </>
+        )}
+
+        {activeTab === "tests" && (
+          <>
+            {testsLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+              </div>
+            ) : pendingTests.length === 0 ? (
+              <div className="tg-section p-6 text-center">
+                <Sparkles className="w-10 h-10 text-purple-500 mx-auto mb-3" />
+                <p className="text-muted-foreground">Нет тестов на модерации</p>
+              </div>
+            ) : (
+              pendingTests.map((test) => (
+                <div key={test.id} className="tg-section p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Sparkles className="w-4 h-4 text-purple-500" />
+                        <h3 className="font-semibold text-foreground">{test.title}</h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {test.question_count} вопросов · {test.result_count} результатов · {test.participant_count} участий
+                      </p>
+                      {test.description && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{test.description}</p>
+                      )}
+                    </div>
+                    <span className="text-xs px-2 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                      На модерации
+                    </span>
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      className="flex-1 py-2 text-sm flex items-center justify-center gap-1 rounded-xl bg-green-500/10 text-green-600 dark:text-green-400 font-medium"
+                      onClick={() => {
+                        haptic.notification('success');
+                        moderateTest.mutate({ testId: test.id, publish: true });
+                        toast({ title: "Тест опубликован!" });
+                      }}
+                    >
+                      <Eye className="w-4 h-4" />
+                      Одобрить
+                    </button>
+                    <button
+                      className="flex-1 py-2 text-sm flex items-center justify-center gap-1 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 font-medium"
+                      onClick={() => {
+                        haptic.notification('warning');
+                        if (confirm("Отклонить этот тест?")) {
+                          moderateTest.mutate({ testId: test.id, publish: false });
+                          toast({ title: "Тест отклонён" });
+                        }
+                      }}
+                    >
+                      <EyeOff className="w-4 h-4" />
+                      Отклонить
                     </button>
                   </div>
                 </div>
@@ -558,21 +675,19 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setNewBanner({ ...newBanner, link_type: "internal" })}
-                      className={`px-3 py-1 rounded-lg text-sm ${
-                        newBanner.link_type === "internal"
+                      className={`px-3 py-1 rounded-lg text-sm ${newBanner.link_type === "internal"
                           ? "bg-primary text-primary-foreground"
                           : "bg-secondary text-foreground"
-                      }`}
+                        }`}
                     >
                       Внутренняя
                     </button>
                     <button
                       onClick={() => setNewBanner({ ...newBanner, link_type: "external" })}
-                      className={`px-3 py-1 rounded-lg text-sm ${
-                        newBanner.link_type === "external"
+                      className={`px-3 py-1 rounded-lg text-sm ${newBanner.link_type === "external"
                           ? "bg-primary text-primary-foreground"
                           : "bg-secondary text-foreground"
-                      }`}
+                        }`}
                     >
                       Внешняя
                     </button>
@@ -626,64 +741,162 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
             ) : (
               banners.map((banner) => (
                 <div key={banner.id} className="tg-section overflow-hidden">
-                  <div className="aspect-[3/1] bg-secondary">
-                    <img
-                      src={banner.image_url}
-                      alt={banner.title}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-foreground">{banner.title}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {banner.link_type === "external" ? "External link" : "Internal link"}
-                        </p>
+                  {editingBannerId === banner.id ? (
+                    /* Edit Form */
+                    <motion.div
+                      className="p-4 space-y-4"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                    >
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-2 block">Заголовок</label>
+                        <Input
+                          value={editBanner.title}
+                          onChange={(e) => setEditBanner({ ...editBanner, title: e.target.value })}
+                          className="bg-secondary border-0"
+                        />
                       </div>
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full ${
-                          banner.is_active
-                            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                            : "bg-secondary text-muted-foreground"
-                        }`}
-                      >
-                        {banner.is_active ? "Active" : "Hidden"}
-                      </span>
-                    </div>
-                    <div className="flex gap-2 mt-3">
-                      <button
-                        className="flex-1 tg-button-secondary py-2 text-sm flex items-center justify-center gap-1"
-                        onClick={() => {
-                          haptic.selection();
-                          toggleBannerActive.mutate({ id: banner.id, is_active: banner.is_active });
-                        }}
-                      >
-                        {banner.is_active ? (
-                          <>
-                            <EyeOff className="w-4 h-4" />
-                            Hide
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="w-4 h-4" />
-                            Show
-                          </>
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-2 block">Описание</label>
+                        <Input
+                          value={editBanner.description}
+                          onChange={(e) => setEditBanner({ ...editBanner, description: e.target.value })}
+                          className="bg-secondary border-0"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-2 block">URL изображения</label>
+                        <Input
+                          value={editBanner.image_url}
+                          onChange={(e) => setEditBanner({ ...editBanner, image_url: e.target.value })}
+                          className="bg-secondary border-0"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-2 block">Ссылка</label>
+                        <Input
+                          value={editBanner.link_url}
+                          onChange={(e) => setEditBanner({ ...editBanner, link_url: e.target.value })}
+                          className="bg-secondary border-0"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Тип ссылки</span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setEditBanner({ ...editBanner, link_type: "internal" })}
+                            className={`px-3 py-1 rounded-lg text-sm ${editBanner.link_type === "internal" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}
+                          >
+                            Внутренняя
+                          </button>
+                          <button
+                            onClick={() => setEditBanner({ ...editBanner, link_type: "external" })}
+                            className={`px-3 py-1 rounded-lg text-sm ${editBanner.link_type === "external" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"}`}
+                          >
+                            Внешняя
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Показывать на главной</span>
+                        <Switch
+                          checked={editBanner.is_active}
+                          onCheckedChange={(checked) => setEditBanner({ ...editBanner, is_active: checked })}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          className="flex-1 tg-button py-2"
+                          onClick={() => updateBanner.mutate({ id: banner.id, banner: editBanner })}
+                          disabled={updateBanner.isPending}
+                        >
+                          {updateBanner.isPending ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Сохранить"}
+                        </button>
+                        <button
+                          className="tg-button-secondary py-2 px-4"
+                          onClick={() => setEditingBannerId(null)}
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    /* View Mode */
+                    <>
+                      <div className="aspect-[3/1] bg-secondary relative">
+                        <img
+                          src={banner.image_url}
+                          alt={banner.title}
+                          className="w-full h-full object-cover"
+                        />
+                        {!banner.is_active && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <span className="text-white text-sm font-medium">Скрыт</span>
+                          </div>
                         )}
-                      </button>
-                      <button
-                        className="p-2 bg-destructive/10 rounded-lg text-destructive"
-                        onClick={() => {
-                          haptic.notification('warning');
-                          if (confirm("Delete this banner?")) {
-                            deleteBanner.mutate(banner.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
+                      </div>
+                      <div className="p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-foreground">{banner.title}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {banner.description || (banner.link_type === "external" ? "External link" : "Internal link")}
+                            </p>
+                          </div>
+                          <span
+                            className={`text-xs px-2 py-1 rounded-full ${banner.is_active
+                                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                                : "bg-secondary text-muted-foreground"
+                              }`}
+                          >
+                            {banner.is_active ? "Active" : "Hidden"}
+                          </span>
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            className="flex-1 tg-button-secondary py-2 text-sm flex items-center justify-center gap-1"
+                            onClick={() => {
+                              haptic.selection();
+                              startEditBanner(banner);
+                            }}
+                          >
+                            <Pencil className="w-4 h-4" />
+                            Edit
+                          </button>
+                          <button
+                            className="flex-1 tg-button-secondary py-2 text-sm flex items-center justify-center gap-1"
+                            onClick={() => {
+                              haptic.selection();
+                              toggleBannerActive.mutate({ id: banner.id, is_active: banner.is_active });
+                            }}
+                          >
+                            {banner.is_active ? (
+                              <>
+                                <EyeOff className="w-4 h-4" />
+                                Hide
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="w-4 h-4" />
+                                Show
+                              </>
+                            )}
+                          </button>
+                          <button
+                            className="p-2 bg-destructive/10 rounded-lg text-destructive"
+                            onClick={() => {
+                              haptic.notification('warning');
+                              if (confirm("Delete this banner?")) {
+                                deleteBanner.mutate(banner.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))
             )}
@@ -758,9 +971,8 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                       {TASK_ICONS.map((icon) => (
                         <button
                           key={icon}
-                          className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg ${
-                            newTask.icon === icon ? "bg-primary/20" : "bg-secondary"
-                          }`}
+                          className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg ${newTask.icon === icon ? "bg-primary/20" : "bg-secondary"
+                            }`}
                           onClick={() => setNewTask({ ...newTask, icon })}
                         >
                           {icon}
@@ -865,7 +1077,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                     <Settings className="w-5 h-5 text-primary" />
                     <h3 className="font-semibold text-foreground">Настройки сезона</h3>
                   </div>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm text-muted-foreground mb-2 block">
@@ -889,7 +1101,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                     <Trophy className="w-5 h-5 text-yellow-500" />
                     <h3 className="font-semibold text-foreground">Пороги для кубков</h3>
                   </div>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
@@ -903,7 +1115,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                         min={0}
                       />
                     </div>
-                    
+
                     <div>
                       <label className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
                         <span className="text-lg">🥈</span> Серебро (минимум очков)
@@ -916,7 +1128,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                         min={0}
                       />
                     </div>
-                    
+
                     <div>
                       <label className="text-sm text-muted-foreground mb-2 flex items-center gap-2">
                         <span className="text-lg">🥉</span> Бронза (минимум очков)

@@ -11,7 +11,7 @@ const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('ENV vars:', { 
+  console.error('ENV vars:', {
     SUPABASE_URL: process.env.SUPABASE_URL ? 'set' : 'missing',
     VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ? 'set' : 'missing',
     SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY ? 'set' : 'missing',
@@ -71,7 +71,7 @@ export async function getPublishedQuizzes(limit = 10): Promise<Quiz[]> {
     .eq('is_published', true)
     .order('like_count', { ascending: false })
     .limit(limit);
-  
+
   if (error) throw error;
   return data || [];
 }
@@ -85,7 +85,7 @@ export async function getQuizById(id: string): Promise<Quiz | null> {
     .select('*')
     .eq('id', id)
     .single();
-  
+
   if (error) {
     if (error.code === 'PGRST116') return null; // Not found
     throw error;
@@ -102,19 +102,19 @@ export async function getRandomQuiz(): Promise<Quiz | null> {
     .from('quizzes')
     .select('*', { count: 'exact', head: true })
     .eq('is_published', true);
-  
+
   if (!count || count === 0) return null;
-  
+
   // Get random offset
   const offset = Math.floor(Math.random() * count);
-  
+
   const { data, error } = await supabase
     .from('quizzes')
     .select('*')
     .eq('is_published', true)
     .range(offset, offset)
     .single();
-  
+
   if (error) return null;
   return data;
 }
@@ -132,7 +132,7 @@ export async function getDailyQuiz(): Promise<Quiz | null> {
     .order('participant_count', { ascending: false })
     .limit(1)
     .single();
-  
+
   if (error) return getRandomQuiz();
   return data;
 }
@@ -141,8 +141,8 @@ export async function getDailyQuiz(): Promise<Quiz | null> {
  * Update quiz status (for moderation)
  */
 export async function updateQuizStatus(
-  quizId: string, 
-  status: QuizStatus, 
+  quizId: string,
+  status: QuizStatus,
   moderatedBy?: string,
   rejectionReason?: string
 ): Promise<Quiz | null> {
@@ -197,6 +197,89 @@ export async function getPendingQuizzes(): Promise<Quiz[]> {
     .select('*')
     .eq('status', 'pending')
     .order('submitted_at', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+// ================================
+// Personality Tests
+// ================================
+
+export interface PersonalityTest {
+  id: string;
+  title: string;
+  description: string | null;
+  image_url: string | null;
+  created_by: string | null;
+  question_count: number;
+  result_count: number;
+  participant_count: number;
+  like_count: number;
+  save_count: number;
+  is_published: boolean;
+  created_at: string;
+}
+
+/**
+ * Get personality test by ID
+ */
+export async function getPersonalityTestById(testId: string): Promise<PersonalityTest | null> {
+  const { data, error } = await supabase
+    .from('personality_tests')
+    .select('*')
+    .eq('id', testId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+  return data;
+}
+
+/**
+ * Update personality test status (publish/unpublish)
+ */
+export async function updatePersonalityTestStatus(
+  testId: string,
+  isPublished: boolean
+): Promise<PersonalityTest | null> {
+  const { data, error } = await supabase
+    .from('personality_tests')
+    .update({ is_published: isPublished })
+    .eq('id', testId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Get pending personality tests
+ */
+export async function getPendingPersonalityTests(): Promise<PersonalityTest[]> {
+  const { data, error } = await supabase
+    .from('personality_tests')
+    .select('*')
+    .eq('is_published', false)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+/**
+ * Get published personality tests
+ */
+export async function getPublishedPersonalityTests(limit: number = 10): Promise<PersonalityTest[]> {
+  const { data, error } = await supabase
+    .from('personality_tests')
+    .select('*')
+    .eq('is_published', true)
+    .order('participant_count', { ascending: false })
+    .limit(limit);
 
   if (error) throw error;
   return data || [];

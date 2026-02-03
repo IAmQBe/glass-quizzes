@@ -118,3 +118,6 @@ export async function startBot() {
     console.log('ℹ️ Bot in production mode - set up webhook separately');
   }
 }
+
+// Auto-start the bot when this file is run directly
+startBot();

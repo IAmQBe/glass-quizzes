@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Trash2, Image, Clock, X, Upload, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Image, Clock, X, Upload, Loader2, Pencil } from "lucide-react";
 import { useCreateQuiz, useSubmitForReview } from "@/hooks/useQuizzes";
 import { useImageUpload, resizeImage } from "@/hooks/useImageUpload";
 import { haptic } from "@/lib/telegram";
@@ -28,11 +28,13 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
     options: ["", "", "", ""],
     correctAnswer: 0,
   });
-  
+
   // Image upload state
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [coverImageUrl, setCoverImageUrl] = useState<string>("");
   const [coverPreview, setCoverPreview] = useState<string>("");
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [manualImageUrl, setManualImageUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const createQuiz = useCreateQuiz();
@@ -58,7 +60,7 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
 
     haptic.selection();
     setCoverImage(file);
-    
+
     // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -72,9 +74,27 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
     setCoverImage(null);
     setCoverPreview("");
     setCoverImageUrl("");
+    setManualImageUrl("");
+    setShowUrlInput(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const handleSetManualUrl = () => {
+    if (!manualImageUrl.trim()) {
+      toast({ title: "Введите URL изображения" });
+      return;
+    }
+    // Basic URL validation
+    if (!manualImageUrl.startsWith('http://') && !manualImageUrl.startsWith('https://')) {
+      toast({ title: "URL должен начинаться с http:// или https://" });
+      return;
+    }
+    haptic.selection();
+    setCoverImageUrl(manualImageUrl);
+    setCoverPreview(manualImageUrl);
+    setShowUrlInput(false);
   };
 
   const handleBack = () => {
@@ -128,8 +148,9 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
     haptic.impact("medium");
 
     try {
-      // Step 1: Upload cover image if selected
+      // Step 1: Get image URL (from upload, manual URL, or data URL)
       let imageUrl = coverImageUrl;
+
       if (coverImage && !imageUrl) {
         toast({ title: "Загружаем обложку..." });
         try {
@@ -139,9 +160,19 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
           setCoverImageUrl(imageUrl);
         } catch (uploadError) {
           console.error("Image upload error:", uploadError);
-          toast({ title: "Ошибка загрузки изображения", description: "Попробуйте ещё раз" });
-          return;
+          // Use data URL as fallback if upload fails
+          if (coverPreview && coverPreview.startsWith('data:')) {
+            console.log("Using data URL as fallback");
+            imageUrl = coverPreview;
+            toast({ title: "Используем локальное изображение" });
+          } else {
+            toast({ title: "Квиз будет создан без обложки" });
+            imageUrl = undefined;
+          }
         }
+      } else if (!imageUrl && coverPreview) {
+        // Use manual URL or data URL preview
+        imageUrl = coverPreview;
       }
 
       // Step 2: Create quiz with status='pending'
@@ -166,17 +197,20 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
       }
 
       haptic.notification("success");
-      toast({ 
-        title: "Квиз создан! 🎉", 
-        description: "Отправлен на модерацию. Мы уведомим когда опубликуем." 
+      toast({
+        title: "Квиз создан! 🎉",
+        description: "Отправлен на модерацию. Мы уведомим когда опубликуем."
       });
       onSuccess();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Create quiz error:", error);
       haptic.notification("error");
-      toast({ 
-        title: "Ошибка", 
-        description: "Не удалось создать квиз. Проверьте авторизацию." 
+
+      // Show detailed error message
+      const errorMessage = error?.message || "Неизвестная ошибка";
+      toast({
+        title: "Ошибка",
+        description: errorMessage
       });
     }
   };
@@ -206,8 +240,8 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
             <div
               key={s}
               className={`flex-1 h-1 rounded-full ${["info", "questions", "preview"].indexOf(step) >= i
-                  ? "bg-primary"
-                  : "bg-secondary"
+                ? "bg-primary"
+                : "bg-secondary"
                 }`}
             />
           ))}
@@ -264,8 +298,8 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                       setDuration(d);
                     }}
                     className={`flex-1 py-2 rounded-lg font-medium transition-colors ${duration === d
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary text-foreground"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-foreground"
                       }`}
                   >
                     {d}s
@@ -280,7 +314,7 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                 <Image className="w-4 h-4 inline mr-1" />
                 Обложка (опционально)
               </label>
-              
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -288,13 +322,17 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                 onChange={handleImageSelect}
                 className="hidden"
               />
-              
+
               {coverPreview ? (
                 <div className="relative rounded-xl overflow-hidden">
-                  <img 
-                    src={coverPreview} 
-                    alt="Preview" 
+                  <img
+                    src={coverPreview}
+                    alt="Preview"
                     className="w-full h-48 object-cover"
+                    onError={() => {
+                      toast({ title: "Не удалось загрузить изображение" });
+                      handleRemoveImage();
+                    }}
                   />
                   <button
                     onClick={handleRemoveImage}
@@ -311,15 +349,50 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                     </div>
                   )}
                 </div>
+              ) : showUrlInput ? (
+                <div className="space-y-2">
+                  <input
+                    type="url"
+                    value={manualImageUrl}
+                    onChange={(e) => setManualImageUrl(e.target.value)}
+                    placeholder="https://example.com/image.jpg"
+                    className="w-full bg-secondary rounded-xl px-4 py-3 text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSetManualUrl}
+                      className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg font-medium"
+                    >
+                      Применить
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowUrlInput(false);
+                        setManualImageUrl("");
+                      }}
+                      className="px-4 py-2 bg-secondary text-foreground rounded-lg"
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                </div>
               ) : (
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full py-8 border-2 border-dashed border-muted rounded-xl flex flex-col items-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
-                >
-                  <Upload className="w-8 h-8" />
-                  <span className="text-sm">Нажмите для загрузки</span>
-                  <span className="text-xs">JPG, PNG, GIF, WebP до 5MB</span>
-                </button>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full py-6 border-2 border-dashed border-muted rounded-xl flex flex-col items-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                  >
+                    <Upload className="w-8 h-8" />
+                    <span className="text-sm">Нажмите для загрузки</span>
+                    <span className="text-xs">JPG, PNG, GIF, WebP до 5MB</span>
+                  </button>
+                  <button
+                    onClick={() => setShowUrlInput(true)}
+                    className="w-full py-2 text-sm text-primary hover:underline"
+                  >
+                    Или вставьте URL изображения
+                  </button>
+                </div>
               )}
             </div>
 
@@ -405,8 +478,8 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                           });
                         }}
                         className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${currentQuestion.correctAnswer === index
-                            ? "border-green-500 bg-green-500"
-                            : "border-muted"
+                          ? "border-green-500 bg-green-500"
+                          : "border-muted"
                           }`}
                       >
                         {currentQuestion.correctAnswer === index && (
@@ -465,13 +538,39 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
             animate={{ x: 0, opacity: 1 }}
           >
             <div className="tg-section overflow-hidden">
-              {coverPreview && (
-                <img 
-                  src={coverPreview} 
-                  alt={title} 
-                  className="w-full h-40 object-cover"
-                />
-              )}
+              {/* Cover image with edit button */}
+              <div className="relative">
+                {coverPreview ? (
+                  <>
+                    <img
+                      src={coverPreview}
+                      alt={title}
+                      className="w-full h-40 object-cover"
+                    />
+                    <button
+                      onClick={() => {
+                        haptic.selection();
+                        fileInputRef.current?.click();
+                      }}
+                      className="absolute top-2 right-2 p-2 bg-background/80 backdrop-blur rounded-full text-foreground hover:bg-background/90 transition-colors"
+                      title="Изменить обложку"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => {
+                      haptic.selection();
+                      fileInputRef.current?.click();
+                    }}
+                    className="w-full h-40 bg-secondary/50 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Image className="w-8 h-8" />
+                    <span className="text-sm">Добавить обложку</span>
+                  </button>
+                )}
+              </div>
               <div className="p-4">
                 <h2 className="text-xl font-bold text-foreground mb-2">{title}</h2>
                 {description && (
@@ -498,8 +597,8 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                           <div
                             key={optIndex}
                             className={`px-3 py-2 rounded-lg text-sm ${optIndex === q.correctAnswer
-                                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                                : "bg-secondary text-foreground"
+                              ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                              : "bg-secondary text-foreground"
                               }`}
                           >
                             {opt}
@@ -520,10 +619,10 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
               {(createQuiz.isPending || isUploading) && (
                 <Loader2 className="w-5 h-5 animate-spin" />
               )}
-              {isUploading 
-                ? "Загружаем изображение..." 
-                : createQuiz.isPending 
-                  ? "Создаём квиз..." 
+              {isUploading
+                ? "Загружаем изображение..."
+                : createQuiz.isPending
+                  ? "Создаём квиз..."
                   : "Создать и отправить на модерацию"
               }
             </button>

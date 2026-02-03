@@ -27,8 +27,8 @@ export async function notifyAdminsNewQuiz(quiz: QuizNotification): Promise<void>
     return;
   }
 
-  const authorLink = quiz.authorUsername 
-    ? `@${quiz.authorUsername}` 
+  const authorLink = quiz.authorUsername
+    ? `@${quiz.authorUsername}`
     : `<a href="tg://user?id=${quiz.authorId}">${quiz.authorName}</a>`;
 
   const message = `📝 <b>Новый квиз на модерацию!</b>\n\n` +

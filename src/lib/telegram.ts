@@ -151,6 +151,29 @@ export const challengeFriend = () => {
   }
 };
 
+// Share personality test result
+export const sharePersonalityTestResult = (
+  resultTitle: string,
+  description: string,
+  testId: string,
+  testTitle?: string
+) => {
+  const tg = getTelegram();
+
+  // Short description (first sentence or 80 chars)
+  const shortDesc = description.split('.')[0].slice(0, 80);
+
+  // Format: test_result:testId:resultTitle - bot will parse this
+  const shareQuery = `test_result:${testId}:${encodeURIComponent(resultTitle)}`;
+
+  // Fallback text for inline (bot will format properly)
+  const shareText = `🎭 Я — ${resultTitle}\n${shortDesc}.\nА ты кто? Пройди тест 👇`;
+
+  if (tg) {
+    tg.switchInlineQuery(shareQuery, ['users', 'groups', 'channels']);
+  }
+};
+
 // Share referral link to Telegram chat
 export const shareReferralLink = (referralCode: string, botUsername: string = 'MindTestBot') => {
   const tg = getTelegram();
