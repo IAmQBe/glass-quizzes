@@ -140,13 +140,13 @@ export const shareQuizResult = (
   verdict?: string
 ) => {
   const tg = window.Telegram?.WebApp;
-  
+
   // Format: quiz_result:quizId:score:total:title (inline handler expects this)
   const titlePart = quizTitle.slice(0, 20).replace(/:/g, ' ');
   const inlineQuery = `quiz_result:${quizId}:${score}:${totalQuestions}:${encodeURIComponent(titlePart)}`;
-  
+
   console.log('[Share Quiz] Attempting switchInlineQuery:', inlineQuery);
-  
+
   if (tg?.switchInlineQuery) {
     try {
       tg.switchInlineQuery(inlineQuery, ['users', 'groups', 'channels']);
@@ -187,13 +187,13 @@ export const sharePersonalityTestResult = (
   testTitle?: string
 ) => {
   const tg = window.Telegram?.WebApp;
-  
+
   // Format: test_result:testId:resultTitle (inline handler expects this)
   const titlePart = resultTitle.slice(0, 30).replace(/:/g, ' ');
   const inlineQuery = `test_result:${testId}:${encodeURIComponent(titlePart)}`;
-  
+
   console.log('[Share] Attempting switchInlineQuery:', inlineQuery);
-  
+
   if (tg?.switchInlineQuery) {
     try {
       // Opens chat selector directly - user picks chat, rich card is sent
@@ -213,11 +213,11 @@ export const sharePersonalityTestResult = (
 // Fallback when switchInlineQuery doesn't work
 function fallbackShare(id: string, title: string, type: 'test' | 'quiz') {
   const botUsername = 'QuipoBot';
-  const startParam = type === 'test' 
+  const startParam = type === 'test'
     ? `share_${id}_${title}`
     : `qshare_${id}`;
   const url = `https://t.me/${botUsername}?start=${encodeURIComponent(startParam)}`;
-  
+
   const tg = window.Telegram?.WebApp;
   if (tg?.openTelegramLink) {
     tg.openTelegramLink(url);

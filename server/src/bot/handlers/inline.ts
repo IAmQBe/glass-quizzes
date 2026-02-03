@@ -336,15 +336,26 @@ export async function handleInlineQuery(ctx: Context) {
           const resultDesc = resultData?.description ?? '';
 
           // Get description without repeating the title
-          // Split by sentences and skip if first sentence contains the result title
+          // Skip sentences that:
+          // 1. Contain the result title
+          // 2. Start with "Я —" or "Ты —" (often just restating the character name)
+          // 3. Are too short (< 15 chars)
           const sentences = resultDesc.split(/[.!?]+/).filter(s => s.trim());
           let shortDesc = '';
+          const cleanTitle = resultTitle.toLowerCase().replace(/[^a-zа-яё0-9]/gi, '');
+          
           for (const sentence of sentences) {
-            const cleanSentence = sentence.trim().toLowerCase();
-            const cleanTitle = resultTitle.toLowerCase();
-            // Skip sentences that just repeat the title
-            if (!cleanSentence.includes(cleanTitle) && cleanSentence.length > 10) {
-              shortDesc = sentence.trim();
+            const trimmed = sentence.trim();
+            const cleanSentence = trimmed.toLowerCase();
+            const cleanSentenceNorm = cleanSentence.replace(/[^a-zа-яё0-9]/gi, '');
+            
+            // Skip if sentence contains title or is a character intro
+            const containsTitle = cleanSentenceNorm.includes(cleanTitle) || cleanTitle.includes(cleanSentenceNorm);
+            const isCharacterIntro = /^(я|ты)\s*[—–-]/i.test(trimmed);
+            const isTooShort = trimmed.length < 15;
+            
+            if (!containsTitle && !isCharacterIntro && !isTooShort) {
+              shortDesc = trimmed;
               break;
             }
           }

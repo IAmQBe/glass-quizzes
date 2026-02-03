@@ -543,6 +543,7 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2026-02-03 | Netlify переезд | Документация и .env.example без хардкода URL; после переезда: VITE_MINI_APP_URL + netlify link + BotFather | CLAUDE.md, .env.example |
 | 2026-02-03 | 1-click sharing | Прямой switchInlineQuery из Mini App для шаринга результатов (без редиректа в бота) | telegram.ts |
 | 2026-02-03 | New Netlify: zingy-quokka | Новый деплой на zingy-quokka-ea065f.netlify.app | .env, BotFather |
+| 2026-02-03 | Share caption fix | Улучшена логика shortDesc: пропускаются фразы "Я —"/"Ты —", слишком короткие, и содержащие title | inline.ts |
 
 ## TODO / Backlog
 
