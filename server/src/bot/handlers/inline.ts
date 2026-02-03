@@ -343,17 +343,17 @@ export async function handleInlineQuery(ctx: Context) {
           const sentences = resultDesc.split(/[.!?]+/).filter(s => s.trim());
           let shortDesc = '';
           const cleanTitle = resultTitle.toLowerCase().replace(/[^a-zа-яё0-9]/gi, '');
-          
+
           for (const sentence of sentences) {
             const trimmed = sentence.trim();
             const cleanSentence = trimmed.toLowerCase();
             const cleanSentenceNorm = cleanSentence.replace(/[^a-zа-яё0-9]/gi, '');
-            
+
             // Skip if sentence contains title or is a character intro
             const containsTitle = cleanSentenceNorm.includes(cleanTitle) || cleanTitle.includes(cleanSentenceNorm);
             const isCharacterIntro = /^(я|ты)\s*[—–-]/i.test(trimmed);
             const isTooShort = trimmed.length < 15;
-            
+
             if (!containsTitle && !isCharacterIntro && !isTooShort) {
               shortDesc = trimmed;
               break;

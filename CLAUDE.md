@@ -544,6 +544,7 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2026-02-03 | 1-click sharing | Прямой switchInlineQuery из Mini App для шаринга результатов (без редиректа в бота) | telegram.ts |
 | 2026-02-03 | New Netlify: zingy-quokka | Новый деплой на zingy-quokka-ea065f.netlify.app | .env, BotFather |
 | 2026-02-03 | Share caption fix | Улучшена логика shortDesc: пропускаются фразы "Я —"/"Ты —", слишком короткие, и содержащие title | inline.ts |
+| 2026-02-03 | Referral tracking on share | При переходе по share-ссылке новый пользователь записывается как реферал (ref_telegram_id в start_param) | useCurrentProfile.ts |
 
 ## TODO / Backlog
 

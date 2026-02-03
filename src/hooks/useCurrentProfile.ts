@@ -44,6 +44,21 @@ function getStartParam(): string | null {
 }
 
 /**
+ * Parse referrer telegram_id from start_param
+ * Format: ..._ref_<telegram_id>_...
+ */
+function getReferrerTelegramId(): number | null {
+  const startParam = getStartParam();
+  if (!startParam) return null;
+  
+  const match = startParam.match(/ref_(\d+)/);
+  if (match) {
+    return parseInt(match[1], 10);
+  }
+  return null;
+}
+
+/**
  * Hook to get current user's profile
  */
 export const useCurrentProfile = () => {
@@ -155,6 +170,46 @@ export const useEnsureProfile = () => {
       }
 
       console.log("Profile created:", created.id);
+
+      // Track referral if this is a new user from a share link
+      const referrerTelegramId = getReferrerTelegramId();
+      if (referrerTelegramId && referrerTelegramId !== tgData.telegram_id) {
+        console.log("Referrer telegram_id:", referrerTelegramId);
+        
+        // Find referrer's profile by telegram_id
+        const { data: referrer } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("telegram_id", referrerTelegramId)
+          .maybeSingle();
+        
+        if (referrer) {
+          // Check if referral already exists (shouldn't due to UNIQUE constraint, but be safe)
+          const { data: existingReferral } = await supabase
+            .from("referrals")
+            .select("id")
+            .eq("referred_id", created.id)
+            .maybeSingle();
+          
+          if (!existingReferral) {
+            const { error: referralError } = await supabase
+              .from("referrals")
+              .insert({
+                referrer_id: referrer.id,
+                referred_id: created.id,
+              });
+            
+            if (referralError) {
+              console.warn("Could not create referral:", referralError.message);
+            } else {
+              console.log("Referral recorded! Referrer:", referrer.id);
+            }
+          }
+        } else {
+          console.log("Referrer not found for telegram_id:", referrerTelegramId);
+        }
+      }
+
       return created as Profile;
     },
     onSuccess: (profile) => {
