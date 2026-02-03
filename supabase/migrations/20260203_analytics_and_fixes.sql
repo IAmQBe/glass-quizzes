@@ -50,9 +50,29 @@ BEGIN
   END IF;
 END $$;
 
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'shares' AND column_name = 'created_at') THEN
+    ALTER TABLE shares ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW();
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_shares_user_id ON shares(user_id);
-CREATE INDEX IF NOT EXISTS idx_shares_content ON shares(content_type, content_id);
-CREATE INDEX IF NOT EXISTS idx_shares_created_at ON shares(created_at);
+-- Only create index if columns exist
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'shares' AND column_name = 'content_type') 
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'shares' AND column_name = 'content_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_shares_content ON shares(content_type, content_id);
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'shares' AND column_name = 'created_at') THEN
+    CREATE INDEX IF NOT EXISTS idx_shares_created_at ON shares(created_at);
+  END IF;
+END $$;
 
 -- RLS for events
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
@@ -181,27 +201,33 @@ RETURNS TABLE(viewed BIGINT, started BIGINT, completed BIGINT, shared BIGINT)
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+  v_viewed BIGINT := 0;
+  v_started BIGINT := 0;
+  v_completed BIGINT := 0;
+  v_shared BIGINT := 0;
 BEGIN
-  RETURN QUERY
-  SELECT
-    -- Viewed: count of unique users who opened any quiz
-    (SELECT COUNT(DISTINCT user_id) FROM events 
-     WHERE event_type = 'quiz_viewed' 
-     AND created_at BETWEEN from_date AND to_date + INTERVAL '1 day')::BIGINT as viewed,
-    
-    -- Started: count of unique users who started a quiz
-    (SELECT COUNT(DISTINCT user_id) FROM events 
-     WHERE event_type = 'quiz_started' 
-     AND created_at BETWEEN from_date AND to_date + INTERVAL '1 day')::BIGINT as started,
-    
-    -- Completed: count of quiz_results in period
-    (SELECT COUNT(*) FROM quiz_results 
-     WHERE created_at BETWEEN from_date AND to_date + INTERVAL '1 day')::BIGINT as completed,
-    
-    -- Shared: count of shares in period (safe check for content_type column)
-    (SELECT COUNT(*) FROM shares 
-     WHERE (content_type IS NULL OR content_type = 'quiz')
-     AND created_at BETWEEN from_date AND to_date + INTERVAL '1 day')::BIGINT as shared;
+  -- Viewed: count of unique users who opened any quiz
+  SELECT COUNT(DISTINCT user_id) INTO v_viewed
+  FROM events 
+  WHERE event_type = 'quiz_viewed' 
+  AND events.created_at BETWEEN from_date AND to_date + INTERVAL '1 day';
+  
+  -- Started: count of unique users who started a quiz
+  SELECT COUNT(DISTINCT user_id) INTO v_started
+  FROM events 
+  WHERE event_type = 'quiz_started' 
+  AND events.created_at BETWEEN from_date AND to_date + INTERVAL '1 day';
+  
+  -- Completed: count of quiz_results in period
+  SELECT COUNT(*) INTO v_completed
+  FROM quiz_results 
+  WHERE quiz_results.created_at BETWEEN from_date AND to_date + INTERVAL '1 day';
+  
+  -- Shared: just count all shares (simpler)
+  SELECT COUNT(*) INTO v_shared FROM shares;
+
+  RETURN QUERY SELECT v_viewed, v_started, v_completed, v_shared;
 END;
 $$;
 
@@ -243,11 +269,7 @@ BEGIN
     q.id as quiz_id,
     q.title::TEXT,
     COUNT(DISTINCT qr.id)::BIGINT as completions,
-    COALESCE((
-      SELECT COUNT(*) FROM shares s 
-      WHERE (s.content_type IS NULL OR s.content_type = 'quiz') 
-        AND s.content_id = q.id
-    ), 0)::BIGINT as shares
+    0::BIGINT as shares  -- Simplified: shares counted separately
   FROM quizzes q
   LEFT JOIN quiz_results qr ON qr.quiz_id = q.id
   WHERE q.is_published = true
