@@ -32,9 +32,9 @@ export const LeaderboardScreen = ({ onBack, onSquadSelect }: LeaderboardScreenPr
   const handleTabClick = (tab: LeaderboardTab, isActive: boolean) => {
     haptic.selection();
     if (!isActive) {
-      toast({ 
-        title: "Скоро 🍿", 
-        description: "Этот рейтинг появится в следующем обновлении" 
+      toast({
+        title: "Скоро 🍿",
+        description: "Этот рейтинг появится в следующем обновлении"
       });
       return;
     }
@@ -49,10 +49,10 @@ export const LeaderboardScreen = ({ onBack, onSquadSelect }: LeaderboardScreenPr
   const handleOpenChannel = (squad: Squad) => {
     haptic.impact('light');
     const tg = getTelegram();
-    const url = squad.username 
+    const url = squad.username
       ? `https://t.me/${squad.username}`
       : squad.invite_link;
-    
+
     if (url) {
       if (tg?.openTelegramLink) {
         tg.openTelegramLink(url);
@@ -114,13 +114,12 @@ export const LeaderboardScreen = ({ onBack, onSquadSelect }: LeaderboardScreenPr
             <button
               key={tab.id}
               onClick={() => handleTabClick(tab.id, tab.active)}
-              className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${
-                activeTab === tab.id && tab.active
+              className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tab.id && tab.active
                   ? "bg-primary text-primary-foreground"
                   : tab.active
-                  ? "bg-secondary text-muted-foreground"
-                  : "bg-secondary/50 text-muted-foreground/50"
-              }`}
+                    ? "bg-secondary text-muted-foreground"
+                    : "bg-secondary/50 text-muted-foreground/50"
+                }`}
             >
               {tab.icon}
               {tab.label}

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { UserStats } from "@/types/quiz";
-import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Bell, BellOff, Sun, Moon, Sparkles, History } from "lucide-react";
-import { haptic, getTelegramUser, shareReferralLink, sharePersonalityTestResult } from "@/lib/telegram";
+import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Sun, Moon, Sparkles, History, Pencil, Lock } from "lucide-react";
+import { haptic, getTelegramUser, shareReferralLink, sharePersonalityTestResult, getTelegram } from "@/lib/telegram";
 import { useIsAdmin } from "@/hooks/useAuth";
 import { useMyQuizzes, useMyQuizResults } from "@/hooks/useQuizzes";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -10,22 +10,32 @@ import { useProfile, useUpdateProfile, useReferralCount } from "@/hooks/useProfi
 import { useMyPersonalityTestCompletions, useMyPersonalityTests } from "@/hooks/usePersonalityTests";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
-import { Switch } from "@/components/ui/switch";
 import { Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/useTheme";
+
+// Fun avatar placeholders for users without photos
+const FUNNY_AVATARS = [
+  "🤓", "🧐", "🤪", "😎", "🥸", "🤠", "🦊", "🐸", "🐵", "🦄", "🎃", "👽", "🤖", "👻"
+];
+
+const getRandomAvatar = (seed: number) => {
+  return FUNNY_AVATARS[seed % FUNNY_AVATARS.length];
+};
 
 interface ProfileScreenProps {
   stats: UserStats;
   onBack: () => void;
   onOpenAdmin?: () => void;
   onQuizSelect?: (quizId: string) => void;
+  onEditQuiz?: (quizId: string) => void;
+  onEditTest?: (testId: string) => void;
 }
 
 type FilterType = "date" | "popularity";
 type TabType = "my" | "saved" | "history";
 
-export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: ProfileScreenProps) => {
+export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEditQuiz, onEditTest }: ProfileScreenProps) => {
   const user = getTelegramUser();
   const { data: isAdmin } = useIsAdmin();
   const { data: myQuizzes = [], isLoading: myQuizzesLoading } = useMyQuizzes();
@@ -121,8 +131,16 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.1 }}
         >
-          <div className="tg-avatar w-20 h-20 mb-3">
-            <span className="text-4xl">🧠</span>
+          <div className="w-20 h-20 mb-3 rounded-full overflow-hidden bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border-2 border-primary/20">
+            {user?.photo_url ? (
+              <img 
+                src={user.photo_url} 
+                alt={user.first_name || 'Avatar'} 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-4xl">{getRandomAvatar(user?.id || 0)}</span>
+            )}
           </div>
           <h2 className="text-lg font-semibold text-foreground">
             {user?.first_name || 'Player'}
@@ -174,32 +192,35 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
             </span>
           </div>
 
-          {profile?.referral_code ? (
-            <div className="flex gap-2">
-              <div className="flex-1 bg-secondary rounded-lg px-3 py-2 font-mono text-sm text-foreground truncate">
-                t.me/MindTestBot?start={profile.referral_code}
-              </div>
-              <button
-                onClick={handleCopyReferral}
-                className="p-2 bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
-              >
-                {copied ? (
-                  <Check className="w-5 h-5 text-green-500" />
-                ) : (
-                  <Copy className="w-5 h-5 text-muted-foreground" />
-                )}
-              </button>
-              <button
-                onClick={handleShareReferral}
-                className="p-2 bg-primary rounded-lg text-primary-foreground"
-              >
-                <Share2 className="w-5 h-5" />
-              </button>
-            </div>
-          ) : (
-            <div className="flex justify-center py-2">
-              <Loader2 className="w-5 h-5 text-primary animate-spin" />
-            </div>
+          <p className="text-xs text-muted-foreground">
+            Приглашай друзей и получай бонусы за каждого нового пользователя
+          </p>
+
+          <button
+            onClick={handleShareReferral}
+            className="tg-button w-full flex items-center justify-center gap-2"
+          >
+            <Share2 className="w-4 h-4" />
+            Пригласить друга
+          </button>
+
+          {profile?.referral_code && (
+            <button
+              onClick={handleCopyReferral}
+              className="tg-button-secondary w-full flex items-center justify-center gap-2 text-sm"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-4 h-4 text-green-500" />
+                  Скопировано!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  Скопировать ссылку
+                </>
+              )}
+            </button>
           )}
         </motion.div>
 
@@ -238,24 +259,25 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
             </button>
           </div>
 
-          {/* Challenge Notifications Toggle */}
-          <div className="flex items-center justify-between p-4 border-b border-border">
+          {/* Challenges - Coming Soon */}
+          <div 
+            className="flex items-center justify-between p-4 border-b border-border opacity-50"
+            onClick={() => {
+              haptic.selection();
+              toast({ title: "Скоро! 🎯", description: "Челленджи появятся в следующем обновлении" });
+            }}
+          >
             <div className="flex items-center gap-3">
-              {profile?.challenge_notifications_enabled ? (
-                <Bell className="w-5 h-5 text-primary" />
-              ) : (
-                <BellOff className="w-5 h-5 text-muted-foreground" />
-              )}
+              <Swords className="w-5 h-5 text-muted-foreground" />
               <div>
-                <span className="text-foreground font-medium">Уведомления о вызовах</span>
-                <p className="text-xs text-muted-foreground">Получать приглашения на челленджи</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-foreground font-medium">Челленджи</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500 text-white font-medium">soon</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Вызывай друзей на дуэли</p>
               </div>
             </div>
-            <Switch
-              checked={profile?.challenge_notifications_enabled ?? true}
-              onCheckedChange={handleToggleNotifications}
-              disabled={profileLoading || updateProfile.isPending}
-            />
+            <Lock className="w-4 h-4 text-muted-foreground" />
           </div>
 
           {/* Admin Button */}
@@ -385,34 +407,61 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
                       key={quiz.id}
                       quiz={quiz}
                       onClick={() => onQuizSelect?.(quiz.id)}
+                      onEdit={onEditQuiz ? () => onEditQuiz(quiz.id) : undefined}
                     />
                   ))}
                   {/* My Tests */}
-                  {myTests.map((test: any) => (
-                    <div key={test.id} className="tg-section p-4">
-                      <div className="flex items-center gap-3">
-                        {test.image_url ? (
-                          <img src={test.image_url} alt={test.title} className="w-12 h-12 rounded-lg object-cover" />
-                        ) : (
-                          <div className="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                            <Sparkles className="w-6 h-6 text-purple-500" />
+                  {myTests.map((test: any) => {
+                    const isDraft = !test.is_published;
+                    const isPending = test.status === 'pending';
+                    const canEdit = isDraft && !isPending && onEditTest;
+
+                    return (
+                      <div key={test.id} className="tg-section p-4">
+                        <div className="flex items-center gap-3">
+                          {test.image_url ? (
+                            <img src={test.image_url} alt={test.title} className="w-12 h-12 rounded-lg object-cover" />
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                              <Sparkles className="w-6 h-6 text-purple-500" />
+                            </div>
+                          )}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-500">Тест</span>
+                              <h3 className="font-medium text-foreground">{test.title}</h3>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {test.question_count} вопросов · {test.participant_count || 0} участий
+                            </p>
                           </div>
-                        )}
-                        <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-500">Тест</span>
-                            <h3 className="font-medium text-foreground">{test.title}</h3>
+                            {canEdit && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  haptic.impact('light');
+                                  onEditTest(test.id);
+                                }}
+                                className="p-2 rounded-lg bg-secondary hover:bg-secondary/80"
+                              >
+                                <Pencil className="w-4 h-4 text-purple-500" />
+                              </button>
+                            )}
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              test.is_published 
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' 
+                                : isPending
+                                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                                : 'bg-secondary text-muted-foreground'
+                            }`}>
+                              {test.is_published ? 'Live' : isPending ? 'На модерации' : 'Draft'}
+                            </span>
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            {test.question_count} вопросов · {test.participant_count || 0} участий
-                          </p>
                         </div>
-                        <span className={`text-xs px-2 py-1 rounded-full ${test.is_published ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'}`}>
-                          {test.is_published ? 'Live' : 'Draft'}
-                        </span>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </>
               )}
             </>
@@ -507,46 +556,72 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect }: Prof
 };
 
 // Quiz List Item Component
-const QuizListItem = ({ quiz, onClick }: { quiz: any; onClick: () => void }) => (
-  <button
-    className="tg-section w-full p-4 text-left"
-    onClick={() => {
-      haptic.impact('light');
-      onClick();
-    }}
-  >
-    <div className="flex items-center gap-3">
-      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden">
-        {quiz.image_url ? (
-          <img src={quiz.image_url} alt={quiz.title} className="w-full h-full object-cover" />
-        ) : (
-          <span className="text-xl">📝</span>
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <h3 className="font-medium text-foreground line-clamp-1">{quiz.title}</h3>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-          <span>{quiz.question_count} вопросов</span>
-          <span>{quiz.participant_count} участий</span>
-          {(quiz.like_count ?? 0) > 0 && (
-            <span className="flex items-center gap-1">
-              <PopcornIcon className="w-3 h-3 text-amber-500" />
-              {quiz.like_count}
-            </span>
+const QuizListItem = ({ quiz, onClick, onEdit }: { quiz: any; onClick: () => void; onEdit?: () => void }) => {
+  const isDraft = !quiz.is_published;
+  const isPending = quiz.status === 'pending';
+  const canEdit = isDraft && !isPending && onEdit;
+
+  return (
+    <div className="tg-section w-full p-4">
+      <div className="flex items-center gap-3">
+        <button
+          className="flex-1 flex items-center gap-3 text-left"
+          onClick={() => {
+            haptic.impact('light');
+            onClick();
+          }}
+        >
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden">
+            {quiz.image_url ? (
+              <img src={quiz.image_url} alt={quiz.title} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-xl">📝</span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-medium text-foreground line-clamp-1">{quiz.title}</h3>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+              <span>{quiz.question_count} вопросов</span>
+              <span>{quiz.participant_count} участий</span>
+              {(quiz.like_count ?? 0) > 0 && (
+                <span className="flex items-center gap-1">
+                  <PopcornIcon className="w-3 h-3 text-amber-500" />
+                  {quiz.like_count}
+                </span>
+              )}
+            </div>
+          </div>
+        </button>
+        
+        <div className="flex items-center gap-2">
+          {canEdit && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                haptic.impact('light');
+                onEdit();
+              }}
+              className="p-2 rounded-lg bg-secondary hover:bg-secondary/80"
+            >
+              <Pencil className="w-4 h-4 text-primary" />
+            </button>
           )}
+          <span
+            className={`text-xs px-2 py-1 rounded-full ${
+              quiz.is_published
+                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                : isPending
+                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                : "bg-secondary text-muted-foreground"
+            }`}
+          >
+            {quiz.is_published ? "Live" : isPending ? "На модерации" : "Draft"}
+          </span>
         </div>
       </div>
-      <span
-        className={`text-xs px-2 py-1 rounded-full ${quiz.is_published
-          ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-          : "bg-secondary text-muted-foreground"
-          }`}
-      >
-        {quiz.is_published ? "Live" : "Draft"}
-      </span>
     </div>
-  </button>
-);
+  );
+};
 
 // Test Result Item Component
 const TestResultItem = ({ completion, onShare }: { completion: any; onShare: () => void }) => {

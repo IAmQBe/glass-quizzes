@@ -45,16 +45,28 @@ function getStartParam(): string | null {
 
 /**
  * Parse referrer telegram_id from start_param
- * Format: ..._ref_<telegram_id>_...
+ * Supports multiple formats:
+ * - ..._ref_<telegram_id>_... (legacy)
+ * - ..._ref<telegram_id>_... (new compact)
+ * - ...:<telegram_id> (inline share)
  */
 function getReferrerTelegramId(): number | null {
   const startParam = getStartParam();
   if (!startParam) return null;
 
-  const match = startParam.match(/ref_(\d+)/);
-  if (match) {
-    return parseInt(match[1], 10);
+  // Format: ref_123456 or ref123456
+  const refMatch = startParam.match(/ref_?(\d+)/);
+  if (refMatch) {
+    return parseInt(refMatch[1], 10);
   }
+
+  // Format from inline: test_result:testId:title:123456 (last part is userId)
+  const parts = startParam.split(/[_:]/);
+  const lastPart = parts[parts.length - 1];
+  if (lastPart && /^\d+$/.test(lastPart) && lastPart.length >= 5) {
+    return parseInt(lastPart, 10);
+  }
+
   return null;
 }
 

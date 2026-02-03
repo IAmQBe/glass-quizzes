@@ -140,10 +140,14 @@ export const shareQuizResult = (
   verdict?: string
 ) => {
   const tg = window.Telegram?.WebApp;
+  const userId = tg?.initDataUnsafe?.user?.id;
 
-  // Format: quiz_result:quizId:score:total:title (inline handler expects this)
+  // Format: quiz_result:quizId:score:total:title:refUserId (inline handler expects this)
   const titlePart = quizTitle.slice(0, 20).replace(/:/g, ' ');
-  const inlineQuery = `quiz_result:${quizId}:${score}:${totalQuestions}:${encodeURIComponent(titlePart)}`;
+  // Include user ID as referrer for tracking
+  const inlineQuery = userId
+    ? `quiz_result:${quizId}:${score}:${totalQuestions}:${encodeURIComponent(titlePart)}:${userId}`
+    : `quiz_result:${quizId}:${score}:${totalQuestions}:${encodeURIComponent(titlePart)}`;
 
   console.log('[Share Quiz] Attempting switchInlineQuery:', inlineQuery);
 
@@ -153,11 +157,11 @@ export const shareQuizResult = (
       console.log('[Share Quiz] switchInlineQuery called successfully');
     } catch (err) {
       console.error('[Share Quiz] switchInlineQuery error:', err);
-      fallbackShare(quizId, titlePart, 'quiz');
+      fallbackShare(quizId, titlePart, 'quiz', userId);
     }
   } else {
     console.log('[Share Quiz] switchInlineQuery not available, using fallback');
-    fallbackShare(quizId, titlePart, 'quiz');
+    fallbackShare(quizId, titlePart, 'quiz', userId);
   }
 };
 
@@ -187,10 +191,14 @@ export const sharePersonalityTestResult = (
   testTitle?: string
 ) => {
   const tg = window.Telegram?.WebApp;
+  const userId = tg?.initDataUnsafe?.user?.id;
 
-  // Format: test_result:testId:resultTitle (inline handler expects this)
+  // Format: test_result:testId:resultTitle:refUserId (inline handler expects this)
   const titlePart = resultTitle.slice(0, 30).replace(/:/g, ' ');
-  const inlineQuery = `test_result:${testId}:${encodeURIComponent(titlePart)}`;
+  // Include user ID as referrer for tracking
+  const inlineQuery = userId 
+    ? `test_result:${testId}:${encodeURIComponent(titlePart)}:${userId}`
+    : `test_result:${testId}:${encodeURIComponent(titlePart)}`;
 
   console.log('[Share] Attempting switchInlineQuery:', inlineQuery);
 
@@ -202,20 +210,22 @@ export const sharePersonalityTestResult = (
     } catch (err) {
       console.error('[Share] switchInlineQuery error:', err);
       // Fallback: open bot with share parameter
-      fallbackShare(testId, titlePart, 'test');
+      fallbackShare(testId, titlePart, 'test', userId);
     }
   } else {
     console.log('[Share] switchInlineQuery not available, using fallback');
-    fallbackShare(testId, titlePart, 'test');
+    fallbackShare(testId, titlePart, 'test', userId);
   }
 };
 
 // Fallback when switchInlineQuery doesn't work
-function fallbackShare(id: string, title: string, type: 'test' | 'quiz') {
+function fallbackShare(id: string, title: string, type: 'test' | 'quiz', refUserId?: number) {
   const botUsername = 'QuipoBot';
+  // Include referrer user ID in the start parameter
+  const refPart = refUserId ? `_ref${refUserId}` : '';
   const startParam = type === 'test'
-    ? `share_${id}_${title}`
-    : `qshare_${id}`;
+    ? `share_${id}_${title}${refPart}`
+    : `qshare_${id}${refPart}`;
   const url = `https://t.me/${botUsername}?start=${encodeURIComponent(startParam)}`;
 
   const tg = window.Telegram?.WebApp;

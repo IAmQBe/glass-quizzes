@@ -41,7 +41,7 @@ export const CreateSquadGuide = ({ onBack }: CreateSquadGuideProps) => {
       description: (
         <span>
           Перейди в настройки канала/группы → Администраторы → Добавить → Найди{" "}
-          <button 
+          <button
             onClick={handleCopyBotUsername}
             className="text-primary font-medium inline-flex items-center gap-1"
           >
@@ -175,7 +175,7 @@ export const CreateSquadGuide = ({ onBack }: CreateSquadGuideProps) => {
             <ExternalLink className="w-4 h-4" />
             Открыть @{BOT_USERNAME}
           </button>
-          
+
           <p className="text-xs text-center text-muted-foreground">
             После добавления бота администратором вернись сюда — команда появится в списке
           </p>
