@@ -197,7 +197,7 @@ export const sharePersonalityTestResult = (
   // Format: test_result:testId:resultTitle:imageUrl:refUserId
   const titlePart = resultTitle.slice(0, 30).replace(/:/g, ' ');
   const imgPart = imageUrl ? encodeURIComponent(imageUrl) : '';
-  
+
   // Build query with all data for instant response
   const parts = ['test_result', testId, encodeURIComponent(titlePart), imgPart];
   if (userId) parts.push(String(userId));

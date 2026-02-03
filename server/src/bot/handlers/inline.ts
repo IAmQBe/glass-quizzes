@@ -255,7 +255,7 @@ export async function handleInlineQuery(ctx: Context) {
       if (parts.length >= 3) {
         const testId = parts[1];
         const resultTitle = decodeURIComponent(parts[2]).trim();
-        
+
         // Parse imageUrl (part 3) and userId (part 4)
         let imageUrl = '';
         if (parts.length >= 4 && parts[3] && !/^\d+$/.test(parts[3])) {
@@ -267,7 +267,7 @@ export async function handleInlineQuery(ctx: Context) {
         const safeId = `tr${testId.replace(/-/g, '').slice(0, 12)}${Date.now()}`;
         const caption = `🎭 *Я — ${resultTitle}*\n\nА ты кто? Пройди тест и узнай! 👇`;
 
-        // Use photo if we have a valid image URL, otherwise article
+        // Use photo if we have a valid image URL
         if (isValidImageUrl(imageUrl)) {
           results.push({
             type: 'photo',
@@ -281,15 +281,41 @@ export async function handleInlineQuery(ctx: Context) {
             reply_markup: { inline_keyboard: [[{ text: '🧪 Пройти тест', url: buttonUrl }]] },
           } as any);
         } else {
-          results.push({
-            type: 'article',
-            id: safeId,
-            title: `🎭 Я — ${resultTitle}`,
-            description: 'Пройди тест и узнай кто ты!',
-            thumbnail_url: 'https://placehold.co/100x100/9333ea/white?text=%F0%9F%8E%AD',
-            input_message_content: { message_text: caption, parse_mode: 'Markdown' },
-            reply_markup: { inline_keyboard: [[{ text: '🧪 Пройти тест', url: buttonUrl }]] },
-          });
+          // No image - try to fetch from DB quickly (with timeout)
+          let fetchedImageUrl: string | null = null;
+          try {
+            const { data } = await Promise.race([
+              supabase.from('personality_test_results').select('image_url').eq('test_id', testId).ilike('title', `%${resultTitle.slice(0, 10)}%`).limit(1).maybeSingle(),
+              new Promise<{data: null}>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+            ]) as any;
+            if (data?.image_url && isValidImageUrl(data.image_url)) {
+              fetchedImageUrl = data.image_url;
+            }
+          } catch { /* ignore timeout */ }
+
+          if (fetchedImageUrl) {
+            results.push({
+              type: 'photo',
+              id: safeId,
+              photo_url: fetchedImageUrl,
+              thumbnail_url: fetchedImageUrl,
+              title: `🎭 Я — ${resultTitle}`,
+              description: 'Пройди тест и узнай кто ты!',
+              caption,
+              parse_mode: 'Markdown',
+              reply_markup: { inline_keyboard: [[{ text: '🧪 Пройти тест', url: buttonUrl }]] },
+            } as any);
+          } else {
+            results.push({
+              type: 'article',
+              id: safeId,
+              title: `🎭 Я — ${resultTitle}`,
+              description: 'Пройди тест и узнай кто ты!',
+              thumbnail_url: 'https://placehold.co/100x100/9333ea/white?text=%F0%9F%8E%AD',
+              input_message_content: { message_text: caption, parse_mode: 'Markdown' },
+              reply_markup: { inline_keyboard: [[{ text: '🧪 Пройти тест', url: buttonUrl }]] },
+            });
+          }
         }
       }
 
