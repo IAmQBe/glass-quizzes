@@ -1,8 +1,20 @@
 import { motion } from "framer-motion";
 import { Users, HelpCircle, Clock } from "lucide-react";
-import { haptic } from "@/lib/telegram";
+import { haptic, getTelegram } from "@/lib/telegram";
 import { PopcornIcon } from "./icons/PopcornIcon";
 import { BookmarkIcon } from "./icons/BookmarkIcon";
+
+interface CreatorInfo {
+  id: string;
+  first_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  squad?: {
+    id: string;
+    title: string;
+    username: string | null;
+  } | null;
+}
 
 interface QuizCardProps {
   id: string;
@@ -16,6 +28,7 @@ interface QuizCardProps {
   save_count?: number;
   isLiked?: boolean;
   isSaved?: boolean;
+  creator?: CreatorInfo | null;
   onClick: () => void;
   onToggleLike?: () => void;
   onToggleSave?: () => void;
@@ -32,6 +45,7 @@ export const QuizCard = ({
   save_count = 0,
   isLiked = false,
   isSaved = false,
+  creator,
   onClick,
   onToggleLike,
   onToggleSave,
@@ -53,6 +67,20 @@ export const QuizCard = ({
     onToggleSave?.();
   };
 
+  const handleSquadClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!creator?.squad?.username) return;
+    
+    haptic.impact('light');
+    const tg = getTelegram();
+    const url = `https://t.me/${creator.squad.username}`;
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  };
+
   const formatDuration = (seconds: number) => {
     if (seconds < 60) return `${seconds}s`;
     return `${Math.floor(seconds / 60)}m`;
@@ -66,13 +94,13 @@ export const QuizCard = ({
 
   return (
     <motion.button
-      className="tg-section w-full text-left overflow-hidden"
+      className="tg-section w-full text-left overflow-hidden rounded-2xl"
       onClick={handleClick}
       whileTap={{ scale: 0.98 }}
       transition={{ type: "spring", stiffness: 400, damping: 25 }}
     >
       {/* Image */}
-      <div className="relative aspect-[16/9] bg-secondary">
+      <div className="relative aspect-[16/9] bg-secondary rounded-t-2xl overflow-hidden">
         {image_url ? (
           <img
             src={image_url}
@@ -154,11 +182,29 @@ export const QuizCard = ({
           </p>
         )}
 
+        {/* Creator info */}
+        {creator && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-muted-foreground">
+              от {creator.first_name || creator.username || 'Аноним'}
+            </span>
+            {creator.squad && (
+              <button
+                onClick={handleSquadClick}
+                className="text-xs text-primary hover:underline flex items-center gap-1"
+              >
+                <PopcornIcon className="w-3 h-3" />
+                {creator.squad.title}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Stats */}
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
             <HelpCircle className="w-3.5 h-3.5" />
-            <span>{question_count} questions</span>
+            <span>{question_count} вопросов</span>
           </div>
           <div className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" />

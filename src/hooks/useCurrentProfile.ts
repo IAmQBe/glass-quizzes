@@ -50,7 +50,7 @@ function getStartParam(): string | null {
 function getReferrerTelegramId(): number | null {
   const startParam = getStartParam();
   if (!startParam) return null;
-  
+
   const match = startParam.match(/ref_(\d+)/);
   if (match) {
     return parseInt(match[1], 10);
@@ -175,14 +175,14 @@ export const useEnsureProfile = () => {
       const referrerTelegramId = getReferrerTelegramId();
       if (referrerTelegramId && referrerTelegramId !== tgData.telegram_id) {
         console.log("Referrer telegram_id:", referrerTelegramId);
-        
+
         // Find referrer's profile by telegram_id
         const { data: referrer } = await supabase
           .from("profiles")
           .select("id")
           .eq("telegram_id", referrerTelegramId)
           .maybeSingle();
-        
+
         if (referrer) {
           // Check if referral already exists (shouldn't due to UNIQUE constraint, but be safe)
           const { data: existingReferral } = await supabase
@@ -190,7 +190,7 @@ export const useEnsureProfile = () => {
             .select("id")
             .eq("referred_id", created.id)
             .maybeSingle();
-          
+
           if (!existingReferral) {
             const { error: referralError } = await supabase
               .from("referrals")
@@ -198,7 +198,7 @@ export const useEnsureProfile = () => {
                 referrer_id: referrer.id,
                 referred_id: created.id,
               });
-            
+
             if (referralError) {
               console.warn("Could not create referral:", referralError.message);
             } else {

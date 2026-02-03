@@ -399,8 +399,8 @@ export async function handleInlineQuery(ctx: Context) {
               thumbnail_url: 'https://via.placeholder.com/100x100.png?text=Result',
               input_message_content: {
                 message_text: shortDesc
-                  ? `🎭 *Я — ${resultTitle}*\n\n${shortDesc}.\n\nА ты кто? Пройди тест 👇`
-                  : `🎭 *Я — ${resultTitle}*\n\nА ты кто? Пройди тест "${test.title}" 👇`,
+                  ? `🎭 *Я — ${resultTitle}*\n\n${shortDesc}.\n\nА кто ты? Пройди тест 👇`
+                  : `🎭 *Я — ${resultTitle}*\n\nА кто ты? Пройди тест "${test.title}" 👇`,
                 parse_mode: 'Markdown',
               },
               reply_markup: {

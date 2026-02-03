@@ -1,6 +1,7 @@
 import { Bot, InlineKeyboard } from 'grammy';
 import { handleInlineQuery } from './handlers/inline.js';
 import { registerModerationHandlers } from './handlers/moderation.js';
+import { supabase } from '../lib/supabase.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -127,6 +128,130 @@ bot.on('callback_query:data', async (ctx) => {
       text: 'Opening quiz...',
       show_alert: false,
     });
+  }
+});
+
+/**
+ * Handle bot being added/removed as admin in channels/groups
+ * This creates/deactivates squads (Попкорн-команды)
+ */
+bot.on('my_chat_member', async (ctx) => {
+  const update = ctx.myChatMember;
+  const chat = update.chat;
+  const newStatus = update.new_chat_member.status;
+  const oldStatus = update.old_chat_member.status;
+  const fromUser = update.from;
+
+  // Only handle channels and groups/supergroups
+  if (chat.type !== 'channel' && chat.type !== 'group' && chat.type !== 'supergroup') {
+    return;
+  }
+
+  const chatId = chat.id;
+  const chatTitle = chat.title || 'Unnamed';
+  const chatUsername = 'username' in chat ? chat.username : null;
+  const chatType = chat.type;
+
+  // Bot became admin
+  if ((newStatus === 'administrator' || newStatus === 'creator') && 
+      oldStatus !== 'administrator' && oldStatus !== 'creator') {
+    
+    console.log(`🍿 Bot added as admin to ${chatType}: ${chatTitle} (${chatId})`);
+
+    // Find who added the bot (their profile)
+    const { data: adderProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('telegram_id', fromUser.id)
+      .maybeSingle();
+
+    // Generate invite link if possible
+    let inviteLink: string | null = null;
+    try {
+      if (chatUsername) {
+        inviteLink = `https://t.me/${chatUsername}`;
+      } else {
+        // Try to get/create invite link
+        const link = await ctx.api.exportChatInviteLink(chatId);
+        inviteLink = link;
+      }
+    } catch (e) {
+      console.log('Could not get invite link:', e);
+    }
+
+    // Create or reactivate squad
+    const { data: existingSquad } = await supabase
+      .from('squads')
+      .select('id')
+      .eq('telegram_chat_id', chatId)
+      .maybeSingle();
+
+    if (existingSquad) {
+      // Reactivate existing squad
+      await supabase
+        .from('squads')
+        .update({
+          title: chatTitle,
+          username: chatUsername,
+          type: chatType,
+          invite_link: inviteLink,
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingSquad.id);
+
+      console.log(`🍿 Squad reactivated: ${chatTitle}`);
+    } else {
+      // Create new squad
+      const { error } = await supabase
+        .from('squads')
+        .insert({
+          telegram_chat_id: chatId,
+          title: chatTitle,
+          username: chatUsername,
+          type: chatType,
+          invite_link: inviteLink,
+          created_by: adderProfile?.id || null,
+          is_active: true,
+        });
+
+      if (error) {
+        console.error('Failed to create squad:', error);
+      } else {
+        console.log(`🍿 Squad created: ${chatTitle}`);
+        
+        // Notify the chat
+        try {
+          await ctx.api.sendMessage(
+            chatId,
+            '🍿 *Попкорн-команда активирована!*\n\n' +
+            'Теперь участники вашего сообщества могут вступить в эту команду через Quipo.\n\n' +
+            '• Все лайки (попкорны) участников суммируются\n' +
+            '• Команда появится в общем рейтинге\n' +
+            '• Создатели контента могут указывать вашу команду\n\n' +
+            '_Открой Quipo → Профиль → Выбрать сквад_',
+            { parse_mode: 'Markdown' }
+          );
+        } catch (e) {
+          console.log('Could not send activation message:', e);
+        }
+      }
+    }
+  }
+
+  // Bot was removed from admin
+  if ((oldStatus === 'administrator' || oldStatus === 'creator') && 
+      newStatus !== 'administrator' && newStatus !== 'creator') {
+    
+    console.log(`🍿 Bot removed as admin from ${chatType}: ${chatTitle} (${chatId})`);
+
+    // Deactivate squad
+    await supabase
+      .from('squads')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('telegram_chat_id', chatId);
+
+    console.log(`🍿 Squad deactivated: ${chatTitle}`);
   }
 });
 

@@ -2,7 +2,19 @@ import { motion } from "framer-motion";
 import { Users, Clock, HelpCircle, Sparkles } from "lucide-react";
 import { PopcornIcon } from "./icons/PopcornIcon";
 import { BookmarkIcon } from "./icons/BookmarkIcon";
-import { haptic } from "@/lib/telegram";
+import { haptic, getTelegram } from "@/lib/telegram";
+
+interface CreatorInfo {
+  id: string;
+  first_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  squad?: {
+    id: string;
+    title: string;
+    username: string | null;
+  } | null;
+}
 
 interface PersonalityTestCardProps {
   id: string;
@@ -16,6 +28,7 @@ interface PersonalityTestCardProps {
   save_count?: number;
   isLiked?: boolean;
   isSaved?: boolean;
+  creator?: CreatorInfo | null;
   onClick: () => void;
   onToggleLike?: () => void;
   onToggleSave?: () => void;
@@ -33,6 +46,7 @@ export const PersonalityTestCard = ({
   save_count = 0,
   isLiked = false,
   isSaved = false,
+  creator,
   onClick,
   onToggleLike,
   onToggleSave,
@@ -49,9 +63,23 @@ export const PersonalityTestCard = ({
     onToggleSave?.();
   };
 
+  const handleSquadClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!creator?.squad?.username) return;
+    
+    haptic.impact('light');
+    const tg = getTelegram();
+    const url = `https://t.me/${creator.squad.username}`;
+    if (tg?.openTelegramLink) {
+      tg.openTelegramLink(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  };
+
   return (
     <motion.div
-      className="tg-card overflow-hidden cursor-pointer active:scale-[0.98] transition-transform"
+      className="tg-card overflow-hidden cursor-pointer active:scale-[0.98] transition-transform rounded-2xl"
       onClick={onClick}
       whileTap={{ scale: 0.98 }}
     >
@@ -96,7 +124,25 @@ export const PersonalityTestCard = ({
 
       {/* Description */}
       {description && (
-        <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{description}</p>
+        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{description}</p>
+      )}
+
+      {/* Creator info */}
+      {creator && (
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs text-muted-foreground">
+            от {creator.first_name || creator.username || 'Аноним'}
+          </span>
+          {creator.squad && (
+            <button
+              onClick={handleSquadClick}
+              className="text-xs text-purple-500 hover:underline flex items-center gap-1"
+            >
+              <PopcornIcon className="w-3 h-3" />
+              {creator.squad.title}
+            </button>
+          )}
+        </div>
       )}
 
       {/* Stats row */}

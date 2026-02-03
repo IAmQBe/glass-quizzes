@@ -1,6 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+// Creator info for display
+export interface CreatorInfo {
+  id: string;
+  first_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  squad?: {
+    id: string;
+    title: string;
+    username: string | null;
+  } | null;
+}
+
 // Quiz interface matching actual Supabase schema
 export interface Quiz {
   id: string;
@@ -18,6 +31,7 @@ export interface Quiz {
   rating_count: number | null;
   like_count: number;
   save_count: number;
+  creator?: CreatorInfo | null;
 }
 
 export interface QuestionOption {
@@ -34,14 +48,27 @@ export interface Question {
   order_index: number;
 }
 
-// Get all published quizzes
+// Get all published quizzes with creator info
 export const usePublishedQuizzes = () => {
   return useQuery({
     queryKey: ["quizzes", "published"],
     queryFn: async (): Promise<Quiz[]> => {
       const { data, error } = await supabase
         .from("quizzes")
-        .select("*")
+        .select(`
+          *,
+          creator:profiles!created_by (
+            id,
+            first_name,
+            username,
+            avatar_url,
+            squad:squads (
+              id,
+              title,
+              username
+            )
+          )
+        `)
         .eq("is_published", true)
         .order("created_at", { ascending: false });
 
@@ -423,5 +450,136 @@ export const useMyQuizResults = () => {
       if (error) throw error;
       return data || [];
     },
+  });
+};
+
+/**
+ * Update an existing quiz (for creators)
+ */
+export const useUpdateQuiz = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      quizId,
+      updates,
+      questions,
+    }: {
+      quizId: string;
+      updates: {
+        title?: string;
+        description?: string;
+        image_url?: string;
+        duration_seconds?: number;
+      };
+      questions?: QuestionInput[];
+    }) => {
+      const { getTelegramUser } = await import("@/lib/telegram");
+      const tgUser = getTelegramUser();
+
+      if (!tgUser?.id) {
+        throw new Error("Откройте приложение через Telegram");
+      }
+
+      // Verify ownership
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("telegram_id", tgUser.id)
+        .maybeSingle();
+
+      if (!profile) throw new Error("Профиль не найден");
+
+      const { data: quiz } = await supabase
+        .from("quizzes")
+        .select("created_by")
+        .eq("id", quizId)
+        .single();
+
+      if (!quiz || quiz.created_by !== profile.id) {
+        throw new Error("Вы не можете редактировать этот квиз");
+      }
+
+      // Update quiz
+      const { error: updateError } = await supabase
+        .from("quizzes")
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", quizId);
+
+      if (updateError) throw updateError;
+
+      // Update questions if provided
+      if (questions && questions.length > 0) {
+        // Delete old questions
+        await supabase
+          .from("questions")
+          .delete()
+          .eq("quiz_id", quizId);
+
+        // Insert new questions
+        const questionsToInsert = questions.map((q, index) => ({
+          quiz_id: quizId,
+          question_text: q.text,
+          options: q.options.map(text => ({ text })),
+          correct_answer: q.correctAnswer,
+          order_index: index,
+        }));
+
+        const { error: questionsError } = await supabase
+          .from("questions")
+          .insert(questionsToInsert);
+
+        if (questionsError) throw questionsError;
+
+        // Update question count
+        await supabase
+          .from("quizzes")
+          .update({ question_count: questions.length })
+          .eq("id", quizId);
+      }
+
+      return { success: true };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["quiz"] });
+    },
+  });
+};
+
+/**
+ * Check if current user is the creator of a quiz
+ */
+export const useIsQuizCreator = (quizId: string | null) => {
+  return useQuery({
+    queryKey: ["isQuizCreator", quizId],
+    queryFn: async (): Promise<boolean> => {
+      if (!quizId) return false;
+
+      const { getTelegramUser } = await import("@/lib/telegram");
+      const tgUser = getTelegramUser();
+
+      if (!tgUser?.id) return false;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("telegram_id", tgUser.id)
+        .maybeSingle();
+
+      if (!profile) return false;
+
+      const { data: quiz } = await supabase
+        .from("quizzes")
+        .select("created_by")
+        .eq("id", quizId)
+        .single();
+
+      return quiz?.created_by === profile.id;
+    },
+    enabled: !!quizId,
   });
 };

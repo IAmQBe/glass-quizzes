@@ -545,6 +545,13 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2026-02-03 | New Netlify: zingy-quokka | Новый деплой на zingy-quokka-ea065f.netlify.app | .env, BotFather |
 | 2026-02-03 | Share caption fix | Улучшена логика shortDesc: пропускаются фразы "Я —"/"Ты —", слишком короткие, и содержащие title | inline.ts |
 | 2026-02-03 | Referral tracking on share | При переходе по share-ссылке новый пользователь записывается как реферал (ref_telegram_id в start_param) | useCurrentProfile.ts |
+| 2026-02-03 | Quiz timer | Рабочий таймер в квизах с обратным отсчётом, красный при <10сек, auto-submit при истечении | QuizScreen.tsx |
+| 2026-02-03 | Squads (Попкорн-команды) | Система команд на базе Telegram каналов/групп. Бот = админ → сквад активен | squads migration, useSquads.ts |
+| 2026-02-03 | Squad weekly change | Смена сквада раз в неделю (can_change_squad RPC), join_squad/leave_squad функции | squads migration |
+| 2026-02-03 | Creator info on cards | Отображение имени создателя и кликабельного сквада на QuizCard и PersonalityTestCard | QuizCard, PersonalityTestCard |
+| 2026-02-03 | Quiz/Test editing | useUpdateQuiz, useIsQuizCreator для редактирования своих квизов | useQuizzes.ts |
+| 2026-02-03 | Smooth banner animation | Плавная анимация смены баннеров: scale + opacity вместо x-translate | BannerCarousel.tsx |
+| 2026-02-03 | Bot squad handler | my_chat_member event: создание/деактивация сквадов при добавлении/удалении бота как админа | bot/index.ts |
 
 ## TODO / Backlog
 

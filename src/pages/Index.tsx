@@ -646,6 +646,7 @@ const Index = () => {
                               result_count={test.result_count}
                               like_count={test.like_count}
                               save_count={test.save_count}
+                              creator={test.creator}
                               isLiked={testLikeIds.has(test.id)}
                               isSaved={testSaveIds.has(test.id)}
                               onClick={() => handleTestSelect(test.id)}
@@ -691,6 +692,22 @@ const Index = () => {
               questions={mappedQuestions.length > 0 ? mappedQuestions : undefined}
               currentQuestion={currentQuestion}
               onAnswer={handleAnswer}
+              durationSeconds={quizData?.quiz?.duration_seconds || 0}
+              onTimeUp={() => {
+                // Auto-submit with current answers when time is up
+                const currentScore = answers.reduce((acc, ans, idx) => {
+                  const question = quizData?.questions?.[idx];
+                  const correctAnswer = question?.correct_answer ?? 0;
+                  return acc + (ans === correctAnswer ? 1 : 0);
+                }, 0);
+                const total = quizData?.questions?.length || 1;
+                setResult({
+                  score: Math.round((currentScore / total) * 100),
+                  percentile: 50,
+                  verdict: "Время вышло!",
+                });
+                setCurrentScreen("result");
+              }}
             />
           )}
 

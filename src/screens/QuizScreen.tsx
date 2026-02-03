@@ -1,4 +1,6 @@
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Clock } from "lucide-react";
 import { Question } from "@/types/quiz";
 import { haptic } from "@/lib/telegram";
 import { sampleQuestions } from "@/data/quizData";
@@ -7,9 +9,50 @@ interface QuizScreenProps {
   questions?: { id: number; text: string; options: string[] }[];
   currentQuestion: number;
   onAnswer: (answerIndex: number) => void;
+  durationSeconds?: number;
+  onTimeUp?: () => void;
 }
 
-export const QuizScreen = ({ questions, currentQuestion, onAnswer }: QuizScreenProps) => {
+export const QuizScreen = ({ 
+  questions, 
+  currentQuestion, 
+  onAnswer,
+  durationSeconds = 0,
+  onTimeUp
+}: QuizScreenProps) => {
+  const [timeLeft, setTimeLeft] = useState(durationSeconds);
+  
+  // Timer logic
+  useEffect(() => {
+    if (durationSeconds <= 0) return;
+    setTimeLeft(durationSeconds);
+  }, [durationSeconds]);
+  
+  useEffect(() => {
+    if (timeLeft <= 0 || durationSeconds <= 0) return;
+    
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          onTimeUp?.();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [timeLeft, durationSeconds, onTimeUp]);
+  
+  const formatTime = useCallback((seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }, []);
+  
+  const timerColor = timeLeft <= 10 ? 'text-red-500' : timeLeft <= 30 ? 'text-orange-500' : 'text-muted-foreground';
+
   // Use sample questions if none provided
   const quizQuestions = questions || sampleQuestions.map(q => ({
     id: q.id,
@@ -34,7 +77,7 @@ export const QuizScreen = ({ questions, currentQuestion, onAnswer }: QuizScreenP
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
-      {/* Progress */}
+      {/* Progress & Timer */}
       <div className="mb-2">
         <div className="tg-progress">
           <motion.div
@@ -45,8 +88,18 @@ export const QuizScreen = ({ questions, currentQuestion, onAnswer }: QuizScreenP
           />
         </div>
       </div>
-      <div className="text-center text-sm text-muted-foreground mb-6">
-        {currentQuestion + 1} of {quizQuestions.length}
+      <div className="flex items-center justify-between text-sm text-muted-foreground mb-6 px-1">
+        <span>{currentQuestion + 1} из {quizQuestions.length}</span>
+        {durationSeconds > 0 && (
+          <motion.div 
+            className={`flex items-center gap-1 font-medium ${timerColor}`}
+            animate={timeLeft <= 10 ? { scale: [1, 1.1, 1] } : {}}
+            transition={{ repeat: timeLeft <= 10 ? Infinity : 0, duration: 1 }}
+          >
+            <Clock className="w-4 h-4" />
+            <span>{formatTime(timeLeft)}</span>
+          </motion.div>
+        )}
       </div>
 
       {/* Question */}

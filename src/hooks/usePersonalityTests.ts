@@ -6,6 +6,18 @@ import { getTelegramUser, haptic } from "@/lib/telegram";
 // Types
 // ============================================
 
+export interface CreatorInfo {
+  id: string;
+  first_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  squad?: {
+    id: string;
+    title: string;
+    username: string | null;
+  } | null;
+}
+
 export interface PersonalityTest {
   id: string;
   title: string;
@@ -20,6 +32,7 @@ export interface PersonalityTest {
   is_published: boolean;
   created_at: string;
   updated_at: string;
+  creator?: CreatorInfo | null;
 }
 
 export interface PersonalityTestQuestion {
@@ -91,7 +104,20 @@ export const usePublishedPersonalityTests = () => {
     queryFn: async (): Promise<PersonalityTest[]> => {
       const { data, error } = await supabase
         .from("personality_tests")
-        .select("*")
+        .select(`
+          *,
+          creator:profiles!created_by (
+            id,
+            first_name,
+            username,
+            avatar_url,
+            squad:squads (
+              id,
+              title,
+              username
+            )
+          )
+        `)
         .eq("is_published", true)
         .order("created_at", { ascending: false });
 
