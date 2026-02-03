@@ -184,6 +184,8 @@ export const challengeFriend = () => {
 
 // Share personality test result: use switchInlineQuery for 1-click sharing
 // Opens chat selector directly, sends rich card with image + title + description + CTA
+// NOTE: Telegram limits inline query to 256 chars, so we only pass testId + title + userId
+// The bot fetches description and imageUrl from DB
 export const sharePersonalityTestResult = (
   resultTitle: string,
   description: string,
@@ -194,21 +196,22 @@ export const sharePersonalityTestResult = (
   const tg = window.Telegram?.WebApp;
   const userId = tg?.initDataUnsafe?.user?.id;
 
-  // Format: test_result:testId:resultTitle:description:imageUrl:refUserId
-  const titlePart = resultTitle.slice(0, 30).replace(/:/g, ' ');
-  // Truncate description to ~100 chars, remove colons and newlines
-  const descPart = (description || '').slice(0, 120).replace(/:/g, ' ').replace(/\n/g, ' ').trim();
-  const imgPart = imageUrl ? encodeURIComponent(imageUrl) : '';
+  // Format: test_result:testId:resultTitle:refUserId
+  // Keep it SHORT (<256 chars) - Telegram limit!
+  const titlePart = resultTitle.slice(0, 25).replace(/:/g, ' ').trim();
 
-  // Build query with all data for instant response
-  const parts = ['test_result', testId, encodeURIComponent(titlePart), encodeURIComponent(descPart), imgPart];
+  // Build compact query
+  const parts = ['test_result', testId, encodeURIComponent(titlePart)];
   if (userId) parts.push(String(userId));
   const inlineQuery = parts.join(':');
+
+  console.log('[Share] inline query length:', inlineQuery.length, 'query:', inlineQuery);
 
   if (tg?.switchInlineQuery) {
     try {
       tg.switchInlineQuery(inlineQuery, ['users', 'groups', 'channels']);
     } catch (err) {
+      console.error('[Share] switchInlineQuery failed:', err);
       fallbackShare(testId, titlePart, 'test', userId);
     }
   } else {

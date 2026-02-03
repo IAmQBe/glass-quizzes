@@ -245,68 +245,58 @@ export async function handleInlineQuery(ctx: Context) {
       return;
     }
 
-    // Check for test result share format: test_result:testId:resultTitle:description:imageUrl:userId
+    // Check for test result share format: test_result:testId:resultTitle:userId
+    // NOTE: Query is kept short (<256 chars) - we fetch description+image from DB
     if (rawQuery.startsWith('test_result:')) {
       const parts = rawQuery.split(':');
-      console.log('[Inline] test_result query, parts:', parts.length);
+      console.log('[Inline] test_result query, parts:', parts.length, 'raw:', rawQuery.slice(0, 100));
 
       if (parts.length >= 3) {
         const testId = parts[1];
         const resultTitle = decodeURIComponent(parts[2]).trim();
 
-        // Parse description (part 3) - if not all digits (userId)
-        let resultDescription = '';
-        if (parts.length >= 4 && parts[3] && !/^\d+$/.test(parts[3])) {
-          resultDescription = decodeURIComponent(parts[3]).trim();
-        }
-
-        // Parse imageUrl (part 4) - if starts with http
-        let imageUrl = '';
-        if (parts.length >= 5 && parts[4]) {
-          const decoded = decodeURIComponent(parts[4]);
-          if (decoded.startsWith('http')) {
-            imageUrl = decoded;
-          }
-        }
-
-        console.log('[Inline] resultTitle:', resultTitle);
-        console.log('[Inline] description:', resultDescription ? resultDescription.slice(0, 50) + '...' : 'EMPTY');
-        console.log('[Inline] imageUrl:', imageUrl ? imageUrl.slice(0, 50) + '...' : 'EMPTY');
+        console.log('[Inline] testId:', testId, '| resultTitle:', resultTitle);
 
         const startParam = buildStartParam({ testId, refUserId: userId, source: 'result_share' });
         const buttonUrl = buildDeepLink(startParam);
         const safeId = `tr${testId.replace(/-/g, '').slice(0, 12)}${Date.now()}`;
-
-        // Build caption with description
-        const descriptionText = resultDescription || 'Пройди тест и узнай кто ты!';
-        const caption = `🎭 *Я — ${resultTitle}*\n\n${descriptionText}\n\n👇 А ты кто?`;
         const keyboard = new InlineKeyboard().url('🧪 Пройти тест', buttonUrl);
 
-        // Try to get image URL - first from query, then from DB
-        let finalImageUrl = isValidImageUrl(imageUrl) ? imageUrl : null;
+        // Fetch description and image from DB (with timeout)
+        let resultDescription = '';
+        let finalImageUrl: string | null = null;
 
-        // If no image in query, try quick DB lookup
-        if (!finalImageUrl) {
-          console.log('[Inline] No image in query, trying DB lookup...');
-          try {
-            const { data } = await Promise.race([
-              supabase.from('personality_test_results').select('image_url').eq('test_id', testId).ilike('title', `%${resultTitle.slice(0, 15)}%`).limit(1).maybeSingle(),
-              new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 4000))
-            ]) as any;
-            if (data?.image_url && isValidImageUrl(data.image_url)) {
+        try {
+          console.log('[Inline] Fetching from DB...');
+          const { data } = await Promise.race([
+            supabase.from('personality_test_results')
+              .select('description, image_url')
+              .eq('test_id', testId)
+              .ilike('title', `%${resultTitle.slice(0, 15)}%`)
+              .limit(1)
+              .maybeSingle(),
+            new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 5000))
+          ]) as any;
+
+          if (data) {
+            resultDescription = data.description || '';
+            if (data.image_url && isValidImageUrl(data.image_url)) {
               finalImageUrl = data.image_url;
-              console.log('[Inline] Got image from DB:', finalImageUrl?.slice(0, 50));
             }
-          } catch (e) {
-            console.log('[Inline] DB lookup failed:', e);
+            console.log('[Inline] DB result - desc:', resultDescription?.slice(0, 30), '| img:', finalImageUrl?.slice(0, 40));
           }
+        } catch (e) {
+          console.log('[Inline] DB lookup failed/timeout');
         }
+
+        // Build caption
+        const descriptionText = resultDescription || 'Пройди тест и узнай кто ты!';
+        const caption = `🎭 *Я — ${resultTitle}*\n\n${descriptionText}\n\n👇 А ты кто?`;
 
         // Build result using InlineQueryResultBuilder
         let result: InlineQueryResult;
         if (finalImageUrl) {
-          console.log('[Inline] Building PHOTO result with URL:', finalImageUrl.slice(0, 80));
-          // Use the builder for photo result
+          console.log('[Inline] Building PHOTO result');
           result = InlineQueryResultBuilder.photo(safeId, finalImageUrl, {
             thumbnail_url: finalImageUrl,
             photo_width: 400,
@@ -318,8 +308,7 @@ export async function handleInlineQuery(ctx: Context) {
             reply_markup: keyboard,
           });
         } else {
-          console.log('[Inline] Building ARTICLE result (no valid image)');
-          // Use the builder for article result
+          console.log('[Inline] Building ARTICLE result');
           result = InlineQueryResultBuilder.article(safeId, `🎭 Я — ${resultTitle}`, {
             description: descriptionText.slice(0, 100),
             thumbnail_url: 'https://placehold.co/100x100/9333ea/white?text=Test',
@@ -327,7 +316,7 @@ export async function handleInlineQuery(ctx: Context) {
           }).text(caption, { parse_mode: 'Markdown' });
         }
 
-        console.log('[Inline] Answering with result type:', (result as any).type);
+        console.log('[Inline] Answering, type:', (result as any).type);
         await ctx.answerInlineQuery([result], { cache_time: 0, is_personal: true });
         return;
       }
