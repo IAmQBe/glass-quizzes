@@ -17,6 +17,7 @@ export interface LeaderboardEntry {
   total_popcorns?: number;
   quiz_count?: number;
   tests_count?: number;
+  popcorns?: number; // alias for total_popcorns
 }
 
 /**
@@ -55,8 +56,9 @@ export const useLeaderboard = (category: LeaderboardCategory, limit: number = 10
           if (result.error) throw result.error;
           data = (result.data || []).map((entry: any) => ({
             ...entry,
-            total_popcorns: Number(entry.total_popcorns),
-            quiz_count: Number(entry.quiz_count),
+            total_popcorns: Number(entry.total_popcorns || entry.popcorns || 0),
+            popcorns: Number(entry.popcorns || entry.total_popcorns || 0),
+            quiz_count: Number(entry.quiz_count || 0),
             rank: Number(entry.rank),
           }));
           break;
