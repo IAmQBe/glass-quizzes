@@ -1,0 +1,134 @@
+import { motion } from "framer-motion";
+import { ChevronRight, Clock3, Flame, Plus } from "lucide-react";
+import { haptic } from "@/lib/telegram";
+import { PredictionPoll, getPredictionPoolTotal } from "@/types/prediction";
+
+interface PredictionTopBlockProps {
+  predictions: PredictionPoll[];
+  onOpenPrediction: (predictionId: string) => void;
+  onOpenAll: () => void;
+  onCreatePrediction: () => void;
+  createHint?: string;
+}
+
+const formatPopcorn = (value: number) => `${Math.round(value).toLocaleString("ru-RU")} 🍿`;
+
+const formatTimeLeft = (deadlineAt: string) => {
+  const deadlineMs = new Date(deadlineAt).getTime();
+  const diffMs = deadlineMs - Date.now();
+
+  if (diffMs <= 0) {
+    return "закрыт";
+  }
+
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}д ${hours}ч`;
+  if (hours > 0) return `${hours}ч ${minutes}м`;
+  return `${minutes}м`;
+};
+
+const shortOption = (text: string) => {
+  if (text.length <= 14) return text;
+  return `${text.slice(0, 14)}...`;
+};
+
+export const PredictionTopBlock = ({
+  predictions,
+  onOpenPrediction,
+  onOpenAll,
+  onCreatePrediction,
+  createHint,
+}: PredictionTopBlockProps) => {
+  return (
+    <motion.section
+      initial={{ y: 20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ delay: 0.145 }}
+      className="space-y-3"
+    >
+      <div className="tg-section p-4 space-y-2.5">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <Flame className="w-4 h-4 text-orange-500" />
+            Топ-3 прогнозов
+          </h3>
+        </div>
+
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {predictions.length === 0 && (
+            <div className="rounded-xl border border-border p-3 text-sm text-muted-foreground w-full">
+              Сейчас нет открытых прогнозов. Загляни в витрину позже.
+            </div>
+          )}
+
+          {predictions.slice(0, 3).map((prediction) => (
+            <button
+              key={prediction.id}
+              onClick={() => {
+                haptic.impact("light");
+                onOpenPrediction(prediction.id);
+              }}
+              className="w-[248px] shrink-0 rounded-xl border border-border p-2.5 text-left bg-card"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-foreground leading-snug line-clamp-2">{prediction.title}</p>
+                <span className="text-[10px] px-2 py-1 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">
+                  {formatTimeLeft(prediction.deadline_at)}
+                </span>
+              </div>
+
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Пул: {formatPopcorn(getPredictionPoolTotal(prediction))}
+              </p>
+
+              <div className="mt-1.5 flex gap-1 flex-wrap">
+                <span className="text-[10px] px-2 py-1 rounded-full bg-secondary text-foreground">
+                  A: {shortOption(prediction.option_a_label)}
+                </span>
+                <span className="text-[10px] px-2 py-1 rounded-full bg-secondary text-foreground">
+                  B: {shortOption(prediction.option_b_label)}
+                </span>
+              </div>
+
+              <div className="mt-2 flex justify-end">
+                <span className="text-xs text-primary font-medium inline-flex items-center gap-1">
+                  Открыть
+                  <ChevronRight className="w-3 h-3" />
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => {
+              haptic.selection();
+              onOpenAll();
+            }}
+            className="rounded-xl py-2 text-sm font-medium bg-secondary text-foreground inline-flex items-center justify-center gap-2"
+          >
+            <Clock3 className="w-3.5 h-3.5" />
+            Перейти
+          </button>
+          <button
+            onClick={() => {
+              haptic.impact("medium");
+              onCreatePrediction();
+            }}
+            className="tg-button-secondary text-sm py-2 flex items-center justify-center gap-2"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Создать событие
+          </button>
+        </div>
+
+        {createHint ? <p className="text-xs text-muted-foreground text-center">{createHint}</p> : null}
+      </div>
+    </motion.section>
+  );
+};

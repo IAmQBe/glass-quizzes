@@ -55,6 +55,7 @@ export const QuizShowcase = ({
             duration_seconds={quiz.duration_seconds}
             like_count={(quiz as any).like_count ?? 0}
             save_count={(quiz as any).save_count ?? 0}
+            is_anonymous={(quiz as any).is_anonymous ?? false}
             isLiked={likeIds.has(quiz.id)}
             isSaved={saveIds.has(quiz.id)}
             isCompleted={completedIds.has(quiz.id)}

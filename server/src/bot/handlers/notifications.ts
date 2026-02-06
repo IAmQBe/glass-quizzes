@@ -19,6 +19,13 @@ interface NewContentPayload {
   resultCount?: number;
 }
 
+interface PredictionModerationPayload {
+  id: string;
+  title: string;
+  squadTitle?: string | null;
+  reportCount?: number;
+}
+
 /**
  * Notify all admins about new content pending moderation
  */
@@ -125,6 +132,73 @@ ${details ? `\n<pre>${JSON.stringify(details, null, 2)}</pre>` : ''}
       await bot.api.sendMessage(adminId, message, { parse_mode: 'HTML' });
     } catch (error) {
       // Silent fail for informational notifications
+    }
+  }
+}
+
+export async function notifyAdminsPredictionPending(
+  prediction: PredictionModerationPayload
+): Promise<void> {
+  if (ADMIN_TELEGRAM_IDS.length === 0) {
+    console.warn('No admin Telegram IDs configured for prediction notifications');
+    return;
+  }
+
+  const message = `
+🆕 <b>Новый прогноз на модерации</b>
+
+<b>${prediction.title}</b>
+${prediction.squadTitle ? `👥 Сквад: ${prediction.squadTitle}` : ''}
+
+🆔 <code>${prediction.id}</code>
+  `.trim();
+
+  const deepLink = `${MINI_APP_URL}?startapp=poll=${encodeURIComponent(prediction.id)}`;
+  const keyboard = new InlineKeyboard()
+    .webApp('👁️ Открыть прогноз', deepLink);
+
+  for (const adminId of ADMIN_TELEGRAM_IDS) {
+    try {
+      await bot.api.sendMessage(adminId, message, {
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
+    } catch (error) {
+      console.error(`Failed to notify admin ${adminId} about pending prediction:`, error);
+    }
+  }
+}
+
+export async function notifyAdminsPredictionUnderReview(
+  prediction: PredictionModerationPayload
+): Promise<void> {
+  if (ADMIN_TELEGRAM_IDS.length === 0) {
+    console.warn('No admin Telegram IDs configured for prediction notifications');
+    return;
+  }
+
+  const message = `
+🚨 <b>Прогноз отправлен на проверку</b>
+
+<b>${prediction.title}</b>
+${prediction.squadTitle ? `👥 Сквад: ${prediction.squadTitle}` : ''}
+${typeof prediction.reportCount === 'number' ? `⚠️ Репортов: ${prediction.reportCount}` : ''}
+
+🆔 <code>${prediction.id}</code>
+  `.trim();
+
+  const deepLink = `${MINI_APP_URL}?startapp=poll=${encodeURIComponent(prediction.id)}`;
+  const keyboard = new InlineKeyboard()
+    .webApp('🔎 Открыть прогноз', deepLink);
+
+  for (const adminId of ADMIN_TELEGRAM_IDS) {
+    try {
+      await bot.api.sendMessage(adminId, message, {
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
+    } catch (error) {
+      console.error(`Failed to notify admin ${adminId} about under_review prediction:`, error);
     }
   }
 }

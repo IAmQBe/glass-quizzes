@@ -1,6 +1,6 @@
+redirectsOrigin = "config"
 plugins = []
 headers = []
-redirects = []
 
 [functions]
 
@@ -8,8 +8,8 @@ redirects = []
 
 [build]
 publish = "/Users/dacrime/dacrime/CV/legend/glass-quizzes/dist"
-publishOrigin = "ui"
-commandOrigin = "ui"
+publishOrigin = "config"
+commandOrigin = "config"
 command = "npm run build"
 
 [build.environment]
@@ -25,3 +25,15 @@ command = "npm run build"
 [build.processing.js]
 
 [build.services]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]

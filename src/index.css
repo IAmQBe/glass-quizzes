@@ -268,4 +268,176 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;  /* Chrome, Safari, Opera */
   }
+
+  .star-field {
+    position: absolute;
+    inset: -6px;
+    pointer-events: none;
+  }
+
+  .star-field--cta {
+    inset: -10px;
+  }
+
+  .star-particle {
+    position: absolute;
+    animation: star-float-cta 2.8s ease-in-out infinite;
+    filter: drop-shadow(0 0 10px rgba(255, 180, 60, 0.9));
+  }
+
+  .star-a {
+    top: -6px;
+    left: 14%;
+    --star-x: 4px;
+    --star-y: -8px;
+    animation-delay: 0s;
+  }
+
+  .star-b {
+    top: -8px;
+    right: 12%;
+    --star-x: -5px;
+    --star-y: -10px;
+    animation-delay: 0.5s;
+  }
+
+  .star-c {
+    bottom: -6px;
+    right: 20%;
+    --star-x: -4px;
+    --star-y: -8px;
+    animation-delay: 0.2s;
+  }
+
+  .cta-join {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .cta-join-glow {
+    position: absolute;
+    inset: -14px;
+    border-radius: 999px;
+    background: radial-gradient(circle at 50% 50%, rgba(255, 196, 85, 0.55), transparent 70%);
+    filter: blur(12px);
+    opacity: 0.9;
+    animation: cta-glow 2.4s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .cta-join-content {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .gradient-flow-btn {
+    background-image: linear-gradient(120deg, hsl(var(--primary)), hsl(var(--accent)), hsl(var(--primary)));
+    background-size: 200% 200%;
+    animation: gradient-flow 4.5s ease infinite;
+    color: hsl(var(--primary-foreground));
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  }
+
+  .cta-join-btn {
+    background-image: linear-gradient(120deg, hsl(var(--primary)), hsl(var(--primary) / 0.78), hsl(var(--primary)));
+    background-size: 220% 220%;
+    animation: gradient-flow 5.5s ease-in-out infinite;
+    color: hsl(var(--primary-foreground));
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+  }
+
+  .cta-join-shine {
+    position: absolute;
+    inset: -40% -30%;
+    background: linear-gradient(
+      120deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0) 35%,
+      rgba(255, 255, 255, 0.25) 45%,
+      rgba(255, 255, 255, 0.6) 50%,
+      rgba(255, 255, 255, 0.25) 55%,
+      rgba(255, 255, 255, 0) 65%,
+      transparent 100%
+    );
+    transform: translateX(-140%);
+    animation: cta-shine 6s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+  }
+}
+
+@keyframes star-float {
+  0% {
+    transform: translate(0, 0) scale(0.7) rotate(0deg);
+    opacity: 0.2;
+  }
+  60% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(var(--star-x), var(--star-y)) scale(1.1) rotate(18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes star-float-cta {
+  0% {
+    transform: translate(0, 0) scale(0.85) rotate(0deg);
+    opacity: 0.1;
+  }
+  35% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(var(--star-x), var(--star-y)) scale(1.05) rotate(14deg);
+    opacity: 0;
+  }
+}
+
+@keyframes cta-glow {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes gradient-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes cta-shine {
+  0%,
+  45% {
+    transform: translateX(-140%);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  60% {
+    transform: translateX(140%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(140%);
+    opacity: 0;
+  }
 }

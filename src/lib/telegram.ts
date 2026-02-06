@@ -219,15 +219,74 @@ export const sharePersonalityTestResult = (
   }
 };
 
+const BOT_USERNAME = 'QuipoBot';
+
+const sanitizeTitleForStartParam = (title?: string, maxLength: number = 25) => {
+  if (!title) return '';
+  return title.slice(0, maxLength).replace(/:/g, ' ').trim();
+};
+
+const buildShareStartParam = (type: 'test' | 'quiz', id: string, title?: string, refUserId?: number) => {
+  const refPart = refUserId ? `_ref${refUserId}` : '';
+  if (type === 'test') {
+    const titlePart = sanitizeTitleForStartParam(title);
+    return `share_${id}_${titlePart}${refPart}`;
+  }
+  return `qshare_${id}${refPart}`;
+};
+
+const buildBotStartUrl = (type: 'test' | 'quiz', id: string, title?: string, refUserId?: number) => {
+  const startParam = buildShareStartParam(type, id, title, refUserId);
+  return `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(startParam)}`;
+};
+
+const openShareDialog = (text: string, url: string) => {
+  const tg = getTelegram();
+  if (tg) {
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+    if (tg.openTelegramLink) {
+      tg.openTelegramLink(shareUrl);
+    } else if (tg.openLink) {
+      tg.openLink(shareUrl);
+    } else {
+      tg.switchInlineQuery(`${text}\n\n${url}`, ['users', 'groups', 'channels']);
+    }
+    return;
+  }
+
+  if (navigator.share) {
+    navigator.share({ text, url });
+  } else {
+    navigator.clipboard.writeText(`${text}\n\n${url}`);
+  }
+};
+
+const buildInviteText = (type: 'test' | 'quiz', title: string, description?: string | null) => {
+  const typeLabel = type === 'quiz' ? 'квиза' : 'теста';
+  const base = `Предлагаю тебе присоединиться к прохождению ${typeLabel}: ${title}`;
+  const desc = description?.trim();
+  return desc ? `${base}\n${desc}` : base;
+};
+
+export const shareQuizInvite = (quizId: string, title: string, description?: string | null) => {
+  const tg = getTelegram();
+  const userId = tg?.initDataUnsafe?.user?.id;
+  const text = buildInviteText('quiz', title, description);
+  const url = buildBotStartUrl('quiz', quizId, undefined, userId);
+  openShareDialog(text, url);
+};
+
+export const sharePersonalityTestInvite = (testId: string, title: string, description?: string | null) => {
+  const tg = getTelegram();
+  const userId = tg?.initDataUnsafe?.user?.id;
+  const text = buildInviteText('test', title, description);
+  const url = buildBotStartUrl('test', testId, title, userId);
+  openShareDialog(text, url);
+};
+
 // Fallback when switchInlineQuery doesn't work
 function fallbackShare(id: string, title: string, type: 'test' | 'quiz', refUserId?: number) {
-  const botUsername = 'QuipoBot';
-  // Include referrer user ID in the start parameter
-  const refPart = refUserId ? `_ref${refUserId}` : '';
-  const startParam = type === 'test'
-    ? `share_${id}_${title}${refPart}`
-    : `qshare_${id}${refPart}`;
-  const url = `https://t.me/${botUsername}?start=${encodeURIComponent(startParam)}`;
+  const url = buildBotStartUrl(type, id, title, refUserId);
 
   const tg = window.Telegram?.WebApp;
   if (tg?.openTelegramLink) {

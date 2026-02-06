@@ -1,8 +1,10 @@
 import { motion } from "framer-motion";
-import { Users, HelpCircle, Sparkles, Check, Award } from "lucide-react";
-import { haptic, getTelegram } from "@/lib/telegram";
+import { Users, HelpCircle, Sparkles, Check, Award, Share2, VenetianMask } from "lucide-react";
+import { haptic, getTelegram, sharePersonalityTestInvite } from "@/lib/telegram";
+import { formatQuestionCount } from "@/lib/utils";
 import { PopcornIcon } from "./icons/PopcornIcon";
 import { BookmarkIcon } from "./icons/BookmarkIcon";
+import { GifImage } from "./GifImage";
 
 interface CreatorInfo {
   id: string;
@@ -26,6 +28,7 @@ interface PersonalityTestCardProps {
   result_count: number;
   like_count?: number;
   save_count?: number;
+  is_anonymous?: boolean;
   isLiked?: boolean;
   isSaved?: boolean;
   isCompleted?: boolean;
@@ -45,6 +48,7 @@ export const PersonalityTestCard = ({
   result_count,
   like_count = 0,
   save_count = 0,
+  is_anonymous = false,
   isLiked = false,
   isSaved = false,
   isCompleted = false,
@@ -79,7 +83,7 @@ export const PersonalityTestCard = ({
 
   const handleSquadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!creator?.squad?.username) return;
+    if (is_anonymous || !creator?.squad?.username) return;
 
     haptic.impact('light');
     const tg = getTelegram();
@@ -89,6 +93,12 @@ export const PersonalityTestCard = ({
     } else {
       window.open(url, '_blank');
     }
+  };
+
+  const handleShare = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    haptic.impact('light');
+    sharePersonalityTestInvite(id, title, description);
   };
 
   const formatCount = (count: number) => {
@@ -110,7 +120,7 @@ export const PersonalityTestCard = ({
       {/* Image */}
       <div className="relative aspect-[16/9] bg-purple-500/10 rounded-t-2xl overflow-hidden">
         {image_url ? (
-          <img
+          <GifImage
             src={image_url}
             alt={title}
             className={`w-full h-full object-cover ${isCompleted ? 'opacity-80' : ''}`}
@@ -127,6 +137,15 @@ export const PersonalityTestCard = ({
           <span className="text-xs text-white font-medium">Тест личности</span>
         </div>
 
+        {/* Top right - Share */}
+        <button
+          onClick={handleShare}
+          className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm rounded-full w-7 h-7 flex items-center justify-center text-white"
+          aria-label="Поделиться тестом"
+        >
+          <Share2 className="w-3.5 h-3.5" />
+        </button>
+
         {/* Top right - Completed badge */}
         {isCompleted && (
           <div className="absolute top-2 right-12 bg-green-500/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
@@ -135,19 +154,7 @@ export const PersonalityTestCard = ({
           </div>
         )}
 
-        {/* Bottom left - Stats on image */}
-        <div className="absolute bottom-2 left-2 flex gap-1.5">
-          <div className="bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
-            <Users className="w-3 h-3 text-white" />
-            <span className="text-xs text-white font-medium">
-              {formatCount(participant_count)}
-            </span>
-          </div>
-          <div className="bg-purple-500/80 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
-            <Award className="w-3 h-3 text-white" />
-            <span className="text-xs text-white font-medium">{result_count}</span>
-          </div>
-        </div>
+        {/* Image overlay left intentionally minimal */}
       </div>
 
       {/* Content */}
@@ -163,19 +170,21 @@ export const PersonalityTestCard = ({
         )}
 
         {/* Creator info */}
-        {creator && (
+        {(creator || is_anonymous) && (
           <div className="flex items-center gap-2 mb-2">
             <div className="w-6 h-6 rounded-full bg-purple-500/10 flex items-center justify-center overflow-hidden">
-              {creator.avatar_url ? (
+              {is_anonymous ? (
+                <VenetianMask className="w-3.5 h-3.5 text-muted-foreground" />
+              ) : creator?.avatar_url ? (
                 <img src={creator.avatar_url} alt="" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-[10px]">✨</span>
               )}
             </div>
             <span className="text-xs text-muted-foreground">
-              {creator.first_name || creator.username || 'Аноним'}
+              {is_anonymous ? 'UNNAMED' : (creator?.first_name || creator?.username || 'Аноним')}
             </span>
-            {creator.squad && (
+            {!is_anonymous && creator?.squad && (
               <button
                 onClick={handleSquadClick}
                 className="text-xs text-purple-500 hover:underline flex items-center gap-1"
@@ -189,20 +198,30 @@ export const PersonalityTestCard = ({
 
         {/* Stats + Actions */}
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <HelpCircle className="w-3.5 h-3.5" />
-            <span>{question_count} вопросов</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>{formatQuestionCount(question_count)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Award className="w-3.5 h-3.5" />
+              <span>{result_count}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Users className="w-3.5 h-3.5" />
+              <span>{formatCount(participant_count)}</span>
+            </div>
           </div>
           <div className="flex items-center gap-1.5">
             {onToggleLike && (
               <button
                 onClick={handleLike}
                 className={`flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium transition-colors ${isLiked
-                  ? "bg-amber-500/20 text-amber-600"
+                  ? "bg-yellow-500/20 text-yellow-600"
                   : "bg-secondary text-muted-foreground"
                   }`}
               >
-                <PopcornIcon className="w-3.5 h-3.5" />
+                <PopcornIcon className="w-3.5 h-3.5" active={isLiked} />
                 <span>{formatCount(like_count)}</span>
               </button>
             )}

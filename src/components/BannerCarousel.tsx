@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence, PanInfo } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { haptic, getTelegram } from "@/lib/telegram";
+import { GifImage } from "./GifImage";
 
 interface Banner {
   id: string;
@@ -119,7 +120,7 @@ export const BannerCarousel = ({ banners }: BannerCarouselProps) => {
             }}
           >
             {/* Image */}
-            <img
+            <GifImage
               src={banner.image_url}
               alt={banner.title}
               className="w-full h-full object-cover"

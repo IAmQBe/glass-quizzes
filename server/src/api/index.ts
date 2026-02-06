@@ -3,10 +3,24 @@ import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { validateInitData, parseStartParam, type InitData } from '../lib/telegram.js';
-import { getQuizById, getPublishedQuizzes, getDailyQuiz, updateQuizStatus, getProfileByTelegramId } from '../lib/supabase.js';
+import {
+  getQuizById,
+  getPublishedQuizzes,
+  getDailyQuiz,
+  getProfileByTelegramId,
+  getPredictionPollById,
+  getSquadTitleById,
+  isProfileAdmin,
+  getTaskById,
+  getCompletedTaskIds,
+  completeTaskForProfile,
+  revokeTaskCompletionForProfile,
+  type Task,
+} from '../lib/supabase.js';
 import { bot } from '../bot/index.js';
 import { analytics } from './analytics.js';
-import { notifyAdminsNewQuiz, notifyAuthorModerationResult } from '../bot/notifications.js';
+import { notifyAdminsNewQuiz } from '../bot/notifications.js';
+import { notifyAdminsPredictionPending, notifyAdminsPredictionUnderReview } from '../bot/handlers/notifications.js';
 
 const app = new Hono();
 
@@ -49,6 +63,126 @@ const authMiddleware = async (c: any, next: any) => {
     console.error('Auth error:', error);
     return c.json({ error: 'Invalid initData' }, 401);
   }
+};
+
+const VERIFIABLE_TASK_TYPES = new Set(['subscribe_channel', 'channel_boost', 'telegram_premium']);
+
+const parseTelegramChatId = (value: string | null): string | null => {
+  if (!value) return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (/^-?\d+$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('@')) {
+    return trimmed;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (!url.hostname.includes('t.me')) return null;
+
+    const path = url.pathname.replace(/^\/+/, '');
+    const segment = path.split('/')[0];
+    if (!segment) return null;
+    if (/^-?\d+$/.test(segment)) return segment;
+    return `@${segment}`;
+  } catch {
+    if (trimmed.includes('/')) {
+      const segment = trimmed.split('/').filter(Boolean).pop();
+      if (!segment) return null;
+      if (/^-?\d+$/.test(segment)) return segment;
+      return `@${segment}`;
+    }
+    return `@${trimmed}`;
+  }
+};
+
+const callTelegramBotApi = async <T>(method: string, payload: Record<string, unknown>): Promise<T | null> => {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) {
+    console.error('TELEGRAM_BOT_TOKEN is not configured');
+    return null;
+  }
+
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const json = await response.json() as { ok: boolean; result?: T; description?: string };
+  if (!response.ok || !json.ok) {
+    console.warn(`Telegram API ${method} failed:`, json.description || response.statusText);
+    return null;
+  }
+
+  return json.result ?? null;
+};
+
+const verifyTaskEligibility = async (
+  task: Task,
+  telegramUserId: number,
+  userIsPremium: boolean
+): Promise<{ ok: boolean; message?: string }> => {
+  if (task.task_type === 'telegram_premium') {
+    return userIsPremium
+      ? { ok: true }
+      : { ok: false, message: 'Нужна активная подписка Telegram Premium' };
+  }
+
+  if (task.task_type === 'subscribe_channel') {
+    const chatId = parseTelegramChatId(task.action_url);
+    if (!chatId) {
+      return { ok: false, message: 'Некорректный канал в задании' };
+    }
+
+    const member = await callTelegramBotApi<{ status?: string; is_member?: boolean }>('getChatMember', {
+      chat_id: chatId,
+      user_id: telegramUserId,
+    });
+
+    if (!member) {
+      return { ok: false, message: 'Не удалось проверить подписку. Убедитесь, что бот является админом канала' };
+    }
+
+    const status = member.status || '';
+    const isSubscribed =
+      status === 'member' ||
+      status === 'administrator' ||
+      status === 'creator' ||
+      (status === 'restricted' && member.is_member === true);
+
+    return isSubscribed
+      ? { ok: true }
+      : { ok: false, message: 'Подпишитесь на канал и попробуйте снова' };
+  }
+
+  if (task.task_type === 'channel_boost') {
+    const chatId = parseTelegramChatId(task.action_url);
+    if (!chatId) {
+      return { ok: false, message: 'Некорректный канал в задании' };
+    }
+
+    const boosts = await callTelegramBotApi<{ boosts?: unknown[] }>('getUserChatBoosts', {
+      chat_id: chatId,
+      user_id: telegramUserId,
+    });
+
+    if (!boosts) {
+      return { ok: false, message: 'Не удалось проверить буст канала. Проверьте права бота в канале' };
+    }
+
+    const hasBoost = Array.isArray(boosts.boosts) && boosts.boosts.length > 0;
+    return hasBoost
+      ? { ok: true }
+      : { ok: false, message: 'Сначала отдайте буст каналу и повторите проверку' };
+  }
+
+  return { ok: true };
 };
 
 // ==================
@@ -222,6 +356,164 @@ app.post('/api/quizzes/submit-for-review', authMiddleware, async (c) => {
   } catch (error) {
     console.error('Submit for review error:', error);
     return c.json({ error: 'Failed to submit for review' }, 500);
+  }
+});
+
+/**
+ * Notify admins about prediction moderation events
+ */
+app.post('/api/predictions/moderation-notify', authMiddleware, async (c) => {
+  const initData = c.get('initData');
+  const body = await c.req.json();
+  const { pollId, eventType } = body || {};
+
+  if (!pollId || (eventType !== 'pending' && eventType !== 'under_review')) {
+    return c.json({ error: 'pollId and valid eventType are required' }, 400);
+  }
+
+  const tgUser = initData?.user;
+  if (!tgUser?.id) {
+    return c.json({ error: 'User not found in initData' }, 400);
+  }
+
+  try {
+    const profile = await getProfileByTelegramId(tgUser.id);
+    if (!profile) {
+      return c.json({ error: 'Profile not found' }, 404);
+    }
+
+    const poll = await getPredictionPollById(pollId);
+    if (!poll) {
+      return c.json({ error: 'Prediction poll not found' }, 404);
+    }
+
+    const isAdmin = await isProfileAdmin(profile.id);
+
+    if (eventType === 'pending' && !isAdmin && poll.created_by !== profile.id) {
+      return c.json({ error: 'Forbidden for pending notification' }, 403);
+    }
+
+    if (eventType === 'under_review' && !isAdmin) {
+      return c.json({ error: 'Only admins can send under_review notification' }, 403);
+    }
+
+    const squadTitle = await getSquadTitleById(poll.squad_id);
+
+    if (eventType === 'pending') {
+      await notifyAdminsPredictionPending({
+        id: poll.id,
+        title: poll.title,
+        squadTitle,
+        reportCount: poll.report_count,
+      });
+    } else {
+      await notifyAdminsPredictionUnderReview({
+        id: poll.id,
+        title: poll.title,
+        squadTitle,
+        reportCount: poll.report_count,
+      });
+    }
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.error('Prediction moderation notify error:', error);
+    return c.json({ error: 'Failed to send prediction notification' }, 500);
+  }
+});
+
+/**
+ * Complete task with server-side verification (Telegram-aware)
+ */
+app.post('/api/tasks/complete', authMiddleware, async (c) => {
+  const initData = c.get('initData');
+  const tgUser = initData.user;
+  if (!tgUser?.id) {
+    return c.json({ error: 'User not found in initData' }, 400);
+  }
+
+  const body = await c.req.json().catch(() => null) as { taskId?: string } | null;
+  const taskId = body?.taskId;
+  if (!taskId) {
+    return c.json({ error: 'taskId is required' }, 400);
+  }
+
+  try {
+    const profile = await getProfileByTelegramId(tgUser.id);
+    if (!profile) {
+      return c.json({ error: 'Profile not found' }, 404);
+    }
+
+    const task = await getTaskById(taskId);
+    if (!task) {
+      return c.json({ error: 'Task not found' }, 404);
+    }
+
+    if (!task.is_active) {
+      return c.json({ error: 'Task is inactive' }, 400);
+    }
+
+    const verification = await verifyTaskEligibility(task, tgUser.id, Boolean(tgUser.is_premium));
+    if (!verification.ok) {
+      return c.json({ error: verification.message || 'Task condition not satisfied' }, 400);
+    }
+
+    const result = await completeTaskForProfile(profile.id, task.id);
+    return c.json({
+      success: true,
+      alreadyCompleted: result.alreadyCompleted,
+    });
+  } catch (error) {
+    console.error('Task completion error:', error);
+    return c.json({ error: 'Failed to complete task' }, 500);
+  }
+});
+
+/**
+ * Get completed tasks and auto-revoke invalid verifiable completions
+ */
+app.get('/api/tasks/completed', authMiddleware, async (c) => {
+  const initData = c.get('initData');
+  const tgUser = initData.user;
+  if (!tgUser?.id) {
+    return c.json({ taskIds: [] });
+  }
+
+  try {
+    const profile = await getProfileByTelegramId(tgUser.id);
+    if (!profile) {
+      return c.json({ taskIds: [] });
+    }
+
+    const completedTaskIds = await getCompletedTaskIds(profile.id);
+    if (completedTaskIds.length === 0) {
+      return c.json({ taskIds: [] });
+    }
+
+    const validTaskIds: string[] = [];
+
+    for (const taskId of completedTaskIds) {
+      const task = await getTaskById(taskId);
+      if (!task) continue;
+
+      if (!VERIFIABLE_TASK_TYPES.has(task.task_type)) {
+        validTaskIds.push(taskId);
+        continue;
+      }
+
+      const verification = await verifyTaskEligibility(task, tgUser.id, Boolean(tgUser.is_premium));
+      if (!verification.ok) {
+        await revokeTaskCompletionForProfile(profile.id, taskId);
+        continue;
+      }
+
+      validTaskIds.push(taskId);
+    }
+
+    return c.json({ taskIds: validTaskIds });
+  } catch (error) {
+    console.error('Get completed tasks error:', error);
+    return c.json({ error: 'Failed to fetch completed tasks' }, 500);
   }
 });
 

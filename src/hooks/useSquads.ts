@@ -21,7 +21,7 @@ export interface SquadLeaderboardEntry extends Squad {
 }
 
 // Get squad leaderboard
-export const useSquadLeaderboard = (limit: number = 10) => {
+export const useSquadLeaderboard = (limit: number = 10, enabled: boolean = true) => {
   return useQuery({
     queryKey: ["squadLeaderboard", limit],
     queryFn: async (): Promise<SquadLeaderboardEntry[]> => {
@@ -31,6 +31,7 @@ export const useSquadLeaderboard = (limit: number = 10) => {
       if (error) throw error;
       return data || [];
     },
+    enabled,
   });
 };
 

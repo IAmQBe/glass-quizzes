@@ -1,31 +1,49 @@
 import { useQuery } from "@tanstack/react-query";
-import { getTelegramUser } from "@/lib/telegram";
 import { supabase } from "@/integrations/supabase/client";
+import { useRolePreview } from "@/hooks/useRolePreview";
 
-// Admin IDs from env
-const ADMIN_TELEGRAM_IDS = (import.meta.env.VITE_ADMIN_TELEGRAM_IDS || "")
-  .split(",")
-  .map((id: string) => parseInt(id.trim(), 10))
-  .filter((id: number) => !isNaN(id));
+interface AuthHookOptions {
+  respectRolePreview?: boolean;
+}
 
-export const useIsAdmin = () => {
+export const useIsAdmin = ({ respectRolePreview = true }: AuthHookOptions = {}) => {
+  const { forcedRole } = useRolePreview();
+  const roleOverride = respectRolePreview ? forcedRole : null;
+
   return useQuery({
-    queryKey: ["isAdmin"],
+    queryKey: ["isAdmin", roleOverride],
     queryFn: async (): Promise<boolean> => {
-      const tgUser = getTelegramUser();
-      if (!tgUser) return false;
+      if (roleOverride === "admin") return true;
+      if (roleOverride === "user") return false;
 
-      // Check if Telegram user ID is in admin list
-      return ADMIN_TELEGRAM_IDS.includes(tgUser.id);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+
+      const { data, error } = await supabase.rpc("is_admin", {
+        check_user_id: user.id,
+      });
+
+      if (error) {
+        console.error("Error checking admin role:", error);
+        return false;
+      }
+
+      return Boolean(data);
     },
-    staleTime: Infinity, // Admin status doesn't change
+    staleTime: 60_000,
   });
 };
 
-export const useUserRole = () => {
+export const useUserRole = ({ respectRolePreview = true }: AuthHookOptions = {}) => {
+  const { forcedRole } = useRolePreview();
+  const roleOverride = respectRolePreview ? forcedRole : null;
+
   return useQuery({
-    queryKey: ["userRole"],
-    queryFn: async () => {
+    queryKey: ["userRole", roleOverride],
+    queryFn: async (): Promise<"admin" | "user" | null> => {
+      if (roleOverride === "admin") return "admin";
+      if (roleOverride === "user") return "user";
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
 

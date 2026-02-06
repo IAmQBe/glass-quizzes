@@ -113,6 +113,12 @@ async function fileToDataUrl(file: File): Promise<string> {
 // Helper to resize image before upload (optional optimization)
 export const resizeImage = (file: File, maxWidth: number = 1200): Promise<File> => {
   return new Promise((resolve, reject) => {
+    const isGif = file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif");
+    if (isGif) {
+      resolve(file);
+      return;
+    }
+
     const img = new Image();
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');

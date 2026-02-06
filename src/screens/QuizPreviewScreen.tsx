@@ -1,8 +1,10 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Clock, Users, Play, ExternalLink, HelpCircle } from "lucide-react";
+import { ArrowLeft, Clock, Users, Play, ExternalLink, HelpCircle, Share2, VenetianMask } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
-import { haptic, getTelegram } from "@/lib/telegram";
+import { GifImage } from "@/components/GifImage";
+import { haptic, getTelegram, shareQuizInvite } from "@/lib/telegram";
+import { formatQuestionCount } from "@/lib/utils";
 
 interface CreatorInfo {
   id: string;
@@ -27,6 +29,7 @@ interface QuizPreviewScreenProps {
     participant_count: number;
     like_count: number;
     save_count: number;
+    is_anonymous?: boolean;
     creator?: CreatorInfo | null;
   };
   isLiked?: boolean;
@@ -47,7 +50,7 @@ export const QuizPreviewScreen = ({
   onToggleSave,
 }: QuizPreviewScreenProps) => {
   const handleSquadClick = () => {
-    if (!quiz.creator?.squad) return;
+    if (quiz.is_anonymous || !quiz.creator?.squad) return;
     haptic.impact('light');
     const tg = getTelegram();
     const url = quiz.creator.squad.username
@@ -68,10 +71,21 @@ export const QuizPreviewScreen = ({
     onToggleSave?.();
   };
 
+  const handleShare = () => {
+    haptic.impact('light');
+    shareQuizInvite(quiz.id, quiz.title, quiz.description);
+  };
+
   const formatDuration = (seconds: number) => {
     if (seconds < 60) return `${seconds} сек`;
     const minutes = Math.floor(seconds / 60);
     return `${minutes} мин`;
+  };
+
+  const formatCount = (count: number) => {
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+    return count.toString();
   };
 
   return (
@@ -94,6 +108,13 @@ export const QuizPreviewScreen = ({
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h1 className="text-lg font-semibold flex-1">Квиз</h1>
+          <button
+            onClick={handleShare}
+            className="p-2 -mr-2 rounded-full hover:bg-secondary"
+            aria-label="Поделиться квизом"
+          >
+            <Share2 className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
@@ -106,7 +127,7 @@ export const QuizPreviewScreen = ({
           animate={{ y: 0, opacity: 1 }}
         >
           {quiz.image_url ? (
-            <img
+            <GifImage
               src={quiz.image_url}
               alt={quiz.title}
               className="w-full h-full object-cover"
@@ -117,53 +138,7 @@ export const QuizPreviewScreen = ({
             </div>
           )}
 
-          {/* Top badges */}
-          <div className="absolute top-3 left-3 flex gap-2">
-            <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-white" />
-              <span className="text-xs text-white font-medium">{quiz.participant_count}</span>
-            </div>
-            <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-white" />
-              <span className="text-xs text-white font-medium">{formatDuration(quiz.duration_seconds)}</span>
-            </div>
-          </div>
-
-          {/* Top right - Like button */}
-          <button
-            onClick={handleLike}
-            className={`absolute top-3 right-3 w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
-              isLiked ? "bg-amber-500 text-white" : "bg-black/40 text-white"
-            }`}
-          >
-            <PopcornIcon className="w-5 h-5" />
-          </button>
-
-          {/* Bottom right - Save button */}
-          <button
-            onClick={handleSave}
-            className={`absolute bottom-3 right-3 w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
-              isSaved ? "bg-primary text-white" : "bg-black/40 text-white"
-            }`}
-          >
-            <BookmarkIcon className="w-5 h-5" filled={isSaved} />
-          </button>
-
-          {/* Bottom left - Stats */}
-          <div className="absolute bottom-3 left-3 flex gap-2">
-            {quiz.like_count > 0 && (
-              <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
-                <PopcornIcon className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-xs text-white font-medium">{quiz.like_count}</span>
-              </div>
-            )}
-            {quiz.save_count > 0 && (
-              <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
-                <BookmarkIcon className="w-3.5 h-3.5 text-white" />
-                <span className="text-xs text-white font-medium">{quiz.save_count}</span>
-              </div>
-            )}
-          </div>
+          {/* Image overlay intentionally minimal */}
         </motion.div>
 
         {/* Title & Description */}
@@ -179,7 +154,7 @@ export const QuizPreviewScreen = ({
         </motion.div>
 
         {/* Creator Info */}
-        {quiz.creator && (
+        {(quiz.creator || quiz.is_anonymous) && (
           <motion.div
             className="flex items-center gap-3"
             initial={{ y: 20, opacity: 0 }}
@@ -187,7 +162,9 @@ export const QuizPreviewScreen = ({
             transition={{ delay: 0.1 }}
           >
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-              {quiz.creator.avatar_url ? (
+              {quiz.is_anonymous ? (
+                <VenetianMask className="w-5 h-5 text-muted-foreground" />
+              ) : quiz.creator?.avatar_url ? (
                 <img src={quiz.creator.avatar_url} alt="" className="w-full h-full object-cover" />
               ) : (
                 <HelpCircle className="w-5 h-5 text-primary" />
@@ -195,9 +172,9 @@ export const QuizPreviewScreen = ({
             </div>
             <div className="flex-1">
               <p className="font-medium text-foreground">
-                {quiz.creator.first_name || quiz.creator.username || 'Аноним'}
+                {quiz.is_anonymous ? 'UNNAMED' : (quiz.creator?.first_name || quiz.creator?.username || 'Аноним')}
               </p>
-              {quiz.creator.squad && (
+              {!quiz.is_anonymous && quiz.creator?.squad && (
                 <button
                   onClick={handleSquadClick}
                   className="text-xs text-primary flex items-center gap-1 hover:underline"
@@ -211,25 +188,79 @@ export const QuizPreviewScreen = ({
           </motion.div>
         )}
 
-        {/* Stats row */}
+        {/* Stats + Actions */}
         <motion.div
-          className="flex items-center gap-4 text-sm text-muted-foreground"
+          className="grid grid-cols-[1fr_auto] items-center gap-3 text-sm text-muted-foreground"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.15 }}
         >
-          <div className="flex items-center gap-1.5">
-            <HelpCircle className="w-4 h-4" />
-            <span>{quiz.question_count} вопросов</span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <HelpCircle className="w-4 h-4" />
+              <span>{formatQuestionCount(quiz.question_count)}</span>
+            </div>
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <Clock className="w-4 h-4" />
+              <span>{formatDuration(quiz.duration_seconds)}</span>
+            </div>
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <Users className="w-4 h-4" />
+              <span>{formatCount(quiz.participant_count)}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Clock className="w-4 h-4" />
-            <span>{formatDuration(quiz.duration_seconds)}</span>
+          <div className="flex items-center gap-2 justify-self-end">
+            {onToggleLike && (
+              <button
+                onClick={handleLike}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors shadow-sm ${
+                  isLiked
+                    ? "bg-yellow-500/20 text-yellow-600"
+                    : "bg-card text-muted-foreground border border-border/70 hover:bg-secondary"
+                }`}
+              >
+                <PopcornIcon className="w-4 h-4" active={isLiked} />
+                <span>{formatCount(quiz.like_count)}</span>
+              </button>
+            )}
+            {onToggleSave && (
+              <button
+                onClick={handleSave}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors shadow-sm ${
+                  isSaved
+                    ? "bg-primary/20 text-primary"
+                    : "bg-card text-muted-foreground border border-border/70 hover:bg-secondary"
+                }`}
+              >
+                <BookmarkIcon className="w-4 h-4" filled={isSaved} />
+                <span>{formatCount(quiz.save_count)}</span>
+              </button>
+            )}
           </div>
-          <div className="flex items-center gap-1.5">
-            <Users className="w-4 h-4" />
-            <span>{quiz.participant_count}</span>
-          </div>
+        </motion.div>
+
+        {/* What you'll get */}
+        <motion.div
+          className="tg-section p-4"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+        >
+          <h3 className="font-medium text-foreground mb-2">Что тебя ждёт:</h3>
+          <ul className="space-y-2 text-sm text-muted-foreground">
+            <li className="flex items-center gap-2">
+              <span className="text-primary">✦</span>
+              {formatQuestionCount(quiz.question_count)}
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-primary">✦</span>
+              Время на прохождение: {formatDuration(quiz.duration_seconds)}
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-primary">✦</span>
+              Можно поделиться результатом
+            </li>
+          </ul>
         </motion.div>
       </div>
 

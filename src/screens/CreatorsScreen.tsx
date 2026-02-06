@@ -12,7 +12,7 @@ interface CreatorsScreenProps {
 }
 
 export const CreatorsScreen = ({ onBack, onCreatorSelect }: CreatorsScreenProps) => {
-  const { data: creators = [], isLoading, error } = useLeaderboard('popcorns', 50);
+  const { data: creators = [], isLoading, error } = useLeaderboard('popcorns', 300);
 
   const handleBack = () => {
     haptic.selection();
@@ -45,7 +45,9 @@ export const CreatorsScreen = ({ onBack, onCreatorSelect }: CreatorsScreenProps)
   };
 
   const getDisplayName = (creator: typeof creators[0]) => {
-    return creator.username || creator.first_name || 'Creator';
+    if (creator.username) return creator.username;
+    if (creator.first_name) return creator.first_name;
+    return creator.user_id ? `Автор ${creator.user_id.slice(0, 6)}` : 'Creator';
   };
 
   return (

@@ -9,6 +9,7 @@ import {
   PersonalityTestResult
 } from "@/hooks/usePersonalityTests";
 import { haptic } from "@/lib/telegram";
+import { GifImage } from "@/components/GifImage";
 
 // Fisher-Yates shuffle
 function shuffleArray<T>(array: T[]): T[] {
@@ -181,7 +182,7 @@ export const PersonalityTestScreen = ({ testId, onBack, onComplete }: Personalit
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, delay: 0.1 }}
               >
-                <img
+                <GifImage
                   src={currentQuestion.image_url}
                   alt=""
                   className="w-full h-48 object-cover"

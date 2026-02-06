@@ -143,20 +143,28 @@ export const useTotalPopcornsReceived = () => {
       const profileId = await getProfileId();
       if (!profileId) return 0;
 
-      // Get all quizzes created by this user
-      const { data: myQuizzes, error: quizzesError } = await supabase
-        .from("quizzes")
-        .select("id, like_count")
-        .eq("created_by", profileId);
+      const [quizzesRes, testsRes] = await Promise.all([
+        supabase
+          .from("quizzes")
+          .select("id, like_count")
+          .eq("created_by", profileId),
+        supabase
+          .from("personality_tests")
+          .select("id, like_count")
+          .eq("created_by", profileId),
+      ]);
 
-      if (quizzesError) {
-        console.error("Error fetching user quizzes:", quizzesError);
-        return 0;
+      if (quizzesRes.error) {
+        console.error("Error fetching user quizzes:", quizzesRes.error);
+      }
+      if (testsRes.error) {
+        console.error("Error fetching user tests:", testsRes.error);
       }
 
-      // Sum all like_count values
-      const total = myQuizzes?.reduce((sum, quiz) => sum + (quiz.like_count || 0), 0) || 0;
-      return total;
+      const quizTotal = quizzesRes.data?.reduce((sum, quiz) => sum + (quiz.like_count || 0), 0) || 0;
+      const testTotal = testsRes.data?.reduce((sum, test) => sum + (test.like_count || 0), 0) || 0;
+
+      return quizTotal + testTotal;
     },
   });
 };

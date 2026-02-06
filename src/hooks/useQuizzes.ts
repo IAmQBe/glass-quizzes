@@ -59,11 +59,12 @@ export interface Quiz {
   title: string;
   description: string | null;
   image_url: string | null;
-  created_by: string;
+  created_by: string | null;
   question_count: number;
   participant_count: number;
   duration_seconds: number;
   is_published: boolean;
+  is_anonymous: boolean;
   created_at: string;
   updated_at: string;
   rating: number | null;
@@ -92,24 +93,48 @@ export const usePublishedQuizzes = () => {
   return useQuery({
     queryKey: ["quizzes", "published"],
     queryFn: async (): Promise<Quiz[]> => {
-      // First, get quizzes
-      const { data: quizzes, error: quizError } = await supabase
-        .from("quizzes")
+      // Primary source: public view (with anonymous masking).
+      const { data: viewQuizzes, error: viewError } = await supabase
+        .from("quizzes_public")
         .select("*")
         .eq("is_published", true)
         .order("created_at", { ascending: false });
 
-      if (quizError) {
-        console.error("Error fetching quizzes:", quizError);
-        throw quizError;
+      let quizzes = viewQuizzes || [];
+
+      // Fallback source: base table (for environments where the view is empty/broken).
+      if ((viewError || quizzes.length === 0)) {
+        const { data: tableQuizzes, error: tableError } = await supabase
+          .from("quizzes")
+          .select("*")
+          .or("is_published.eq.true,status.eq.published")
+          .order("created_at", { ascending: false });
+
+        if (tableError && viewError) {
+          console.error("Error fetching quizzes from view and table:", viewError, tableError);
+          throw tableError;
+        }
+
+        if (tableQuizzes && tableQuizzes.length > 0) {
+          quizzes = tableQuizzes;
+        }
       }
 
-      if (!quizzes || quizzes.length === 0) {
+      const visibleQuizzes = (quizzes || []).filter(
+        (quiz) => quiz && (quiz.is_published === true || (quiz as { status?: string | null }).status === "published")
+      );
+
+      if (visibleQuizzes.length === 0) {
         return [];
       }
 
       // Get unique creator IDs
-      const creatorIds = [...new Set(quizzes.map(q => q.created_by).filter(Boolean))];
+      const creatorIds = [...new Set(
+        visibleQuizzes
+          .filter((q) => !q.is_anonymous)
+          .map(q => q.created_by)
+          .filter(Boolean)
+      )];
 
       // Fetch creators separately
       let creatorsMap: Record<string, CreatorInfo> = {};
@@ -152,9 +177,9 @@ export const usePublishedQuizzes = () => {
       }
 
       // Merge quizzes with creators
-      return quizzes.map(quiz => ({
+      return visibleQuizzes.map(quiz => ({
         ...quiz,
-        creator: quiz.created_by ? creatorsMap[quiz.created_by] || null : null,
+        creator: !quiz.is_anonymous && quiz.created_by ? creatorsMap[quiz.created_by] || null : null,
       })) as Quiz[];
     },
   });
@@ -167,16 +192,34 @@ export const useQuizWithQuestions = (quizId: string | null) => {
     queryFn: async () => {
       if (!quizId) return null;
 
-      const { data: quiz, error: quizError } = await supabase
-        .from("quizzes")
+      const { data: viewQuiz, error: viewError } = await supabase
+        .from("quizzes_public")
         .select("*")
         .eq("id", quizId)
         .single();
 
-      if (quizError) throw quizError;
+      let quiz = viewQuiz;
+
+      if (!quiz) {
+        const { data: tableQuiz, error: tableError } = await supabase
+          .from("quizzes")
+          .select("*")
+          .eq("id", quizId)
+          .single();
+
+        if (tableError && viewError) {
+          throw tableError;
+        }
+
+        quiz = tableQuiz;
+      }
+
+      if (!quiz) {
+        throw viewError ?? new Error("Quiz not found");
+      }
 
       let creator: CreatorInfo | null = null;
-      if (quiz?.created_by) {
+      if (quiz.created_by && !quiz.is_anonymous) {
         const creatorsMap = await fetchCreatorsMap([quiz.created_by]);
         creator = creatorsMap[quiz.created_by] || null;
       }
@@ -268,6 +311,7 @@ export const useCreateQuiz = () => {
       description?: string;
       image_url?: string;
       duration_seconds?: number;
+      is_anonymous?: boolean;
       questions?: QuestionInput[];
     }) => {
       console.log("Creating quiz...", quiz.title);
@@ -334,6 +378,7 @@ export const useCreateQuiz = () => {
           question_count: quiz.questions?.length || 0,
           is_published: false, // Not published until admin approves
           created_by: profileId,
+          is_anonymous: quiz.is_anonymous ?? false,
         })
         .select()
         .single();
@@ -478,13 +523,16 @@ export const useSubmitQuizResult = () => {
 
       const { data, error } = await supabase
         .from("quiz_results")
-        .insert({
+        .upsert({
           quiz_id: result.quiz_id,
           user_id: profile.id,
           score: result.score,
           max_score: result.max_score,
           percentile: result.percentile,
           answers: result.answers,
+          completed_at: new Date().toISOString(),
+        }, {
+          onConflict: "quiz_id,user_id",
         })
         .select()
         .single();
@@ -554,49 +602,114 @@ export const useMyQuizResults = () => {
         .eq("telegram_id", tgUser.id)
         .maybeSingle();
 
-      if (!profile) return [];
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
 
-      // Get quiz results with quiz info
-      const { data, error } = await supabase
+      const candidateUserIds = [...new Set([profile?.id, authUser?.id].filter(Boolean) as string[])];
+      if (candidateUserIds.length === 0) return [];
+
+      // Prefer completed_at. If the environment is on a legacy schema, fallback to created_at.
+      const primaryResultsRes = await supabase
         .from("quiz_results")
-        .select(`
-          id,
-          score,
-          max_score,
-          percentile,
-          created_at,
-          quiz:quizzes (
-            id,
-            title,
-            image_url,
-            question_count,
-            created_by
-          )
-        `)
-        .eq("user_id", profile.id)
-        .order("created_at", { ascending: false });
+        .select("id, score, max_score, percentile, completed_at, quiz_id")
+        .in("user_id", candidateUserIds)
+        .order("completed_at", { ascending: false });
 
-      if (error) throw error;
-      const results = data || [];
+      let rawResults: any[] = [];
 
-      const creatorIds = [
-        ...new Set(
-          results
-            .map(r => r.quiz?.created_by)
-            .filter(Boolean) as string[]
-        ),
+      if (primaryResultsRes.error) {
+        const legacyResultsRes = await supabase
+          .from("quiz_results")
+          .select("id, score, max_score, percentile, created_at, quiz_id")
+          .in("user_id", candidateUserIds)
+          .order("created_at", { ascending: false });
+
+        if (legacyResultsRes.error) throw primaryResultsRes.error;
+        rawResults = legacyResultsRes.data || [];
+      } else {
+        rawResults = primaryResultsRes.data || [];
+      }
+
+      const results = rawResults.map((row: any) => ({
+        ...row,
+        completed_at: row.completed_at || row.created_at || null,
+      }));
+
+      const quizIds = [
+        ...new Set(results.map((r: any) => r.quiz_id).filter(Boolean) as string[])
       ];
 
-      const creatorsMap = await fetchCreatorsMap(creatorIds);
+      let quizzesMap = new Map<string, any>();
+      if (quizIds.length > 0) {
+        let quizzes: any[] = [];
 
-      return results.map(r => ({
-        ...r,
-        quiz: r.quiz
-          ? {
-              ...r.quiz,
-              creator: r.quiz.created_by ? creatorsMap[r.quiz.created_by] || null : null,
+        const viewWithAnon = await supabase
+          .from("quizzes_public")
+          .select("id, title, image_url, question_count, created_by, is_anonymous")
+          .in("id", quizIds);
+
+        if (!viewWithAnon.error && (viewWithAnon.data?.length || 0) > 0) {
+          quizzes = viewWithAnon.data || [];
+        } else {
+          const viewLegacy = await supabase
+            .from("quizzes_public")
+            .select("id, title, image_url, question_count, created_by")
+            .in("id", quizIds);
+
+          if (!viewLegacy.error && (viewLegacy.data?.length || 0) > 0) {
+            quizzes = (viewLegacy.data || []).map((quiz: any) => ({
+              ...quiz,
+              is_anonymous: false,
+            }));
+          } else {
+            const tableWithAnon = await supabase
+              .from("quizzes")
+              .select("id, title, image_url, question_count, created_by, is_anonymous, is_published, status")
+              .in("id", quizIds);
+
+            if (!tableWithAnon.error && (tableWithAnon.data?.length || 0) > 0) {
+              quizzes = (tableWithAnon.data || [])
+                .filter((quiz: any) => quiz && (quiz.is_published !== false || quiz.status === "published"))
+                .map((quiz: any) => ({
+                  ...quiz,
+                  is_anonymous: quiz.is_anonymous === true,
+                }));
+            } else {
+              const tableLegacy = await supabase
+                .from("quizzes")
+                .select("id, title, image_url, question_count, created_by, is_published, status")
+                .in("id", quizIds);
+
+              quizzes = (tableLegacy.data || [])
+                .filter((quiz: any) => quiz && (quiz.is_published !== false || quiz.status === "published"))
+                .map((quiz: any) => ({
+                  ...quiz,
+                  is_anonymous: false,
+                }));
             }
-          : r.quiz,
+          }
+        }
+
+        const creatorIds = [
+          ...new Set((quizzes || []).map((q: any) => q.created_by).filter(Boolean) as string[])
+        ];
+        const creatorsMap = await fetchCreatorsMap(creatorIds);
+
+        quizzesMap = new Map(
+          (quizzes || []).map((quiz: any) => [
+            quiz.id,
+            {
+              ...quiz,
+              creator: quiz.created_by ? creatorsMap[quiz.created_by] || null : null,
+            }
+          ])
+        );
+      }
+
+      return results.map((r: any) => ({
+        ...r,
+        quiz: quizzesMap.get(r.quiz_id) || null,
       }));
     },
   });

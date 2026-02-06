@@ -60,6 +60,7 @@ export const useUserStats = () => {
         const [
           quizResultsRes,
           myQuizzesRes,
+          myTestsRes,
           likesGivenRes,
           challengesRes,
         ] = await Promise.all([
@@ -72,6 +73,12 @@ export const useUserStats = () => {
           // My quizzes (created) with like counts
           supabase
             .from("quizzes")
+            .select("id, like_count")
+            .eq("created_by", profileId),
+
+          // My personality tests (created) with like counts
+          supabase
+            .from("personality_tests")
             .select("id, like_count")
             .eq("created_by", profileId),
 
@@ -104,9 +111,13 @@ export const useUserStats = () => {
         const quizzesCreated = myQuizzesRes.data?.length || 0;
 
         // Total popcorns (likes received)
-        const totalPopcorns = myQuizzesRes.data?.reduce(
+        const quizPopcorns = myQuizzesRes.data?.reduce(
           (sum, quiz) => sum + (quiz.like_count || 0), 0
         ) || 0;
+        const testPopcorns = myTestsRes.data?.reduce(
+          (sum, test) => sum + (test.like_count || 0), 0
+        ) || 0;
+        const totalPopcorns = quizPopcorns + testPopcorns;
 
         // Likes given
         const totalLikesGiven = likesGivenRes.count || 0;

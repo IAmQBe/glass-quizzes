@@ -4,7 +4,10 @@ import { ArrowLeft, Plus, Trash2, Image, X, Upload, Loader2, Pencil, Sparkles, C
 import { useCreatePersonalityTest } from "@/hooks/usePersonalityTests";
 import { useImageUpload, resizeImage } from "@/hooks/useImageUpload";
 import { haptic } from "@/lib/telegram";
+import { formatQuestionCount } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { GifImage } from "@/components/GifImage";
+import { Switch } from "@/components/ui/switch";
 
 interface CreatePersonalityTestScreenProps {
   onBack: () => void;
@@ -38,6 +41,7 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
   const [description, setDescription] = useState("");
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState("");
+  const [isAnonymous, setIsAnonymous] = useState(false);
 
   // Results (characters)
   const [results, setResults] = useState<ResultDraft[]>([
@@ -214,6 +218,7 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
         title,
         description,
         image_url: imageUrl || undefined,
+        is_anonymous: isAnonymous,
         results: validResults,
         questions: questions,
       });
@@ -249,7 +254,7 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
 
         {coverPreview ? (
           <div className="relative rounded-xl overflow-hidden">
-            <img src={coverPreview} alt="" className="w-full h-40 object-cover" />
+            <GifImage src={coverPreview} alt="" className="w-full h-40 object-cover" />
             <button
               className="absolute top-2 right-2 p-2 rounded-full bg-black/50 text-white"
               onClick={() => { setCoverImage(null); setCoverPreview(""); }}
@@ -288,6 +293,23 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Узнай какой персонаж тебе ближе всего..."
           className="w-full p-3 rounded-xl bg-muted border border-border text-foreground min-h-[80px] resize-none"
+        />
+      </div>
+
+      {/* Anonymous publishing */}
+      <div className="p-4 rounded-xl bg-card border border-border flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-foreground">Публиковать анонимно</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Лайки начисляются, но не идут в лидерборд.
+          </p>
+        </div>
+        <Switch
+          checked={isAnonymous}
+          onCheckedChange={(checked) => {
+            haptic.selection();
+            setIsAnonymous(checked);
+          }}
         />
       </div>
     </div>
@@ -426,13 +448,13 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
       {/* Preview card */}
       <div className="p-4 rounded-xl bg-card border border-border space-y-3">
         {coverPreview && (
-          <img src={coverPreview} alt="" className="w-full h-32 object-cover rounded-xl" />
+          <GifImage src={coverPreview} alt="" className="w-full h-32 object-cover rounded-xl" />
         )}
         <h3 className="font-semibold text-lg text-foreground">{title}</h3>
         {description && <p className="text-sm text-muted-foreground">{description}</p>}
 
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span>{questions.length} вопросов</span>
+          <span>{formatQuestionCount(questions.length)}</span>
           <span>{results.filter(r => r.title.trim()).length} результатов</span>
         </div>
       </div>

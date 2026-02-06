@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getTelegramUser, haptic } from "@/lib/telegram";
+import { toast } from "@/hooks/use-toast";
 
 interface CreatorInfo {
   id: string;
@@ -79,81 +80,96 @@ export const useFavorites = () => {
       const profileId = await getProfileId();
       if (!profileId) return [];
 
-      const { data, error } = await supabase
-        .from("favorites")
-        .select(`
-          id,
-          quiz_id,
-          test_id,
-          created_at,
-          quizzes (
-            id,
-            title,
-            description,
-            image_url,
-            question_count,
-            participant_count,
-            duration_seconds,
-            rating,
-            rating_count,
-            like_count,
-            save_count,
-            status,
-            created_by,
-            created_at
-          ),
-          personality_tests (
-            id,
-            title,
-            description,
-            image_url,
-            question_count,
-            result_count,
-            participant_count,
-            like_count,
-            save_count,
-            status,
-            created_by,
-            created_at
-          )
-        `)
-        .eq("user_id", profileId)
-        .order("created_at", { ascending: false });
+      const [{ data: favoritesData, error: favoritesError }, { data: testFavorites, error: testFavError }] = await Promise.all([
+        supabase
+          .from("favorites")
+          .select("id, quiz_id, created_at")
+          .eq("user_id", profileId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("personality_test_favorites")
+          .select("id, test_id, created_at")
+          .eq("user_id", profileId)
+          .order("created_at", { ascending: false }),
+      ]);
 
-      if (error) {
-        console.error("Error fetching favorites:", error);
-        return [];
+      if (favoritesError) {
+        console.error("Error fetching quiz favorites:", favoritesError);
       }
-
-      const favorites = data || [];
-
-      const { data: testFavorites, error: testFavError } = await supabase
-        .from("personality_test_favorites")
-        .select(`
-          id,
-          test_id,
-          created_at,
-          personality_tests (
-            id,
-            title,
-            description,
-            image_url,
-            question_count,
-            result_count,
-            participant_count,
-            like_count,
-            save_count,
-            status,
-            created_at,
-            created_by
-          )
-        `)
-        .eq("user_id", profileId)
-        .order("created_at", { ascending: false });
-
       if (testFavError) {
         console.error("Error fetching test favorites:", testFavError);
       }
+
+      const favoritesList = favoritesData || [];
+      const quizIds = [
+        ...new Set(favoritesList.map((f: any) => f.quiz_id).filter(Boolean) as string[])
+      ];
+      const testIds = [
+        ...new Set((testFavorites || []).map((f: any) => f.test_id).filter(Boolean) as string[])
+      ];
+
+      const [quizzesRes, testsRes] = await Promise.all([
+        quizIds.length > 0
+          ? supabase
+              .from("quizzes_public")
+              .select("id, title, description, image_url, question_count, participant_count, duration_seconds, rating, rating_count, like_count, save_count, created_by, created_at, is_anonymous")
+              .in("id", quizIds)
+          : Promise.resolve({ data: [] as any[] }),
+        testIds.length > 0
+          ? supabase
+              .from("personality_tests_public")
+              .select("id, title, description, image_url, question_count, result_count, participant_count, like_count, save_count, created_by, created_at, is_anonymous")
+              .in("id", testIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      if ("error" in quizzesRes && quizzesRes.error) {
+        console.error("Error fetching favorite quizzes details:", quizzesRes.error);
+      }
+      if ("error" in testsRes && testsRes.error) {
+        console.error("Error fetching favorite tests details:", testsRes.error);
+      }
+
+      const quizzes = quizzesRes.data || [];
+      const tests = testsRes.data || [];
+
+      const creatorIds = [
+        ...new Set(
+          quizzes
+            .map((q: any) => q.created_by)
+            .concat(tests.map((t: any) => t.created_by))
+            .filter(Boolean) as string[]
+        ),
+      ];
+      const creatorsMap = await fetchCreatorsMap(creatorIds);
+
+      const quizzesMap = new Map(
+        quizzes.map((q: any) => [
+          q.id,
+          {
+            ...q,
+            creator: q.created_by ? creatorsMap[q.created_by] || null : null,
+          }
+        ])
+      );
+      const testsMap = new Map(
+        tests.map((t: any) => [
+          t.id,
+          {
+            ...t,
+            creator: t.created_by ? creatorsMap[t.created_by] || null : null,
+          }
+        ])
+      );
+
+      const normalizedFavorites = favoritesList.map((f: any) => ({
+        id: f.id,
+        quiz_id: f.quiz_id,
+        test_id: null,
+        created_at: f.created_at,
+        quizzes: f.quiz_id ? quizzesMap.get(f.quiz_id) || null : null,
+        personality_tests: null,
+      }));
 
       const testFavoriteRows = (testFavorites || []).map((f: any) => ({
         id: f.id,
@@ -161,45 +177,14 @@ export const useFavorites = () => {
         test_id: f.test_id,
         created_at: f.created_at,
         quizzes: null,
-        personality_tests: f.personality_tests,
+        personality_tests: f.test_id ? testsMap.get(f.test_id) || null : null,
       }));
 
-      const creatorIds = [
-        ...new Set(
-          favorites
-            .flatMap(f => [f.quizzes?.created_by, f.personality_tests?.created_by])
-            .concat(
-              testFavoriteRows.map((f: any) => f.personality_tests?.created_by)
-            )
-            .filter(Boolean) as string[]
-        ),
-      ];
-
-      const creatorsMap = await fetchCreatorsMap(creatorIds);
-
-      const withCreators = (rows: any[]) => rows.map(f => ({
-        ...f,
-        quizzes: f.quizzes
-          ? {
-              ...f.quizzes,
-              creator: f.quizzes.created_by ? creatorsMap[f.quizzes.created_by] || null : null,
-            }
-          : f.quizzes,
-        personality_tests: f.personality_tests
-          ? {
-              ...f.personality_tests,
-              creator: f.personality_tests.created_by
-                ? creatorsMap[f.personality_tests.created_by] || null
-                : null,
-            }
-          : f.personality_tests,
-      }));
-
-      const merged = [...favorites, ...testFavoriteRows].sort((a, b) =>
+      const merged = [...normalizedFavorites, ...testFavoriteRows].sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
 
-      return withCreators(merged);
+      return merged;
     },
   });
 };
@@ -215,10 +200,9 @@ export const useTestFavoriteIds = () => {
       if (!profileId) return new Set<string>();
 
       const { data, error } = await supabase
-        .from("favorites")
+        .from("personality_test_favorites")
         .select("test_id")
-        .eq("user_id", profileId)
-        .not("test_id", "is", null);
+        .eq("user_id", profileId);
 
       if (error) {
         console.error("Error fetching test favorite IDs:", error);
@@ -246,7 +230,7 @@ export const useToggleTestFavorite = () => {
       if (isFavorite) {
         // Remove favorite
         const { error } = await supabase
-          .from("favorites")
+          .from("personality_test_favorites")
           .delete()
           .eq("user_id", profileId)
           .eq("test_id", testId);
@@ -267,7 +251,7 @@ export const useToggleTestFavorite = () => {
       } else {
         // Add favorite
         const { error } = await supabase
-          .from("favorites")
+          .from("personality_test_favorites")
           .insert({ user_id: profileId, test_id: testId });
 
         if (error) throw error;
@@ -308,10 +292,16 @@ export const useToggleTestFavorite = () => {
       if (context?.previous) {
         queryClient.setQueryData(["testFavoriteIds"], context.previous);
       }
+      toast({
+        title: "Ошибка",
+        description: "Не удалось обновить избранное",
+        variant: "destructive",
+      });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["favorites"] });
       queryClient.invalidateQueries({ queryKey: ["testFavoriteIds"] });
+      queryClient.invalidateQueries({ queryKey: ["personalityTestFavorites"] });
       queryClient.invalidateQueries({ queryKey: ["personalityTests"] });
     },
   });
@@ -397,6 +387,11 @@ export const useToggleFavorite = () => {
       if (context?.previousFavorites) {
         queryClient.setQueryData(["favoriteIds"], context.previousFavorites);
       }
+      toast({
+        title: "Ошибка",
+        description: "Не удалось обновить избранное",
+        variant: "destructive",
+      });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["favorites"] });

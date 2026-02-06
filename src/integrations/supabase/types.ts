@@ -606,6 +606,7 @@ export type Database = {
           id: string
           image_url: string | null
           is_published: boolean
+          is_anonymous: boolean
           like_count: number
           participant_count: number
           question_count: number
@@ -623,6 +624,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_published?: boolean
+          is_anonymous?: boolean
           like_count?: number
           participant_count?: number
           question_count?: number
@@ -640,6 +642,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_published?: boolean
+          is_anonymous?: boolean
           like_count?: number
           participant_count?: number
           question_count?: number
@@ -769,7 +772,55 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      quizzes_public: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          duration_seconds: number
+          id: string
+          image_url: string | null
+          is_published: boolean
+          is_anonymous: boolean
+          like_count: number
+          participant_count: number
+          question_count: number
+          rating: number | null
+          rating_count: number | null
+          save_count: number
+          title: string
+          updated_at: string
+          status: string | null
+          rejection_reason: string | null
+          submitted_at: string | null
+          moderated_by: string | null
+          moderated_at: string | null
+        }
+        Insert: { [key: string]: never }
+        Update: { [key: string]: never }
+        Relationships: []
+      }
+      personality_tests_public: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          image_url: string | null
+          is_published: boolean
+          is_anonymous: boolean
+          like_count: number
+          participant_count: number
+          question_count: number
+          result_count: number
+          save_count: number
+          title: string
+          updated_at: string
+        }
+        Insert: { [key: string]: never }
+        Update: { [key: string]: never }
+        Relationships: []
+      }
     }
     Functions: {
       can_challenge_user: {

@@ -115,6 +115,26 @@ export const useEnsureProfile = () => {
 
       console.log("Ensuring profile for telegram_id:", tgData.telegram_id);
 
+      const { data: authUserData, error: authUserError } = await supabase.auth.getUser();
+      if (authUserError) {
+        console.warn("Error fetching auth user:", authUserError.message);
+      }
+
+      let authUserId = authUserData.user?.id || null;
+      if (!authUserId) {
+        const { data: signInData, error: signInError } = await supabase.auth.signInAnonymously();
+        if (signInError) {
+          console.error("Anonymous auth failed during profile init:", signInError.message);
+          return null;
+        }
+        authUserId = signInData.user?.id || null;
+      }
+
+      if (!authUserId) {
+        console.error("No auth user id available for profile initialization");
+        return null;
+      }
+
       // First try to get existing profile
       const { data: existing, error: fetchError } = await supabase
         .from("profiles")
@@ -154,12 +174,11 @@ export const useEnsureProfile = () => {
 
       // Profile doesn't exist - try upsert (works better with RLS)
       console.log("Creating new profile...");
-      const newId = crypto.randomUUID();
 
       const { data: created, error: createError } = await supabase
         .from("profiles")
         .upsert({
-          id: newId,
+          id: authUserId,
           telegram_id: tgData.telegram_id,
           username: tgData.username,
           first_name: tgData.first_name,
@@ -167,7 +186,7 @@ export const useEnsureProfile = () => {
           avatar_url: tgData.avatar_url,
           has_telegram_premium: tgData.has_telegram_premium,
         }, {
-          onConflict: 'telegram_id',
+          onConflict: 'id',
         })
         .select()
         .single();
@@ -177,8 +196,19 @@ export const useEnsureProfile = () => {
         console.error("Error code:", createError.code);
         console.error("Error details:", createError.details);
         console.error("Error hint:", createError.hint);
+
+        const { data: fallbackProfile, error: fallbackError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("telegram_id", tgData.telegram_id)
+          .maybeSingle();
+
+        if (fallbackError) {
+          console.error("Fallback profile lookup failed:", fallbackError.message);
+        }
+
         // Don't throw - allow app to work without profile
-        return null;
+        return (fallbackProfile as Profile | null) || null;
       }
 
       console.log("Profile created:", created.id);

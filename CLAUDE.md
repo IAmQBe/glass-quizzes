@@ -599,6 +599,10 @@ Full set: button, card, dialog, drawer, toast, tabs, form, input, select, checkb
 | 2026-02-03 | Separate queries for creator | Убраны JOINs, отдельные запросы для избежания RLS проблем | useQuizzes, usePersonalityTests |
 | 2026-02-03 | Improved shareReferralLink | Используем tg.openTelegramLink с share URL вместо switchInlineQuery | telegram.ts |
 | 2026-02-03 | Fallback referral code | Если нет referral_code, используем telegram_id | ProfileScreen |
+| 2026-02-06 | Popcorn icon refresh | Новый SVG попкорна + золотой shimmer в active/pressed state | icons, index.css |
+| 2026-02-06 | Join squad CTA particles | Летающие звёздочки вокруг кнопки вступления в попкорн-команду | Squad/Index UI |
+| 2026-02-06 | GIF animation support | Не ресайзим GIF при загрузке + отображаем анимированными в карточках/баннерах | useImageUpload, GifImage |
+| 2026-02-06 | GIF animation toggle | Переключатель в настройках для отключения анимаций GIF | ProfileScreen, useGifAnimations |
 
 ## TODO / Backlog
 

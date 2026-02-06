@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Trash2, Eye, EyeOff, Loader2, Trophy, Settings, Gift, ExternalLink, BarChart3, Sparkles, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Eye, EyeOff, Loader2, Trophy, Settings, Gift, ExternalLink, BarChart3, Sparkles, Pencil, CheckCircle2, XCircle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { haptic } from "@/lib/telegram";
@@ -9,13 +9,20 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useAllTasks, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
 import { AdminAnalytics } from "@/components/AdminAnalytics";
-import { usePendingPersonalityTests, useModeratePersonalityTest } from "@/hooks/usePersonalityTests";
+import { useAdminPersonalityTests, useModeratePersonalityTest, usePersonalityTestWithDetails } from "@/hooks/usePersonalityTests";
+import { useQuizWithQuestions } from "@/hooks/useQuizzes";
+import { formatQuestionCount } from "@/lib/utils";
+import { PredictionModerationTab } from "@/components/admin/PredictionModerationTab";
+import { RolePreviewMode } from "@/hooks/useRolePreview";
 
 interface AdminPanelProps {
   onBack: () => void;
+  onOpenPrediction?: (predictionId: string) => void;
+  rolePreviewMode: RolePreviewMode;
+  onRolePreviewChange: (mode: RolePreviewMode) => void;
 }
 
-type Tab = "analytics" | "quizzes" | "tests" | "banners" | "tasks" | "seasons";
+type Tab = "analytics" | "predictions" | "quizzes" | "tests" | "banners" | "tasks" | "seasons";
 
 interface LeaderboardConfig {
   season_duration_days: number;
@@ -26,9 +33,38 @@ interface LeaderboardConfig {
   };
 }
 
-const TASK_ICONS = ["🎯", "📢", "👥", "🎁", "⭐", "🔔", "💎", "🏆"];
+type ModerationPreviewItem = {
+  type: "quiz" | "test";
+  id: string;
+};
 
-export const AdminPanel = ({ onBack }: AdminPanelProps) => {
+type CreatorRecord = {
+  id: string;
+  first_name: string | null;
+  username: string | null;
+};
+
+const TASK_ICONS = ["🎯", "📢", "👥", "🎁", "⭐", "🔔", "💎", "🏆"];
+const TASK_TYPE_OPTIONS = [
+  { value: "link", label: "Открыть ссылку" },
+  { value: "subscribe_channel", label: "Подписка на канал" },
+  { value: "channel_boost", label: "Буст канала" },
+  { value: "telegram_premium", label: "Telegram Premium" },
+];
+
+const TASK_TYPE_LABELS: Record<string, string> = {
+  link: "Ссылка",
+  subscribe_channel: "Подписка",
+  channel_boost: "Буст",
+  telegram_premium: "Premium",
+};
+const ROLE_PREVIEW_OPTIONS: Array<{ mode: RolePreviewMode; label: string }> = [
+  { mode: "real", label: "Реально" },
+  { mode: "admin", label: "Как admin" },
+  { mode: "user", label: "Как user" },
+];
+
+export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePreviewChange }: AdminPanelProps) => {
   const [activeTab, setActiveTab] = useState<Tab>("analytics");
   const [showNewTask, setShowNewTask] = useState(false);
   const [showNewQuiz, setShowNewQuiz] = useState(false);
@@ -40,6 +76,16 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     task_type: "link",
     action_url: "",
     icon: "🎯",
+  });
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTask, setEditTask] = useState({
+    title: "",
+    description: "",
+    reward_amount: 10,
+    task_type: "link",
+    action_url: "",
+    icon: "🎯",
+    is_active: true,
   });
   const [newQuiz, setNewQuiz] = useState({
     title: "",
@@ -64,6 +110,8 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     link_type: "external" as "external" | "internal",
     is_active: true,
   });
+  const [previewItem, setPreviewItem] = useState<ModerationPreviewItem | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const queryClient = useQueryClient();
 
   // Fetch all quizzes (admin view)
@@ -99,8 +147,41 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
   const deleteTask = useDeleteTask();
 
   // Personality Tests
-  const { data: pendingTests = [], isLoading: testsLoading } = usePendingPersonalityTests();
+  const { data: allTests = [], isLoading: testsLoading } = useAdminPersonalityTests();
   const moderateTest = useModeratePersonalityTest();
+
+  const { data: previewQuizData, isLoading: previewQuizLoading } = useQuizWithQuestions(
+    previewItem?.type === "quiz" ? previewItem.id : null
+  );
+  const { data: previewTestData, isLoading: previewTestLoading } = usePersonalityTestWithDetails(
+    previewItem?.type === "test" ? previewItem.id : null
+  );
+
+  const creatorIds = useMemo(() => {
+    const source = [
+      ...quizzes.map((quiz: any) => quiz.created_by).filter(Boolean),
+      ...allTests.map((test: any) => test.created_by).filter(Boolean),
+    ] as string[];
+    return Array.from(new Set(source));
+  }, [quizzes, allTests]);
+
+  const { data: creatorsMap = {} } = useQuery({
+    queryKey: ["admin", "creators", creatorIds.join(",")],
+    enabled: creatorIds.length > 0,
+    queryFn: async (): Promise<Record<string, CreatorRecord>> => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, first_name, username")
+        .in("id", creatorIds);
+
+      if (error) throw error;
+      const rows = (data || []) as CreatorRecord[];
+      return rows.reduce<Record<string, CreatorRecord>>((acc, row) => {
+        acc[row.id] = row;
+        return acc;
+      }, {});
+    },
+  });
 
   // Fetch leaderboard config
   const { data: leaderboardConfig, isLoading: configLoading } = useQuery({
@@ -144,6 +225,62 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
       queryClient.invalidateQueries({ queryKey: ["admin", "quizzes"] });
       queryClient.invalidateQueries({ queryKey: ["quizzes"] });
       toast({ title: "Quiz updated" });
+    },
+  });
+
+  // Moderate quiz with status + rejection reason
+  const moderateQuiz = useMutation({
+    mutationFn: async ({
+      quizId,
+      action,
+      rejectionReason,
+    }: {
+      quizId: string;
+      action: "approve" | "reject";
+      rejectionReason?: string;
+    }) => {
+      const now = new Date().toISOString();
+      const normalizedReason = rejectionReason?.trim() || null;
+      const primaryPayload = action === "approve"
+        ? {
+            is_published: true,
+            status: "published",
+            rejection_reason: null,
+            moderated_at: now,
+          }
+        : {
+            is_published: false,
+            status: "rejected",
+            rejection_reason: normalizedReason || "Причина не указана",
+            moderated_at: now,
+          };
+
+      const { data, error } = await (supabase as any)
+        .from("quizzes")
+        .update(primaryPayload)
+        .eq("id", quizId)
+        .select()
+        .single();
+
+      if (error) {
+        // Legacy fallback if moderation columns are missing
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("quizzes")
+          .update({ is_published: action === "approve" })
+          .eq("id", quizId)
+          .select()
+          .single();
+
+        if (fallbackError) throw error;
+        return fallbackData;
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["quiz"] });
     },
   });
 
@@ -320,6 +457,11 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
       toast({ title: "Введите название задания", variant: "destructive" });
       return;
     }
+    const requiresActionUrl = newTask.task_type === "link" || newTask.task_type === "subscribe_channel" || newTask.task_type === "channel_boost";
+    if (requiresActionUrl && !newTask.action_url.trim()) {
+      toast({ title: "Укажите ссылку или канал для задания", variant: "destructive" });
+      return;
+    }
     createTask.mutate({
       title: newTask.title,
       description: newTask.description || null,
@@ -333,6 +475,37 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
     });
     setNewTask({ title: "", description: "", reward_amount: 10, task_type: "link", action_url: "", icon: "🎯" });
     setShowNewTask(false);
+  };
+
+  const startEditTask = (task: any) => {
+    setEditingTaskId(task.id);
+    setEditTask({
+      title: task.title || "",
+      description: task.description || "",
+      reward_amount: Number(task.reward_amount || 0),
+      task_type: task.task_type || "link",
+      action_url: task.action_url || "",
+      icon: task.icon || "🎯",
+      is_active: Boolean(task.is_active),
+    });
+  };
+
+  const getCreatorDisplay = (createdBy: string | null, isAnonymous?: boolean) => {
+    if (isAnonymous) return "UNNAMED";
+    if (!createdBy) return "Автор неизвестен";
+    const creator = creatorsMap[createdBy];
+    if (!creator) return `Автор ${createdBy.slice(0, 6)}`;
+    return creator.first_name || creator.username || `Автор ${createdBy.slice(0, 6)}`;
+  };
+
+  const openPreview = (item: ModerationPreviewItem, initialRejectReason?: string | null) => {
+    setRejectReason(initialRejectReason || "");
+    setPreviewItem(item);
+  };
+
+  const closePreview = () => {
+    setPreviewItem(null);
+    setRejectReason("");
   };
 
   return (
@@ -352,9 +525,40 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
         </h1>
       </div>
 
+      <div className="tg-section p-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-medium text-foreground">Режим просмотра приложения</p>
+          {rolePreviewMode !== "real" && (
+            <span className="text-xs px-2 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              DEBUG
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {ROLE_PREVIEW_OPTIONS.map((option) => (
+            <button
+              key={option.mode}
+              className={`py-2 px-2 rounded-lg text-xs font-medium transition-colors ${rolePreviewMode === option.mode
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-foreground"
+                }`}
+              onClick={() => {
+                haptic.selection();
+                onRolePreviewChange(option.mode);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          Меняется только отображение интерфейса. Роль в базе не изменяется.
+        </p>
+      </div>
+
       {/* Tabs */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-        {(["analytics", "quizzes", "tests", "banners", "tasks", "seasons"] as Tab[]).map((tab) => (
+        {(["analytics", "predictions", "quizzes", "tests", "banners", "tasks", "seasons"] as Tab[]).map((tab) => (
           <button
             key={tab}
             className={`py-2 px-3 rounded-xl font-medium transition-colors whitespace-nowrap text-sm flex items-center gap-1 ${activeTab === tab
@@ -367,6 +571,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
             }}
           >
             {tab === "analytics" && <><BarChart3 className="w-4 h-4" /> Stats</>}
+            {tab === "predictions" && <>Predictions</>}
             {tab === "quizzes" && `Quizzes (${quizzes.length})`}
             {tab === "tests" && <><Sparkles className="w-4 h-4" /> Tests</>}
             {tab === "banners" && `Banners (${banners.length})`}
@@ -380,6 +585,10 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
       <div className="flex-1 space-y-3 overflow-y-auto">
         {activeTab === "analytics" && (
           <AdminAnalytics />
+        )}
+
+        {activeTab === "predictions" && (
+          <PredictionModerationTab onOpenPrediction={onOpenPrediction} />
         )}
 
         {activeTab === "quizzes" && (
@@ -567,7 +776,7 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                         <h3 className="font-semibold text-foreground">{test.title}</h3>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {test.question_count} вопросов · {test.result_count} результатов · {test.participant_count} участий
+                        {formatQuestionCount(test.question_count)} · {test.result_count} результатов · {test.participant_count} участий
                       </p>
                       {test.description && (
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{test.description}</p>
@@ -945,14 +1154,37 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
                 </div>
 
                 <div>
-                  <label className="text-sm text-muted-foreground mb-2 block">Ссылка</label>
-                  <Input
-                    value={newTask.action_url}
-                    onChange={(e) => setNewTask({ ...newTask, action_url: e.target.value })}
-                    placeholder="https://t.me/channel"
-                    className="bg-secondary border-0"
-                  />
+                  <label className="text-sm text-muted-foreground mb-2 block">Тип задания</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {TASK_TYPE_OPTIONS.map((type) => (
+                      <button
+                        key={type.value}
+                        type="button"
+                        onClick={() => setNewTask({ ...newTask, task_type: type.value })}
+                        className={`px-2 py-2 rounded-lg text-xs font-medium transition-colors ${newTask.task_type === type.value
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary text-foreground"
+                          }`}
+                      >
+                        {type.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                {newTask.task_type !== "telegram_premium" && (
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-2 block">
+                      {newTask.task_type === "channel_boost" ? "Канал для буста" : "Ссылка / канал"}
+                    </label>
+                    <Input
+                      value={newTask.action_url}
+                      onChange={(e) => setNewTask({ ...newTask, action_url: e.target.value })}
+                      placeholder={newTask.task_type === "link" ? "https://..." : "https://t.me/channel или @channel"}
+                      className="bg-secondary border-0"
+                    />
+                  </div>
+                )}
 
                 <div className="flex gap-4">
                   <div className="flex-1">
@@ -1016,47 +1248,204 @@ export const AdminPanel = ({ onBack }: AdminPanelProps) => {
             ) : (
               tasks.map((task: any) => (
                 <div key={task.id} className="tg-section p-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-2xl">{task.icon}</span>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-foreground">{task.title}</h3>
-                      {task.description && (
-                        <p className="text-sm text-muted-foreground">{task.description}</p>
-                      )}
-                      {task.action_url && (
-                        <p className="text-xs text-primary flex items-center gap-1 mt-1">
-                          <ExternalLink className="w-3 h-3" />
-                          {task.action_url}
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <span className="text-sm font-semibold text-primary">+{task.reward_amount}</span>
-                      <p className="text-xs text-muted-foreground">попкорнов</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Активно</span>
-                      <Switch
-                        checked={task.is_active}
-                        onCheckedChange={() => {
-                          updateTask.mutate({ id: task.id, is_active: !task.is_active });
-                        }}
-                      />
-                    </div>
-                    <button
-                      className="p-2 bg-destructive/10 rounded-lg text-destructive"
-                      onClick={() => {
-                        haptic.notification('warning');
-                        if (confirm("Удалить задание?")) {
-                          deleteTask.mutate(task.id);
-                        }
-                      }}
+                  {editingTaskId === task.id ? (
+                    <motion.div
+                      className="space-y-4"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-2 block">Название</label>
+                        <Input
+                          value={editTask.title}
+                          onChange={(e) => setEditTask({ ...editTask, title: e.target.value })}
+                          className="bg-secondary border-0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-2 block">Описание</label>
+                        <Input
+                          value={editTask.description}
+                          onChange={(e) => setEditTask({ ...editTask, description: e.target.value })}
+                          className="bg-secondary border-0"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm text-muted-foreground mb-2 block">Тип задания</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {TASK_TYPE_OPTIONS.map((type) => (
+                            <button
+                              key={type.value}
+                              type="button"
+                              onClick={() => setEditTask({ ...editTask, task_type: type.value })}
+                              className={`px-2 py-2 rounded-lg text-xs font-medium transition-colors ${editTask.task_type === type.value
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-secondary text-foreground"
+                                }`}
+                            >
+                              {type.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {editTask.task_type !== "telegram_premium" && (
+                        <div>
+                          <label className="text-sm text-muted-foreground mb-2 block">Ссылка / канал</label>
+                          <Input
+                            value={editTask.action_url}
+                            onChange={(e) => setEditTask({ ...editTask, action_url: e.target.value })}
+                            className="bg-secondary border-0"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex gap-4">
+                        <div className="flex-1">
+                          <label className="text-sm text-muted-foreground mb-2 block">Награда</label>
+                          <Input
+                            type="number"
+                            value={editTask.reward_amount}
+                            onChange={(e) => setEditTask({ ...editTask, reward_amount: parseInt(e.target.value) || 0 })}
+                            className="bg-secondary border-0"
+                            min={1}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm text-muted-foreground mb-2 block">Иконка</label>
+                          <div className="flex gap-1 flex-wrap">
+                            {TASK_ICONS.map((icon) => (
+                              <button
+                                key={icon}
+                                type="button"
+                                className={`w-9 h-9 rounded-lg flex items-center justify-center text-lg ${editTask.icon === icon ? "bg-primary/20" : "bg-secondary"
+                                  }`}
+                                onClick={() => setEditTask({ ...editTask, icon })}
+                              >
+                                {icon}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Активно</span>
+                        <Switch
+                          checked={editTask.is_active}
+                          onCheckedChange={(checked) => setEditTask({ ...editTask, is_active: checked })}
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          className="flex-1 tg-button py-2"
+                          onClick={() => {
+                            const requiresActionUrl = editTask.task_type === "link" || editTask.task_type === "subscribe_channel" || editTask.task_type === "channel_boost";
+                            if (!editTask.title.trim()) {
+                              toast({ title: "Введите название задания", variant: "destructive" });
+                              return;
+                            }
+                            if (requiresActionUrl && !editTask.action_url.trim()) {
+                              toast({ title: "Укажите ссылку или канал", variant: "destructive" });
+                              return;
+                            }
+
+                            updateTask.mutate(
+                              {
+                                id: task.id,
+                                title: editTask.title,
+                                description: editTask.description || null,
+                                reward_amount: editTask.reward_amount,
+                                task_type: editTask.task_type,
+                                action_url: editTask.task_type === "telegram_premium" ? null : (editTask.action_url || null),
+                                icon: editTask.icon,
+                                is_active: editTask.is_active,
+                              },
+                              {
+                                onSuccess: () => {
+                                  setEditingTaskId(null);
+                                  toast({ title: "Задание обновлено" });
+                                },
+                              }
+                            );
+                          }}
+                          disabled={updateTask.isPending}
+                        >
+                          {updateTask.isPending ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Сохранить"}
+                        </button>
+                        <button
+                          className="tg-button-secondary py-2 px-4"
+                          onClick={() => setEditingTaskId(null)}
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3 mb-3">
+                        <span className="text-2xl">{task.icon}</span>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-foreground">{task.title}</h3>
+                          {task.description && (
+                            <p className="text-sm text-muted-foreground">{task.description}</p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                              {TASK_TYPE_LABELS[task.task_type] || task.task_type}
+                            </span>
+                            {task.action_url && (
+                              <p className="text-xs text-primary flex items-center gap-1">
+                                <ExternalLink className="w-3 h-3" />
+                                {task.action_url}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-sm font-semibold text-primary">+{task.reward_amount}</span>
+                          <p className="text-xs text-muted-foreground">попкорнов</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">Активно</span>
+                          <Switch
+                            checked={task.is_active}
+                            onCheckedChange={() => {
+                              updateTask.mutate({ id: task.id, is_active: !task.is_active });
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="px-3 py-2 rounded-lg bg-secondary text-foreground text-sm flex items-center gap-1"
+                            onClick={() => {
+                              haptic.selection();
+                              startEditTask(task);
+                            }}
+                          >
+                            <Pencil className="w-4 h-4" />
+                            Edit
+                          </button>
+                          <button
+                            className="p-2 bg-destructive/10 rounded-lg text-destructive"
+                            onClick={() => {
+                              haptic.notification('warning');
+                              if (confirm("Удалить задание?")) {
+                                deleteTask.mutate(task.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))
             )}

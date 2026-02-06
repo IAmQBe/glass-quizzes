@@ -5,6 +5,7 @@ import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { useSquads, useMySquad, useJoinSquad, useCanChangeSquad, Squad } from "@/hooks/useSquads";
 import { haptic, getTelegram } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
+import { SquadAvatar } from "@/components/SquadAvatar";
 
 interface SquadScreenProps {
   squad: Squad;
@@ -118,15 +119,13 @@ export const SquadScreen = ({ squad, onBack, onQuizSelect, onTestSelect }: Squad
             onClick={handleOpenChannel}
             className="w-24 h-24 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center mb-4 shadow-lg"
           >
-            {squad.avatar_url ? (
-              <img
-                src={squad.avatar_url}
-                alt={squad.title}
-                className="w-full h-full rounded-2xl object-cover"
-              />
-            ) : (
-              <PopcornIcon className="w-12 h-12 text-white" />
-            )}
+            <SquadAvatar
+              avatarUrl={squad.avatar_url}
+              username={squad.username}
+              alt={squad.title}
+              className="w-full h-full rounded-2xl object-cover"
+              fallback={<PopcornIcon className="w-12 h-12 text-white" />}
+            />
           </button>
 
           {/* Title */}

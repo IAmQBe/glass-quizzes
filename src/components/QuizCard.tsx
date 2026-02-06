@@ -1,8 +1,10 @@
 import { motion } from "framer-motion";
-import { Users, HelpCircle, Clock, Check } from "lucide-react";
-import { haptic, getTelegram } from "@/lib/telegram";
+import { Users, HelpCircle, Clock, Check, Share2, VenetianMask } from "lucide-react";
+import { haptic, getTelegram, shareQuizInvite } from "@/lib/telegram";
+import { formatQuestionCount } from "@/lib/utils";
 import { PopcornIcon } from "./icons/PopcornIcon";
 import { BookmarkIcon } from "./icons/BookmarkIcon";
+import { GifImage } from "./GifImage";
 
 interface CreatorInfo {
   id: string;
@@ -26,6 +28,7 @@ interface QuizCardProps {
   duration_seconds: number;
   like_count?: number;
   save_count?: number;
+  is_anonymous?: boolean;
   isLiked?: boolean;
   isSaved?: boolean;
   isCompleted?: boolean;
@@ -36,6 +39,7 @@ interface QuizCardProps {
 }
 
 export const QuizCard = ({
+  id,
   title,
   description,
   image_url,
@@ -44,6 +48,7 @@ export const QuizCard = ({
   duration_seconds,
   like_count = 0,
   save_count = 0,
+  is_anonymous = false,
   isLiked = false,
   isSaved = false,
   isCompleted = false,
@@ -78,7 +83,7 @@ export const QuizCard = ({
 
   const handleSquadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!creator?.squad?.username) return;
+    if (is_anonymous || !creator?.squad?.username) return;
 
     haptic.impact('light');
     const tg = getTelegram();
@@ -88,6 +93,12 @@ export const QuizCard = ({
     } else {
       window.open(url, '_blank');
     }
+  };
+
+  const handleShare = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    haptic.impact('light');
+    shareQuizInvite(id, title, description);
   };
 
   const formatDuration = (seconds: number) => {
@@ -114,7 +125,7 @@ export const QuizCard = ({
       {/* Image */}
       <div className="relative aspect-[16/9] bg-secondary rounded-t-2xl overflow-hidden">
         {image_url ? (
-          <img
+          <GifImage
             src={image_url}
             alt={title}
             className={`w-full h-full object-cover ${isCompleted ? 'opacity-80' : ''}`}
@@ -125,13 +136,14 @@ export const QuizCard = ({
           </div>
         )}
 
-        {/* Top left - Participants */}
-        <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
-          <Users className="w-3 h-3 text-white" />
-          <span className="text-xs text-white font-medium">
-            {formatCount(participant_count)}
-          </span>
-        </div>
+        {/* Top right - Share */}
+        <button
+          onClick={handleShare}
+          className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm rounded-full w-7 h-7 flex items-center justify-center text-white"
+          aria-label="Поделиться квизом"
+        >
+          <Share2 className="w-3.5 h-3.5" />
+        </button>
 
         {/* Completed badge */}
         {isCompleted && (
@@ -157,19 +169,21 @@ export const QuizCard = ({
         )}
 
         {/* Creator info */}
-        {creator && (
+        {(creator || is_anonymous) && (
           <div className="flex items-center gap-2 mb-2">
             <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-              {creator.avatar_url ? (
+              {is_anonymous ? (
+                <VenetianMask className="w-3.5 h-3.5 text-muted-foreground" />
+              ) : creator?.avatar_url ? (
                 <img src={creator.avatar_url} alt="" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-[10px]">🧠</span>
               )}
             </div>
             <span className="text-xs text-muted-foreground">
-              {creator.first_name || creator.username || 'Аноним'}
+              {is_anonymous ? 'UNNAMED' : (creator?.first_name || creator?.username || 'Аноним')}
             </span>
-            {creator.squad && (
+            {!is_anonymous && creator?.squad && (
               <button
                 onClick={handleSquadClick}
                 className="text-xs text-primary hover:underline flex items-center gap-1"
@@ -186,11 +200,15 @@ export const QuizCard = ({
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1">
               <HelpCircle className="w-3.5 h-3.5" />
-              <span>{question_count} вопросов</span>
+              <span>{formatQuestionCount(question_count)}</span>
             </div>
             <div className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5" />
               <span>{formatDuration(duration_seconds)}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Users className="w-3.5 h-3.5" />
+              <span>{formatCount(participant_count)}</span>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -198,11 +216,11 @@ export const QuizCard = ({
               <button
                 onClick={handleLike}
                 className={`flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium transition-colors ${isLiked
-                  ? "bg-amber-500/20 text-amber-600"
+                  ? "bg-yellow-500/20 text-yellow-600"
                   : "bg-secondary text-muted-foreground"
                   }`}
               >
-                <PopcornIcon className="w-3.5 h-3.5" />
+                <PopcornIcon className="w-3.5 h-3.5" active={isLiked} />
                 <span>{formatCount(like_count)}</span>
               </button>
             )}

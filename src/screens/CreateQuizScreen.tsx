@@ -4,7 +4,10 @@ import { ArrowLeft, Plus, Trash2, Image, Clock, X, Upload, Loader2, Pencil } fro
 import { useCreateQuiz, useSubmitForReview } from "@/hooks/useQuizzes";
 import { useImageUpload, resizeImage } from "@/hooks/useImageUpload";
 import { haptic } from "@/lib/telegram";
+import { formatQuestionCount } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { GifImage } from "@/components/GifImage";
+import { Switch } from "@/components/ui/switch";
 
 interface CreateQuizScreenProps {
   onBack: () => void;
@@ -22,6 +25,7 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState(60);
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [questions, setQuestions] = useState<QuestionDraft[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<QuestionDraft>({
     text: "",
@@ -181,6 +185,7 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
         description,
         image_url: imageUrl || undefined,
         duration_seconds: duration,
+        is_anonymous: isAnonymous,
         questions: questions.map(q => ({
           text: q.text,
           options: q.options,
@@ -283,6 +288,27 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
               />
             </div>
 
+            {/* Anonymous publishing */}
+            <div className="tg-section p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <label className="text-sm font-medium text-foreground block">
+                    Публиковать анонимно
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Лайки начисляются, но не идут в лидерборд.
+                  </p>
+                </div>
+                <Switch
+                  checked={isAnonymous}
+                  onCheckedChange={(checked) => {
+                    haptic.selection();
+                    setIsAnonymous(checked);
+                  }}
+                />
+              </div>
+            </div>
+
             {/* Duration */}
             <div className="tg-section p-4">
               <label className="text-sm font-medium text-foreground block mb-2">
@@ -325,7 +351,7 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
 
               {coverPreview ? (
                 <div className="relative rounded-xl overflow-hidden">
-                  <img
+                  <GifImage
                     src={coverPreview}
                     alt="Preview"
                     className="w-full h-48 object-cover"
@@ -542,7 +568,7 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
               <div className="relative">
                 {coverPreview ? (
                   <>
-                    <img
+                    <GifImage
                       src={coverPreview}
                       alt={title}
                       className="w-full h-40 object-cover"
@@ -577,7 +603,7 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                   <p className="text-muted-foreground mb-4">{description}</p>
                 )}
                 <div className="flex gap-4 text-sm text-muted-foreground">
-                  <span>{questions.length} вопросов</span>
+                  <span>{formatQuestionCount(questions.length)}</span>
                   <span>{duration}с на квиз</span>
                 </div>
               </div>

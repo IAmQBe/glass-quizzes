@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { getTelegram, getTelegramUser } from "@/lib/telegram";
 
 interface Task {
   id: string;
@@ -14,6 +15,35 @@ interface Task {
   is_active: boolean;
   display_order: number;
 }
+
+const getApiUrl = () => {
+  const url = import.meta.env.VITE_API_URL as string | undefined;
+  return url?.replace(/\/+$/, "") || null;
+};
+
+const getInitDataAuthHeader = () => {
+  const initData = getTelegram()?.initData;
+  if (!initData) return null;
+  return `tma ${initData}`;
+};
+
+const getProfileId = async (): Promise<string | null> => {
+  const tgUser = getTelegramUser();
+  if (!tgUser?.id) return null;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("telegram_id", tgUser.id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error resolving profile id for tasks:", error);
+    return null;
+  }
+
+  return data?.id || null;
+};
 
 // Fetch active tasks
 export const useTasks = () => {
@@ -53,16 +83,44 @@ export const useCompletedTasks = () => {
   return useQuery({
     queryKey: ["completedTasks"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return new Set<string>();
+      const apiUrl = getApiUrl();
+      const authHeader = getInitDataAuthHeader();
+
+      if (apiUrl && authHeader) {
+        try {
+          const response = await fetch(`${apiUrl}/api/tasks/completed`, {
+            headers: {
+              Authorization: authHeader,
+            },
+          });
+
+          if (response.ok) {
+            const payload = await response.json() as { taskIds?: unknown };
+            if (Array.isArray(payload.taskIds)) {
+              return new Set(
+                payload.taskIds.filter((taskId): taskId is string => typeof taskId === "string")
+              );
+            }
+            return new Set<string>();
+          }
+        } catch (error) {
+          console.warn("Tasks API fetch failed, falling back to direct query:", error);
+        }
+      }
+
+      const profileId = await getProfileId();
+      if (!profileId) return new Set<string>();
 
       const { data, error } = await supabase
         .from("user_tasks")
         .select("task_id")
-        .eq("user_id", user.id);
+        .eq("user_id", profileId);
 
-      if (error) throw error;
-      return new Set(data.map(t => t.task_id));
+      if (error) {
+        console.error("Error fetching completed tasks directly:", error);
+        return new Set<string>();
+      }
+      return new Set((data || []).map((task) => task.task_id));
     },
   });
 };
@@ -73,18 +131,50 @@ export const useCompleteTask = () => {
 
   return useMutation({
     mutationFn: async (taskId: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      const apiUrl = getApiUrl();
+      const authHeader = getInitDataAuthHeader();
+
+      if (apiUrl && authHeader) {
+        const response = await fetch(`${apiUrl}/api/tasks/complete`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+          },
+          body: JSON.stringify({ taskId }),
+        });
+
+        if (response.ok) {
+          const payload = await response.json() as { alreadyCompleted?: boolean };
+          return { alreadyCompleted: Boolean(payload.alreadyCompleted) };
+        }
+
+        const payload = await response.json().catch(() => ({ error: "Task verification failed" })) as { error?: string };
+        throw new Error(payload.error || "Task verification failed");
+      }
+
+      const profileId = await getProfileId();
+      if (!profileId) throw new Error("Профиль не найден");
 
       const { error } = await supabase
         .from("user_tasks")
-        .insert({ user_id: user.id, task_id: taskId });
+        .insert({ user_id: profileId, task_id: taskId });
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === "23505") {
+          return { alreadyCompleted: true };
+        }
+        throw error;
+      }
+
+      return { alreadyCompleted: false };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["completedTasks"] });
-      toast({ title: "Задание выполнено! 🎉" });
+      toast({
+        title: result.alreadyCompleted ? "Уже выполнено" : "Задание выполнено! 🎉",
+        description: result.alreadyCompleted ? "Это задание уже засчитано" : undefined,
+      });
     },
     onError: (error: any) => {
       if (error.code === "23505") {

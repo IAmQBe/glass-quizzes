@@ -5,6 +5,7 @@ import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { useSquads, useMySquad, Squad } from "@/hooks/useSquads";
 import { haptic } from "@/lib/telegram";
 import { Input } from "@/components/ui/input";
+import { SquadAvatar } from "@/components/SquadAvatar";
 
 interface SquadListScreenProps {
   onBack: () => void;
@@ -76,11 +77,13 @@ export const SquadListScreen = ({ onBack, onSquadSelect, onCreateSquad }: SquadL
               className="flex items-center gap-3 w-full text-left"
             >
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center flex-shrink-0">
-                {mySquad.avatar_url ? (
-                  <img src={mySquad.avatar_url} alt="" className="w-full h-full rounded-xl object-cover" />
-                ) : (
-                  <PopcornIcon className="w-6 h-6 text-white" />
-                )}
+                <SquadAvatar
+                  avatarUrl={mySquad.avatar_url}
+                  username={mySquad.username}
+                  alt={mySquad.title}
+                  className="w-full h-full rounded-xl object-cover"
+                  fallback={<PopcornIcon className="w-6 h-6 text-white" />}
+                />
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-foreground truncate">{mySquad.title}</h3>
@@ -201,11 +204,13 @@ export const SquadListScreen = ({ onBack, onSquadSelect, onCreateSquad }: SquadL
 
                   {/* Avatar */}
                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center flex-shrink-0">
-                    {squad.avatar_url ? (
-                      <img src={squad.avatar_url} alt="" className="w-full h-full rounded-xl object-cover" />
-                    ) : (
-                      <PopcornIcon className="w-6 h-6 text-white" />
-                    )}
+                    <SquadAvatar
+                      avatarUrl={squad.avatar_url}
+                      username={squad.username}
+                      alt={squad.title}
+                      className="w-full h-full rounded-xl object-cover"
+                      fallback={<PopcornIcon className="w-6 h-6 text-white" />}
+                    />
                   </div>
 
                   {/* Info */}

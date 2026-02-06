@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Share2, Users, Home, RotateCcw, Sparkles } from "lucide-react";
 import { PersonalityTestResult } from "@/hooks/usePersonalityTests";
 import { haptic, sharePersonalityTestResult } from "@/lib/telegram";
+import { GifImage } from "@/components/GifImage";
 
 interface PersonalityTestResultScreenProps {
   result: PersonalityTestResult;
@@ -63,7 +64,7 @@ export const PersonalityTestResultScreen = ({
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.3, type: "spring" }}
           >
-            <img
+            <GifImage
               src={result.image_url}
               alt={result.title}
               className="w-full h-full object-cover"

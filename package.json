@@ -19,7 +19,11 @@
     "milestone": "./scripts/milestone.sh",
     "db:up": "docker-compose up -d",
     "db:down": "docker-compose down",
-    "db:logs": "docker-compose logs -f postgres"
+    "db:logs": "docker-compose logs -f postgres",
+    "tg:webhook:info": "node scripts/telegram/set-webhook.mjs info",
+    "tg:webhook:set": "node scripts/telegram/set-webhook.mjs set",
+    "tg:webhook:delete": "node scripts/telegram/set-webhook.mjs delete",
+    "tg:init-data:validate": "node scripts/telegram/validate-init-data.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

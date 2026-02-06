@@ -23,12 +23,158 @@ export interface LeaderboardEntry {
 /**
  * Fetch leaderboard by category
  */
-export const useLeaderboard = (category: LeaderboardCategory, limit: number = 100) => {
+export const useLeaderboard = (
+  category: LeaderboardCategory,
+  limit: number = 100,
+  enabled: boolean = true
+) => {
   return useQuery({
     queryKey: ['leaderboard', category, limit],
     queryFn: async (): Promise<LeaderboardEntry[]> => {
       let data: LeaderboardEntry[] = [];
-      let error: Error | null = null;
+
+      const loadCreatorsFallback = async (): Promise<LeaderboardEntry[]> => {
+        const selectWithFallback = async (
+          sources: string[],
+          columnVariants: string[],
+          label: string
+        ): Promise<any[]> => {
+          for (const source of sources) {
+            for (const columns of columnVariants) {
+              const { data: rows, error: rowsError } = await (supabase as any)
+                .from(source)
+                .select(columns);
+
+              if (!rowsError) {
+                return rows || [];
+              }
+
+              console.warn(
+                `Fallback leaderboard: ${label} fetch failed for ${source} (${columns}):`,
+                rowsError.message
+              );
+            }
+          }
+
+          return [];
+        };
+
+        const [quizRows, testRows] = await Promise.all([
+          selectWithFallback(
+            ["quizzes_public", "quizzes"],
+            [
+              "created_by, like_count, is_published, status, is_anonymous",
+              "created_by, like_count, is_published, status",
+              "created_by, like_count, is_published",
+              "created_by, like_count, status",
+              "created_by, like_count",
+            ],
+            "quizzes"
+          ),
+          selectWithFallback(
+            ["personality_tests_public", "personality_tests"],
+            [
+              "created_by, like_count, is_published, is_anonymous",
+              "created_by, like_count, is_published",
+              "created_by, like_count",
+            ],
+            "personality_tests"
+          ),
+        ]);
+
+        const isPublishedQuiz = (row: any) => {
+          const normalizedStatus = typeof row?.status === "string" ? row.status.toLowerCase() : "";
+          if (normalizedStatus === "published") return true;
+          if (row?.is_published === false) return false;
+          return true;
+        };
+
+        const isPublishedTest = (row: any) => {
+          if (row?.is_published === false) return false;
+          return true;
+        };
+
+        const publishedQuizzes = (quizRows || []).filter((row: any) =>
+          isPublishedQuiz(row) && row?.is_anonymous !== true
+        );
+
+        const publishedTests = (testRows || []).filter((row: any) =>
+          isPublishedTest(row) && row?.is_anonymous !== true
+        );
+
+        const likedQuizzesFallback = (quizRows || []).filter((row: any) =>
+          row?.is_anonymous !== true && Number(row?.like_count || 0) > 0
+        );
+
+        const likedTestsFallback = (testRows || []).filter((row: any) =>
+          row?.is_anonymous !== true && Number(row?.like_count || 0) > 0
+        );
+
+        const quizzesForAggregation =
+          publishedQuizzes.length > 0 ? publishedQuizzes : likedQuizzesFallback;
+
+        const testsForAggregation =
+          publishedTests.length > 0 ? publishedTests : likedTestsFallback;
+
+        const aggregated = new Map<string, { total_popcorns: number; quiz_count: number }>();
+
+        quizzesForAggregation.forEach((q: any) => {
+          if (!q?.created_by) return;
+          const current = aggregated.get(q.created_by) || { total_popcorns: 0, quiz_count: 0 };
+          const likeCount = Number(q.like_count || 0);
+          current.total_popcorns += likeCount;
+          current.quiz_count += 1;
+          aggregated.set(q.created_by, current);
+        });
+
+        testsForAggregation.forEach((t: any) => {
+          if (!t?.created_by) return;
+          const current = aggregated.get(t.created_by) || { total_popcorns: 0, quiz_count: 0 };
+          const likeCount = Number(t.like_count || 0);
+          current.total_popcorns += likeCount;
+          current.quiz_count += 1;
+          aggregated.set(t.created_by, current);
+        });
+
+        const creatorIds = Array.from(aggregated.keys());
+        if (creatorIds.length === 0) {
+          return [];
+        }
+
+        const { data: profiles, error: profilesError } = await supabase
+          .from("profiles")
+          .select("id, username, first_name, avatar_url, has_telegram_premium")
+          .in("id", creatorIds);
+
+        if (profilesError) {
+          console.warn("Fallback leaderboard: profiles fetch failed:", profilesError.message);
+        }
+
+        const profileMap = new Map((profiles || []).map((profile: any) => [profile.id, profile]));
+
+        const sorted = creatorIds
+          .map((id) => ({ user_id: id, ...aggregated.get(id)! }))
+          .sort((a, b) => {
+            if (b.total_popcorns !== a.total_popcorns) return b.total_popcorns - a.total_popcorns;
+            return b.quiz_count - a.quiz_count;
+          })
+          .slice(0, limit);
+
+        return sorted.map((row, index) => {
+          const profile = profileMap.get(row.user_id);
+          return {
+            user_id: row.user_id,
+            username: profile?.username ?? null,
+            first_name: profile?.first_name ?? null,
+            avatar_url: profile?.avatar_url ?? null,
+            has_premium: profile?.has_telegram_premium ?? false,
+            total_popcorns: row.total_popcorns,
+            popcorns: row.total_popcorns,
+            quiz_count: row.quiz_count,
+            rank: index + 1,
+          } as LeaderboardEntry;
+        });
+      };
 
       switch (category) {
         case 'quizzes': {
@@ -53,74 +199,23 @@ export const useLeaderboard = (category: LeaderboardCategory, limit: number = 10
         }
         case 'popcorns': {
           const result = await supabase.rpc('get_leaderboard_by_popcorns', { limit_count: limit });
-          if (result.error) throw result.error;
-          data = (result.data || []).map((entry: any) => ({
+          if (result.error) {
+            console.warn("Leaderboard RPC get_leaderboard_by_popcorns failed, using fallback:", result.error.message);
+            data = await loadCreatorsFallback();
+            break;
+          }
+
+          data = (result.data || []).map((entry: any, index: number) => ({
             ...entry,
             total_popcorns: Number(entry.total_popcorns || entry.popcorns || 0),
             popcorns: Number(entry.popcorns || entry.total_popcorns || 0),
             quiz_count: Number(entry.quiz_count || 0),
-            rank: Number(entry.rank),
+            rank: Number(entry.rank || index + 1),
           }));
 
-          // Fallback if RPC returns empty (e.g., status mismatch)
+          // Fallback for empty RPC payloads (legacy/misaligned DB state)
           if (data.length === 0) {
-            const { data: quizzes } = await supabase
-              .from("quizzes")
-              .select("created_by, like_count, is_published, status");
-
-            const publishedQuizzes = (quizzes || []).filter((q: any) =>
-              q?.is_published === true || q?.status === 'published'
-            );
-
-            const agg = new Map<string, { total_popcorns: number; quiz_count: number }>();
-            publishedQuizzes.forEach((q: any) => {
-              if (!q.created_by) return;
-              const current = agg.get(q.created_by) || { total_popcorns: 0, quiz_count: 0 };
-              const likeCount = Number(q.like_count || 0);
-              current.total_popcorns += likeCount;
-              current.quiz_count += 1;
-              agg.set(q.created_by, current);
-            });
-
-            const creatorIds = Array.from(agg.keys());
-            if (creatorIds.length === 0) {
-              data = [];
-              break;
-            }
-
-            const { data: profiles } = await supabase
-              .from("profiles")
-              .select("id, username, first_name, avatar_url, has_telegram_premium")
-              .in("id", creatorIds);
-
-            const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
-
-            const sorted = creatorIds
-              .map((id) => ({ user_id: id, ...agg.get(id)! }))
-              .filter((row) => row.total_popcorns > 0)
-              .sort((a, b) => b.total_popcorns - a.total_popcorns)
-              .slice(0, limit);
-
-            let lastScore: number | null = null;
-            let rank = 0;
-            data = sorted.map((row, index) => {
-              if (lastScore === null || row.total_popcorns !== lastScore) {
-                rank = index + 1;
-                lastScore = row.total_popcorns;
-              }
-              const profile = profileMap.get(row.user_id);
-              return {
-                user_id: row.user_id,
-                username: profile?.username ?? null,
-                first_name: profile?.first_name ?? null,
-                avatar_url: profile?.avatar_url ?? null,
-                has_premium: profile?.has_telegram_premium ?? false,
-                total_popcorns: row.total_popcorns,
-                popcorns: row.total_popcorns,
-                quiz_count: row.quiz_count,
-                rank,
-              } as LeaderboardEntry;
-            });
+            data = await loadCreatorsFallback();
           }
           break;
         }
@@ -142,6 +237,7 @@ export const useLeaderboard = (category: LeaderboardCategory, limit: number = 10
     },
     staleTime: 30 * 1000, // 30 seconds
     refetchOnWindowFocus: false,
+    enabled,
   });
 };
 

@@ -203,6 +203,65 @@ export async function getPendingQuizzes(): Promise<Quiz[]> {
 }
 
 // ================================
+// Predictions
+// ================================
+
+export interface PredictionPoll {
+  id: string;
+  title: string;
+  squad_id: string;
+  created_by: string;
+  status: string;
+  report_count: number;
+}
+
+export async function getPredictionPollById(pollId: string): Promise<PredictionPoll | null> {
+  const { data, error } = await supabase
+    .from('prediction_polls')
+    .select('id,title,squad_id,created_by,status,report_count')
+    .eq('id', pollId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+
+  return data as PredictionPoll;
+}
+
+export async function isProfileAdmin(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('user_roles')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('role', 'admin')
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return Boolean(data?.id);
+}
+
+export async function getSquadTitleById(squadId: string | null): Promise<string | null> {
+  if (!squadId) return null;
+
+  const { data, error } = await supabase
+    .from('squads')
+    .select('title')
+    .eq('id', squadId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data?.title || null;
+}
+
+// ================================
 // Personality Tests
 // ================================
 
@@ -283,4 +342,94 @@ export async function getPublishedPersonalityTests(limit: number = 10): Promise<
 
   if (error) throw error;
   return data || [];
+}
+
+// ================================
+// Tasks
+// ================================
+
+export type TaskType =
+  | 'link'
+  | 'subscribe_channel'
+  | 'channel_boost'
+  | 'telegram_premium'
+  | string;
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  reward_type: string;
+  reward_amount: number;
+  task_type: TaskType;
+  action_url: string | null;
+  icon: string | null;
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getTaskById(taskId: string): Promise<Task | null> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('id', taskId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as Task | null) ?? null;
+}
+
+export async function getCompletedTaskIds(profileId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('user_tasks')
+    .select('task_id')
+    .eq('user_id', profileId);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).map((row) => row.task_id as string);
+}
+
+export async function completeTaskForProfile(
+  profileId: string,
+  taskId: string
+): Promise<{ alreadyCompleted: boolean }> {
+  const { error } = await supabase
+    .from('user_tasks')
+    .insert({
+      user_id: profileId,
+      task_id: taskId,
+    });
+
+  if (!error) {
+    return { alreadyCompleted: false };
+  }
+
+  if (error.code === '23505') {
+    return { alreadyCompleted: true };
+  }
+
+  throw error;
+}
+
+export async function revokeTaskCompletionForProfile(
+  profileId: string,
+  taskId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('user_tasks')
+    .delete()
+    .eq('user_id', profileId)
+    .eq('task_id', taskId);
+
+  if (error) {
+    throw error;
+  }
 }

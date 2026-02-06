@@ -1,8 +1,10 @@
 import { motion } from "framer-motion";
-import { ArrowLeft, Users, ExternalLink, Sparkles, HelpCircle, Award } from "lucide-react";
+import { ArrowLeft, Users, ExternalLink, Sparkles, HelpCircle, Award, Share2, VenetianMask } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
-import { haptic, getTelegram } from "@/lib/telegram";
+import { GifImage } from "@/components/GifImage";
+import { haptic, getTelegram, sharePersonalityTestInvite } from "@/lib/telegram";
+import { formatQuestionCount } from "@/lib/utils";
 
 interface CreatorInfo {
   id: string;
@@ -27,6 +29,7 @@ interface PersonalityTestPreviewScreenProps {
     participant_count: number;
     like_count: number;
     save_count: number;
+    is_anonymous?: boolean;
     creator?: CreatorInfo | null;
   };
   isLiked?: boolean;
@@ -47,7 +50,7 @@ export const PersonalityTestPreviewScreen = ({
   onToggleSave,
 }: PersonalityTestPreviewScreenProps) => {
   const handleSquadClick = () => {
-    if (!test.creator?.squad) return;
+    if (test.is_anonymous || !test.creator?.squad) return;
     haptic.impact('light');
     const tg = getTelegram();
     const url = test.creator.squad.username
@@ -66,6 +69,17 @@ export const PersonalityTestPreviewScreen = ({
   const handleSave = () => {
     haptic.impact('light');
     onToggleSave?.();
+  };
+
+  const handleShare = () => {
+    haptic.impact('light');
+    sharePersonalityTestInvite(test.id, test.title, test.description);
+  };
+
+  const formatCount = (count: number) => {
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+    return count.toString();
   };
 
   return (
@@ -91,6 +105,13 @@ export const PersonalityTestPreviewScreen = ({
             <Sparkles className="w-5 h-5 text-purple-500" />
             Тест личности
           </h1>
+          <button
+            onClick={handleShare}
+            className="p-2 -mr-2 rounded-full hover:bg-secondary"
+            aria-label="Поделиться тестом"
+          >
+            <Share2 className="w-5 h-5" />
+          </button>
         </div>
       </div>
 
@@ -103,7 +124,7 @@ export const PersonalityTestPreviewScreen = ({
           animate={{ y: 0, opacity: 1 }}
         >
           {test.image_url ? (
-            <img
+            <GifImage
               src={test.image_url}
               alt={test.title}
               className="w-full h-full object-cover"
@@ -114,47 +135,7 @@ export const PersonalityTestPreviewScreen = ({
             </div>
           )}
 
-          {/* Top badges */}
-          <div className="absolute top-3 left-3 flex gap-2">
-            <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5 text-white" />
-              <span className="text-xs text-white font-medium">{test.participant_count}</span>
-            </div>
-            <div className="bg-purple-500/90 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
-              <Award className="w-3.5 h-3.5 text-white" />
-              <span className="text-xs text-white font-medium">{test.result_count}</span>
-            </div>
-          </div>
-
-          {/* Top right - Like button */}
-          <button
-            onClick={handleLike}
-            className={`absolute top-3 right-3 w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
-              isLiked ? "bg-amber-500 text-white" : "bg-black/40 text-white"
-            }`}
-          >
-            <PopcornIcon className="w-5 h-5" />
-          </button>
-
-          {/* Bottom right - Save button */}
-          <button
-            onClick={handleSave}
-            className={`absolute bottom-3 right-3 w-10 h-10 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${
-              isSaved ? "bg-purple-500 text-white" : "bg-black/40 text-white"
-            }`}
-          >
-            <BookmarkIcon className="w-5 h-5" filled={isSaved} />
-          </button>
-
-          {/* Bottom left - Stats */}
-          <div className="absolute bottom-3 left-3 flex gap-2">
-            {test.like_count > 0 && (
-              <div className="bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-1 flex items-center gap-1.5">
-                <PopcornIcon className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-xs text-white font-medium">{test.like_count}</span>
-              </div>
-            )}
-          </div>
+          {/* Image overlay intentionally minimal */}
         </motion.div>
 
         {/* Title & Description */}
@@ -170,7 +151,7 @@ export const PersonalityTestPreviewScreen = ({
         </motion.div>
 
         {/* Creator Info */}
-        {test.creator && (
+        {(test.creator || test.is_anonymous) && (
           <motion.div
             className="flex items-center gap-3"
             initial={{ y: 20, opacity: 0 }}
@@ -178,7 +159,9 @@ export const PersonalityTestPreviewScreen = ({
             transition={{ delay: 0.1 }}
           >
             <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center overflow-hidden">
-              {test.creator.avatar_url ? (
+              {test.is_anonymous ? (
+                <VenetianMask className="w-5 h-5 text-muted-foreground" />
+              ) : test.creator?.avatar_url ? (
                 <img src={test.creator.avatar_url} alt="" className="w-full h-full object-cover" />
               ) : (
                 <Sparkles className="w-5 h-5 text-purple-500" />
@@ -186,9 +169,9 @@ export const PersonalityTestPreviewScreen = ({
             </div>
             <div className="flex-1">
               <p className="font-medium text-foreground">
-                {test.creator.first_name || test.creator.username || 'Аноним'}
+                {test.is_anonymous ? 'UNNAMED' : (test.creator?.first_name || test.creator?.username || 'Аноним')}
               </p>
-              {test.creator.squad && (
+              {!test.is_anonymous && test.creator?.squad && (
                 <button
                   onClick={handleSquadClick}
                   className="text-xs text-purple-500 flex items-center gap-1 hover:underline"
@@ -202,20 +185,54 @@ export const PersonalityTestPreviewScreen = ({
           </motion.div>
         )}
 
-        {/* Stats row */}
+        {/* Stats + Actions */}
         <motion.div
-          className="flex items-center gap-4 text-sm text-muted-foreground"
+          className="grid grid-cols-[1fr_auto] items-center gap-3 text-sm text-muted-foreground"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.15 }}
         >
-          <div className="flex items-center gap-1.5">
-            <HelpCircle className="w-4 h-4" />
-            <span>{test.question_count} вопросов</span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <HelpCircle className="w-4 h-4" />
+              <span>{formatQuestionCount(test.question_count)}</span>
+            </div>
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <Award className="w-4 h-4 text-purple-500" />
+              <span>{test.result_count} результатов</span>
+            </div>
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <Users className="w-4 h-4" />
+              <span>{formatCount(test.participant_count)}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <Award className="w-4 h-4 text-purple-500" />
-            <span>{test.result_count} результатов</span>
+          <div className="flex items-center gap-2 justify-self-end">
+            {onToggleLike && (
+              <button
+                onClick={handleLike}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors shadow-sm ${
+                  isLiked
+                    ? "bg-yellow-500/20 text-yellow-600"
+                    : "bg-card text-muted-foreground border border-border/70 hover:bg-secondary"
+                }`}
+              >
+                <PopcornIcon className="w-4 h-4" active={isLiked} />
+                <span>{formatCount(test.like_count)}</span>
+              </button>
+            )}
+            {onToggleSave && (
+              <button
+                onClick={handleSave}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors shadow-sm ${
+                  isSaved
+                    ? "bg-purple-500/20 text-purple-500"
+                    : "bg-card text-muted-foreground border border-border/70 hover:bg-secondary"
+                }`}
+              >
+                <BookmarkIcon className="w-4 h-4" filled={isSaved} />
+                <span>{formatCount(test.save_count)}</span>
+              </button>
+            )}
           </div>
         </motion.div>
 
@@ -230,7 +247,7 @@ export const PersonalityTestPreviewScreen = ({
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-center gap-2">
               <span className="text-purple-500">✦</span>
-              {test.question_count} вопросов о тебе
+              {formatQuestionCount(test.question_count)} о тебе
             </li>
             <li className="flex items-center gap-2">
               <span className="text-purple-500">✦</span>

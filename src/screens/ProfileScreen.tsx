@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { UserStats } from "@/types/quiz";
-import { ArrowLeft, Trophy, Target, Globe, Swords, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Sun, Moon, Sparkles, History, Pencil, Lock, ExternalLink } from "lucide-react";
+import { ArrowLeft, Trophy, Target, Globe, Bell, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Sun, Moon, Sparkles, History, Pencil, Lock, ExternalLink } from "lucide-react";
 import { haptic, getTelegramUser, shareReferralLink, sharePersonalityTestResult, getTelegram } from "@/lib/telegram";
 import { useIsAdmin } from "@/hooks/useAuth";
+import { useRolePreview } from "@/hooks/useRolePreview";
 import { useMyQuizzes, useMyQuizResults } from "@/hooks/useQuizzes";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useProfile, useUpdateProfile, useReferralCount } from "@/hooks/useProfile";
@@ -12,9 +13,13 @@ import { useTotalPopcornsReceived } from "@/hooks/useLikes";
 import { useMySquad, useSquadLeaderboard } from "@/hooks/useSquads";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
+import { GifImage } from "@/components/GifImage";
 import { Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/useTheme";
+import { Switch } from "@/components/ui/switch";
+import { useGifAnimations } from "@/hooks/useGifAnimations";
+import { formatQuestionCount } from "@/lib/utils";
 
 // Fun avatar placeholders for users without photos
 const FUNNY_AVATARS = [
@@ -40,6 +45,8 @@ type TabType = "my" | "saved" | "history";
 export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEditQuiz, onEditTest }: ProfileScreenProps) => {
   const user = getTelegramUser();
   const { data: isAdmin } = useIsAdmin();
+  const { data: isRealAdmin } = useIsAdmin({ respectRolePreview: false });
+  const { rolePreviewMode } = useRolePreview();
   const { data: myQuizzes = [], isLoading: myQuizzesLoading } = useMyQuizzes();
   const { data: myTests = [], isLoading: myTestsLoading } = useMyPersonalityTests();
   const { data: quizResults = [], isLoading: quizResultsLoading } = useMyQuizResults();
@@ -52,6 +59,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
   const { data: squadLeaderboard = [] } = useSquadLeaderboard(100);
   const updateProfile = useUpdateProfile();
   const { isDark, toggleTheme } = useTheme();
+  const { animationsEnabled, setAnimationsEnabled } = useGifAnimations();
 
   // Find my squad rank
   const mySquadRank = mySquad ? squadLeaderboard.findIndex(s => s.id === mySquad.id) + 1 : 0;
@@ -87,11 +95,11 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
     }
   };
 
-  const handleToggleNotifications = () => {
+  const handleToggleNotifications = (enabled: boolean) => {
     if (profile) {
       haptic.selection();
       updateProfile.mutate({
-        challenge_notifications_enabled: !profile.challenge_notifications_enabled
+        challenge_notifications_enabled: enabled
       });
     }
   };
@@ -306,8 +314,48 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
             </button>
           </div>
 
+          {/* Notifications Toggle (Telegram users only) */}
+          {user?.id && (
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <div className="flex items-center gap-3">
+                <Bell className="w-5 h-5 text-primary" />
+                <div>
+                  <span className="text-foreground font-medium">Уведомления</span>
+                  <p className="text-xs text-muted-foreground">
+                    {profile?.challenge_notifications_enabled ? "Включены" : "Выключены"}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={profile?.challenge_notifications_enabled ?? true}
+                onCheckedChange={(value) => handleToggleNotifications(value)}
+                disabled={!profile}
+              />
+            </div>
+          )}
+
+          {/* GIF Animations Toggle */}
+          <div className="flex items-center justify-between p-4 border-b border-border">
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-5 h-5 text-amber-500" />
+              <div>
+                <span className="text-foreground font-medium">Анимации GIF</span>
+                <p className="text-xs text-muted-foreground">
+                  {animationsEnabled ? "Включены" : "Выключены"}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={animationsEnabled}
+              onCheckedChange={(value) => {
+                haptic.selection();
+                setAnimationsEnabled(value);
+              }}
+            />
+          </div>
+
           {/* Admin Button */}
-          {isAdmin && onOpenAdmin && (
+          {isRealAdmin && onOpenAdmin && (
             <button
               className="w-full flex items-center justify-between p-4"
               onClick={() => {
@@ -317,7 +365,14 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
             >
               <div className="flex items-center gap-3">
                 <Settings className="w-5 h-5 text-primary" />
-                <span className="text-foreground font-medium">Admin Panel</span>
+                <div className="text-left">
+                  <p className="text-foreground font-medium leading-tight">Admin Panel</p>
+                  {rolePreviewMode !== "real" && (
+                    <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+                      Просмотр: {rolePreviewMode === "admin" ? "admin" : "user"}
+                    </p>
+                  )}
+                </div>
               </div>
               <ChevronRight className="w-5 h-5 text-muted-foreground" />
             </button>
@@ -446,7 +501,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                       <div key={test.id} className="tg-section p-4">
                         <div className="flex items-center gap-3">
                           {test.image_url ? (
-                            <img src={test.image_url} alt={test.title} className="w-12 h-12 rounded-lg object-cover" />
+                            <GifImage src={test.image_url} alt={test.title} className="w-12 h-12 rounded-lg object-cover" />
                           ) : (
                             <div className="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center">
                               <Sparkles className="w-6 h-6 text-purple-500" />
@@ -458,7 +513,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                               <h3 className="font-medium text-foreground">{test.title}</h3>
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              {test.question_count} вопросов · {test.participant_count || 0} участий
+                              {formatQuestionCount(test.question_count)} · {test.participant_count || 0} участий
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -505,53 +560,60 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                   <p className="text-xs text-muted-foreground mt-1">Нажми закладку на квизе или тесте чтобы сохранить</p>
                 </div>
               ) : (
-                allSaved.map((item: any) => (
-                  <div key={item.id} className="tg-section p-4">
-                    <div className="flex items-center gap-3">
-                      {item.image_url ? (
-                        <img src={item.image_url} alt={item.title} className="w-14 h-14 rounded-xl object-cover" />
-                      ) : (
-                        <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${item.type === 'test' ? 'bg-purple-500/20' : 'bg-primary/20'}`}>
-                          {item.type === 'test' ? (
-                            <Sparkles className="w-6 h-6 text-purple-500" />
-                          ) : (
-                            <Target className="w-6 h-6 text-primary" />
-                          )}
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${item.type === 'test' ? 'bg-purple-500/20 text-purple-500' : 'bg-primary/20 text-primary'}`}>
-                            {item.type === 'test' ? 'Тест' : 'Квиз'}
-                          </span>
-                        </div>
-                        <h3 className="font-medium text-foreground truncate">{item.title}</h3>
-                        {item.creator && (item.creator.first_name || item.creator.username) && (
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                            <span>от {item.creator.first_name || item.creator.username}</span>
-                            {item.creator.squad && (
-                              <span className="flex items-center gap-1 text-primary">
-                                <PopcornIcon className="w-3 h-3" />
-                                {item.creator.squad.title}
-                              </span>
+                allSaved.map((item: any) => {
+                  const isAnonymous = item.is_anonymous === true;
+                  const creatorName = isAnonymous
+                    ? 'UNNAMED'
+                    : (item.creator?.first_name || item.creator?.username || null);
+
+                  return (
+                    <div key={item.id} className="tg-section p-4">
+                      <div className="flex items-center gap-3">
+                        {item.image_url ? (
+                          <GifImage src={item.image_url} alt={item.title} className="w-14 h-14 rounded-xl object-cover" />
+                        ) : (
+                          <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${item.type === 'test' ? 'bg-purple-500/20' : 'bg-primary/20'}`}>
+                            {item.type === 'test' ? (
+                              <Sparkles className="w-6 h-6 text-purple-500" />
+                            ) : (
+                              <Target className="w-6 h-6 text-primary" />
                             )}
                           </div>
                         )}
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                          <span className="flex items-center gap-1">
-                            <Users className="w-3 h-3" />
-                            {item.participant_count || 0}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <PopcornIcon className="w-3 h-3 text-orange-500" />
-                            {item.like_count || 0}
-                          </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${item.type === 'test' ? 'bg-purple-500/20 text-purple-500' : 'bg-primary/20 text-primary'}`}>
+                              {item.type === 'test' ? 'Тест' : 'Квиз'}
+                            </span>
+                          </div>
+                          <h3 className="font-medium text-foreground truncate">{item.title}</h3>
+                          {creatorName && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                              <span>от {creatorName}</span>
+                              {!isAnonymous && item.creator?.squad && (
+                                <span className="flex items-center gap-1 text-primary">
+                                  <PopcornIcon className="w-3 h-3" />
+                                  {item.creator.squad.title}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                            <span className="flex items-center gap-1">
+                              <Users className="w-3 h-3" />
+                              {item.participant_count || 0}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <PopcornIcon className="w-3 h-3 text-orange-500" />
+                              {item.like_count || 0}
+                            </span>
+                          </div>
                         </div>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
                       </div>
-                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </>
           )}
@@ -574,7 +636,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                     <div key={result.id} className="tg-section p-4">
                       <div className="flex items-center gap-3">
                         {result.quiz?.image_url ? (
-                          <img src={result.quiz.image_url} alt={result.quiz.title} className="w-12 h-12 rounded-lg object-cover" />
+                          <GifImage src={result.quiz.image_url} alt={result.quiz.title} className="w-12 h-12 rounded-lg object-cover" />
                         ) : (
                           <div className="w-12 h-12 rounded-lg bg-primary/20 flex items-center justify-center">
                             <Trophy className="w-6 h-6 text-primary" />
@@ -585,17 +647,25 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                             <span className="text-xs px-1.5 py-0.5 rounded bg-primary/20 text-primary">Квиз</span>
                             <h3 className="font-medium text-foreground">{result.quiz?.title || 'Квиз'}</h3>
                           </div>
-                          {result.quiz?.creator && (result.quiz.creator.first_name || result.quiz.creator.username) && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                              <span>от {result.quiz.creator.first_name || result.quiz.creator.username}</span>
-                              {result.quiz.creator.squad && (
-                                <span className="flex items-center gap-1 text-primary">
-                                  <PopcornIcon className="w-3 h-3" />
-                                  {result.quiz.creator.squad.title}
-                                </span>
-                              )}
-                            </div>
-                          )}
+                          {(() => {
+                            const isAnonymous = result.quiz?.is_anonymous === true;
+                            const creatorName = isAnonymous
+                              ? 'UNNAMED'
+                              : (result.quiz?.creator?.first_name || result.quiz?.creator?.username || null);
+
+                            if (!creatorName) return null;
+                            return (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                                <span>от {creatorName}</span>
+                                {!isAnonymous && result.quiz?.creator?.squad && (
+                                  <span className="flex items-center gap-1 text-primary">
+                                    <PopcornIcon className="w-3 h-3" />
+                                    {result.quiz.creator.squad.title}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                           <p className="text-sm text-muted-foreground">
                             {result.score}/{result.max_score} правильных · {result.percentile}%
                           </p>
@@ -653,7 +723,7 @@ const QuizListItem = ({ quiz, onClick, onEdit }: { quiz: any; onClick: () => voi
         >
           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden">
             {quiz.image_url ? (
-              <img src={quiz.image_url} alt={quiz.title} className="w-full h-full object-cover" />
+              <GifImage src={quiz.image_url} alt={quiz.title} className="w-full h-full object-cover" />
             ) : (
               <span className="text-xl">📝</span>
             )}
@@ -661,7 +731,7 @@ const QuizListItem = ({ quiz, onClick, onEdit }: { quiz: any; onClick: () => voi
           <div className="flex-1 min-w-0">
             <h3 className="font-medium text-foreground line-clamp-1">{quiz.title}</h3>
             <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-              <span>{quiz.question_count} вопросов</span>
+              <span>{formatQuestionCount(quiz.question_count)}</span>
               <span>{quiz.participant_count} участий</span>
               {(quiz.like_count ?? 0) > 0 && (
                 <span className="flex items-center gap-1">
@@ -706,16 +776,18 @@ const QuizListItem = ({ quiz, onClick, onEdit }: { quiz: any; onClick: () => voi
 const TestResultItem = ({ completion, onShare }: { completion: any; onShare: () => void }) => {
   const result = completion.result;
   const test = completion.test;
-
-  if (!result || !test) return null;
+  const canShare = Boolean(result && test);
+  const resultTitle = result?.title || "Результат теста";
+  const testTitle = test?.title || "Тест";
+  const resultDescription = result?.description || "Детали результата временно недоступны.";
 
   return (
     <div className="tg-section p-4">
       <div className="flex items-center gap-3">
         {/* Result Image */}
         <div className="w-14 h-14 rounded-xl bg-purple-500/10 flex items-center justify-center overflow-hidden">
-          {result.image_url ? (
-            <img src={result.image_url} alt={result.title} className="w-full h-full object-cover" />
+          {result?.image_url ? (
+            <GifImage src={result.image_url} alt={resultTitle} className="w-full h-full object-cover" />
           ) : (
             <span className="text-2xl">🎭</span>
           )}
@@ -723,21 +795,29 @@ const TestResultItem = ({ completion, onShare }: { completion: any; onShare: () 
 
         {/* Info */}
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-foreground line-clamp-1">{result.title}</h3>
-          <p className="text-xs text-purple-500 font-medium mt-0.5">{test.title}</p>
-          {test.creator && (test.creator.first_name || test.creator.username) && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-              <span>от {test.creator.first_name || test.creator.username}</span>
-              {test.creator.squad && (
-                <span className="flex items-center gap-1 text-purple-500">
-                  <PopcornIcon className="w-3 h-3" />
-                  {test.creator.squad.title}
-                </span>
-              )}
-            </div>
-          )}
+          <h3 className="font-semibold text-foreground line-clamp-1">{resultTitle}</h3>
+          <p className="text-xs text-purple-500 font-medium mt-0.5">{testTitle}</p>
+          {(() => {
+            const isAnonymous = test?.is_anonymous === true;
+            const creatorName = isAnonymous
+              ? 'UNNAMED'
+              : (test?.creator?.first_name || test?.creator?.username || null);
+
+            if (!creatorName) return null;
+            return (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                <span>от {creatorName}</span>
+                {!isAnonymous && test?.creator?.squad && (
+                  <span className="flex items-center gap-1 text-purple-500">
+                    <PopcornIcon className="w-3 h-3" />
+                    {test.creator.squad.title}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
           <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-            {result.description}
+            {resultDescription}
           </p>
         </div>
 
@@ -747,7 +827,12 @@ const TestResultItem = ({ completion, onShare }: { completion: any; onShare: () 
             e.stopPropagation();
             onShare();
           }}
-          className="p-2 rounded-lg bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 transition-colors"
+          disabled={!canShare}
+          className={`p-2 rounded-lg transition-colors ${
+            canShare
+              ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/20"
+              : "bg-secondary text-muted-foreground cursor-not-allowed opacity-60"
+          }`}
         >
           <Share2 className="w-4 h-4" />
         </button>

@@ -6,11 +6,17 @@ import { BottomNav } from "@/components/BottomNav";
 import { TasksBlock } from "@/components/TasksBlock";
 import { OnboardingCarousel } from "@/components/OnboardingCarousel";
 import { useBanners } from "@/hooks/useBanners";
-import { usePublishedQuizzes, useQuizWithQuestions, useCompletedQuizIds } from "@/hooks/useQuizzes";
+import {
+  usePublishedQuizzes,
+  useMyQuizzes,
+  useQuizWithQuestions,
+  useCompletedQuizIds,
+  useSubmitQuizResult,
+} from "@/hooks/useQuizzes";
 import { useFavoriteIds, useToggleFavorite } from "@/hooks/useFavorites";
 import { useLikeIds, useToggleLike } from "@/hooks/useLikes";
 import { useUserStats } from "@/hooks/useUserStats";
-import { useEnsureProfile } from "@/hooks/useCurrentProfile";
+import { useCurrentProfile, useEnsureProfile } from "@/hooks/useCurrentProfile";
 import { useTrackEvent } from "@/hooks/useTrackEvent";
 import { QuizScreen } from "@/screens/QuizScreen";
 import { ResultScreen } from "@/screens/ResultScreen";
@@ -32,13 +38,15 @@ import {
   useTogglePersonalityTestLike,
   useTogglePersonalityTestFavorite,
   useCompletedTestIds,
+  useMyPersonalityTests,
   PersonalityTestResult
 } from "@/hooks/usePersonalityTests";
 import { toast } from "@/hooks/use-toast";
 import { UserStats, QuizResult } from "@/types/quiz";
 import { initTelegramApp, backButton, isTelegramWebApp, shareResult, getTelegramUserData, getTelegram } from "@/lib/telegram";
+import { initUser } from "@/lib/user";
 import { calculateResult, getVerdict } from "@/data/quizData";
-import { TrendingUp, Sparkles, Search, X, Swords, Users, Plus } from "lucide-react";
+import { TrendingUp, Sparkles, Search, X, Swords, Users, Plus, ArrowDown, ArrowUp } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Input } from "@/components/ui/input";
@@ -49,25 +57,43 @@ import { CreateSquadGuide } from "@/screens/CreateSquadGuide";
 import { QuizPreviewScreen } from "@/screens/QuizPreviewScreen";
 import { PersonalityTestPreviewScreen } from "@/screens/PersonalityTestPreviewScreen";
 import { useMySquad, Squad } from "@/hooks/useSquads";
+import { PredictionTopBlock } from "@/components/PredictionTopBlock";
+import { PredictionListScreen } from "@/screens/PredictionListScreen";
+import { PredictionDetailsScreen } from "@/screens/PredictionDetailsScreen";
+import { CreatePredictionScreen } from "@/screens/CreatePredictionScreen";
+import { CreatePredictionGateModal } from "@/components/CreatePredictionGateModal";
+import { DEMO_PREDICTIONS } from "@/data/predictions";
+import { PredictionCreationEligibility, PredictionPoll } from "@/types/prediction";
+import {
+  usePredictionCreationEligibility,
+  usePredictionPolls,
+  useSquadPredictionQuota,
+} from "@/hooks/usePredictions";
+import { useRolePreview } from "@/hooks/useRolePreview";
 
-type AppScreen = "home" | "quiz_preview" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp" | "test_preview" | "personality_test" | "personality_result" | "create_test" | "squad_list" | "squad_detail" | "create_squad" | "create_select";
+type AppScreen = "home" | "quiz_preview" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp" | "test_preview" | "personality_test" | "personality_result" | "create_test" | "squad_list" | "squad_detail" | "create_squad" | "create_select" | "prediction_list" | "prediction_details" | "create_prediction";
 type TabId = "home" | "gallery" | "create" | "leaderboard" | "profile";
-type QuizTab = "trending" | "all";
 type ContentType = "quizzes" | "tests";
-type SortType = "popular" | "saves" | "newest";
+type SortType = "completed" | "newest" | "popular" | "saves";
+type SortDirection = "desc" | "asc";
+type PredictionBackTarget = "home" | "prediction_list" | "admin";
+type PredictionCreateEntry = "home" | "prediction_list";
 
 
 const Index = () => {
   const { data: banners = [], isLoading: bannersLoading } = useBanners();
   const { data: quizzes = [], isLoading: quizzesLoading } = usePublishedQuizzes();
+  const { data: myQuizzes = [] } = useMyQuizzes();
   const { data: saveIds = new Set() } = useFavoriteIds();
   const { data: likeIds = new Set() } = useLikeIds();
   const { data: completedQuizIds = new Set() } = useCompletedQuizIds();
+  const submitQuizResult = useSubmitQuizResult();
   const toggleSave = useToggleFavorite();
   const toggleLike = useToggleLike();
 
   // Personality tests hooks
   const { data: personalityTests = [], isLoading: testsLoading } = usePublishedPersonalityTests();
+  const { data: myPersonalityTests = [] } = useMyPersonalityTests();
   const { data: testLikeIds = new Set() } = usePersonalityTestLikeIds();
   const { data: testSaveIds = new Set() } = usePersonalityTestFavoriteIds();
   const { data: completedTestIds = new Set() } = useCompletedTestIds();
@@ -90,13 +116,36 @@ const Index = () => {
 
   // Squad state
   const [selectedSquad, setSelectedSquad] = useState<Squad | null>(null);
+  const { data: currentProfile } = useCurrentProfile();
   const { data: mySquad } = useMySquad();
 
-  const [quizTab, setQuizTab] = useState<QuizTab>("trending");
-  const [sortBy, setSortBy] = useState<SortType>("popular");
+  // Prediction market state
+  const [predictions, setPredictions] = useState<PredictionPoll[]>(DEMO_PREDICTIONS);
+  const [selectedPredictionId, setSelectedPredictionId] = useState<string | null>(null);
+  const [predictionBackTarget, setPredictionBackTarget] = useState<PredictionBackTarget>("prediction_list");
+  const [predictionCreateEntry, setPredictionCreateEntry] = useState<PredictionCreateEntry>("home");
+  const [isCreateGateOpen, setIsCreateGateOpen] = useState(false);
+  const [gateEligibility, setGateEligibility] = useState<PredictionCreationEligibility | null>(null);
+
+  const { data: predictionPolls = [], refetch: refetchPredictionPolls } = usePredictionPolls();
+  const {
+    data: predictionEligibility,
+    refetch: refetchPredictionEligibility,
+    isFetching: isPredictionEligibilityLoading,
+  } = usePredictionCreationEligibility();
+  const { rolePreviewMode, setRolePreviewMode, forcedRole } = useRolePreview();
+  const { data: predictionQuota } = useSquadPredictionQuota(
+    predictionEligibility?.squad_id,
+    Boolean(predictionEligibility?.squad_id)
+  );
+
+  const [sortBy, setSortBy] = useState<SortType>("completed");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [shouldScrollToContentBlock, setShouldScrollToContentBlock] = useState(false);
+  const homeContentBlockRef = useRef<HTMLDivElement | null>(null);
 
   const { data: quizData } = useQuizWithQuestions(selectedQuizId);
 
@@ -104,6 +153,28 @@ const Index = () => {
   const ensureProfile = useEnsureProfile();
   const { track, trackScreen } = useTrackEvent();
   const profileInitialized = useRef(false);
+
+  useEffect(() => {
+    if (predictionPolls.length > 0) {
+      setPredictions(predictionPolls);
+    }
+  }, [predictionPolls]);
+
+  useEffect(() => {
+    if (!shouldScrollToContentBlock || currentScreen !== "home") return;
+
+    const timeoutId = window.setTimeout(() => {
+      homeContentBlockRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      setShouldScrollToContentBlock(false);
+    }, 120);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [shouldScrollToContentBlock, currentScreen]);
 
   useEffect(() => {
     const onboardingCompleted = localStorage.getItem("onboarding_completed");
@@ -134,6 +205,10 @@ const Index = () => {
       if (!profileInitialized.current && isTelegramWebApp()) {
         profileInitialized.current = true;
         try {
+          const authReady = await initUser();
+          if (!authReady) {
+            console.warn("Supabase auth session init failed");
+          }
           await ensureProfile.mutateAsync();
           console.log("Profile initialized");
         } catch (e) {
@@ -152,6 +227,17 @@ const Index = () => {
       const startParam = tg?.initDataUnsafe?.start_param;
       if (startParam) {
         console.log("Deep link start_param:", startParam);
+
+        const pollMatch = startParam.match(/poll(?:=|:|_)([a-z0-9-]+)/i);
+        if (pollMatch) {
+          const predictionId = pollMatch[1];
+          setTimeout(() => {
+            setSelectedPredictionId(predictionId);
+            setPredictionBackTarget("home");
+            setCurrentScreen("prediction_details");
+          }, 100);
+          return;
+        }
 
         // Parse start_param format: test_UUID_ref_userId_src_source or quest_UUID_ref_userId_src_source
         // Extract UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
@@ -226,6 +312,19 @@ const Index = () => {
         } else if (currentScreen === "pvp") {
           setCurrentScreen("home");
           setActiveTab("home");
+        } else if (currentScreen === "prediction_list") {
+          setCurrentScreen("home");
+          setActiveTab("home");
+        } else if (currentScreen === "prediction_details") {
+          setCurrentScreen(predictionBackTarget);
+          if (predictionBackTarget === "home") {
+            setActiveTab("home");
+          }
+        } else if (currentScreen === "create_prediction") {
+          setCurrentScreen(predictionCreateEntry);
+          if (predictionCreateEntry === "home") {
+            setActiveTab("home");
+          }
         } else {
           setCurrentScreen("home");
           setActiveTab("home");
@@ -238,7 +337,7 @@ const Index = () => {
     return () => {
       backButton.hide();
     };
-  }, [currentScreen, result]);
+  }, [currentScreen, predictionBackTarget, predictionCreateEntry, result]);
 
   const handleTabChange = (tab: TabId) => {
     if (tab === "create") {
@@ -258,6 +357,18 @@ const Index = () => {
   // Track quiz start time for duration calculation
   const quizStartTime = useRef<number>(Date.now());
   const questionStartTime = useRef<number>(Date.now());
+
+  const persistQuizCompletion = (quizId: string | null, quizResult: QuizResult, answerList: number[]) => {
+    if (!quizId) return;
+
+    submitQuizResult.mutate({
+      quiz_id: quizId,
+      score: quizResult.score,
+      max_score: quizResult.maxScore,
+      percentile: quizResult.percentile,
+      answers: answerList,
+    });
+  };
 
   const handleQuizSelect = (quizId: string) => {
     haptic.impact('medium');
@@ -310,6 +421,7 @@ const Index = () => {
         const quizResult = computeQuizResult(newAnswers);
         setResult(quizResult);
         setCurrentScreen("result");
+        persistQuizCompletion(selectedQuizId, quizResult, newAnswers);
 
         // Track quiz completion
         const totalTimeMs = Date.now() - quizStartTime.current;
@@ -391,27 +503,218 @@ const Index = () => {
     activeChallenges: fetchedStats?.activeChallenges ?? 0,
   };
 
-  const filteredQuizzes = quizzes.filter(quiz =>
-    quiz.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    quiz.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const fallbackEligibility: PredictionCreationEligibility = {
+    eligible: false,
+    required_completed_count: 3,
+    completed_count: 0,
+    has_squad: false,
+    squad_id: null,
+    squad_title: null,
+    is_squad_captain: false,
+    is_admin: false,
+    monthly_limit: 5,
+    used_this_month: 0,
+    remaining_this_month: 5,
+    cooldown_hours_left: 0,
+    next_available_at: null,
+    blocking_reason_code: "need_progress",
+  };
 
-  const sortedQuizzes = [...filteredQuizzes].sort((a, b) => {
+  const uiEligibility = predictionEligibility || gateEligibility || fallbackEligibility;
+  const effectivePredictionIsAdmin = forcedRole === "admin"
+    ? true
+    : forcedRole === "user"
+      ? false
+      : uiEligibility.is_admin;
+  const uiEligibilityForView = useMemo(
+    () => ({ ...uiEligibility, is_admin: effectivePredictionIsAdmin }),
+    [uiEligibility, effectivePredictionIsAdmin]
+  );
+  const selectedPrediction = predictions.find((prediction) => prediction.id === selectedPredictionId) || null;
+  const canManageSelectedPrediction = Boolean(selectedPrediction && uiEligibilityForView.is_admin);
+  const hasPredictionAccess = (fetchedStats?.testsCompleted ?? 0) > 0 || (fetchedStats?.bestScore ?? 0) > 0;
+  const homeCreateHint = isPredictionEligibilityLoading
+    ? "Проверяем доступ..."
+    : uiEligibilityForView.eligible
+      ? `Доступно: осталось ${uiEligibilityForView.remaining_this_month}/${uiEligibilityForView.monthly_limit} в этом месяце`
+      : `До доступа: ${uiEligibilityForView.completed_count}/${uiEligibilityForView.required_completed_count} тестов`;
+  const listCreateBadge = isPredictionEligibilityLoading
+    ? "Проверка..."
+    : uiEligibilityForView.eligible
+      ? `Осталось ${uiEligibilityForView.remaining_this_month}/${uiEligibilityForView.monthly_limit}`
+      : "Требования";
+
+  const openPredictionList = () => {
+    setCurrentScreen("prediction_list");
+  };
+
+  const openPredictionDetails = (predictionId: string, backTarget: PredictionBackTarget) => {
+    setSelectedPredictionId(predictionId);
+    setPredictionBackTarget(backTarget);
+    setCurrentScreen("prediction_details");
+  };
+
+  const handlePredictionChange = (nextPrediction: PredictionPoll) => {
+    setPredictions((prev) =>
+      prev.map((prediction) => (prediction.id === nextPrediction.id ? nextPrediction : prediction))
+    );
+  };
+
+  const openCreatePrediction = async (entry: PredictionCreateEntry) => {
+    setPredictionCreateEntry(entry);
+
+    try {
+      const { data } = await refetchPredictionEligibility();
+      const latest = data || predictionEligibility || fallbackEligibility;
+      if (latest.eligible) {
+        setIsCreateGateOpen(false);
+        setCurrentScreen("create_prediction");
+        return;
+      }
+      setGateEligibility(latest);
+      setIsCreateGateOpen(true);
+    } catch {
+      setGateEligibility(predictionEligibility || fallbackEligibility);
+      setIsCreateGateOpen(true);
+    }
+  };
+
+  const handlePredictionCreated = async (predictionId: string) => {
+    await Promise.allSettled([refetchPredictionPolls(), refetchPredictionEligibility()]);
+
+    if (!predictionId) {
+      setCurrentScreen("prediction_list");
+      return;
+    }
+
+    setSelectedPredictionId(predictionId);
+    setPredictionBackTarget("prediction_list");
+    setCurrentScreen("prediction_details");
+  };
+
+  const handleGateGoToTests = () => {
+    setCurrentScreen("home");
+    setActiveTab("home");
+    setShouldScrollToContentBlock(true);
+  };
+
+  const handleGateCreateSquad = () => {
+    setCurrentScreen("create_squad");
+  };
+
+  const handleGateOpenMySquad = () => {
+    if (mySquad) {
+      setSelectedSquad(mySquad);
+      setCurrentScreen("squad_detail");
+      return;
+    }
+    setCurrentScreen("squad_list");
+  };
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const mergedQuizzes = useMemo(() => {
+    const map = new Map<string, (typeof quizzes)[number]>();
+    [...quizzes, ...myQuizzes].forEach((quiz) => {
+      if (!quiz || !quiz.id) return;
+      if (!map.has(quiz.id)) {
+        map.set(quiz.id, quiz);
+      }
+    });
+    return [...map.values()];
+  }, [quizzes, myQuizzes]);
+
+  const mergedTests = useMemo(() => {
+    const map = new Map<string, (typeof personalityTests)[number]>();
+    [...personalityTests, ...myPersonalityTests].forEach((test) => {
+      if (!test || !test.id) return;
+      if (!map.has(test.id)) {
+        map.set(test.id, test);
+      }
+    });
+    return [...map.values()];
+  }, [personalityTests, myPersonalityTests]);
+
+  const safeQuizzes = (Array.isArray(mergedQuizzes) ? mergedQuizzes : []).filter((quiz): quiz is typeof mergedQuizzes[number] => Boolean(quiz));
+  const safeTests = (Array.isArray(mergedTests) ? mergedTests : []).filter((test): test is typeof mergedTests[number] => Boolean(test));
+  const normalizeText = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : "");
+  const toSafeId = (value: unknown) => {
+    if (value === null || value === undefined) return "";
+    return String(value).trim();
+  };
+  const toSafeNumber = (value: unknown) => {
+    const numeric = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  };
+  const normalizedQuizzes = safeQuizzes
+    .map((quiz) => ({
+      ...quiz,
+      id: toSafeId((quiz as { id?: unknown }).id),
+      title: typeof quiz.title === "string" && quiz.title.trim() ? quiz.title : "Без названия",
+      participant_count: toSafeNumber((quiz as { participant_count?: unknown }).participant_count),
+      like_count: toSafeNumber((quiz as { like_count?: unknown }).like_count),
+      save_count: toSafeNumber((quiz as { save_count?: unknown }).save_count),
+    }))
+    .filter((quiz) => quiz.id.length > 0);
+  const normalizedTests = safeTests
+    .map((test) => ({
+      ...test,
+      id: toSafeId((test as { id?: unknown }).id),
+      title: typeof test.title === "string" && test.title.trim() ? test.title : "Без названия",
+      participant_count: toSafeNumber((test as { participant_count?: unknown }).participant_count),
+      like_count: toSafeNumber((test as { like_count?: unknown }).like_count),
+      save_count: toSafeNumber((test as { save_count?: unknown }).save_count),
+    }))
+    .filter((test) => test.id.length > 0);
+
+  const filteredQuizzes = normalizedQuizzes.filter((quiz) => {
+    if (!normalizedSearchQuery) return true;
+    return (
+      normalizeText(quiz.title).includes(normalizedSearchQuery) ||
+      normalizeText(quiz.description).includes(normalizedSearchQuery)
+    );
+  });
+
+  const filteredTests = normalizedTests.filter((test) => {
+    if (!normalizedSearchQuery) return true;
+    return (
+      normalizeText(test.title).includes(normalizedSearchQuery) ||
+      normalizeText(test.description).includes(normalizedSearchQuery)
+    );
+  });
+
+  const getSortValue = (item?: {
+    participant_count?: number | null;
+    like_count?: number | null;
+    save_count?: number | null;
+    created_at?: string | null;
+  } | null) => {
     switch (sortBy) {
+      case "completed":
+        return toSafeNumber(item?.participant_count);
       case "popular":
-        return ((b as any).like_count ?? 0) - ((a as any).like_count ?? 0);
+        return toSafeNumber(item?.like_count);
       case "saves":
-        return ((b as any).save_count ?? 0) - ((a as any).save_count ?? 0);
+        return toSafeNumber(item?.save_count);
       case "newest":
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        return toSafeNumber(Date.parse(typeof item?.created_at === "string" ? item.created_at : ""));
       default:
         return 0;
     }
-  });
+  };
 
-  const trendingQuizzes = [...quizzes]
-    .sort((a, b) => ((b as any).like_count ?? 0) - ((a as any).like_count ?? 0))
-    .slice(0, 10);
+  const compareBySort = <T extends {
+    participant_count?: number | null;
+    like_count?: number | null;
+    save_count?: number | null;
+    created_at?: string | null;
+  }>(a: T, b: T) => {
+    const aValue = getSortValue(a);
+    const bValue = getSortValue(b);
+    return sortDirection === "asc" ? aValue - bValue : bValue - aValue;
+  };
+
+  const sortedQuizzes = [...filteredQuizzes].sort(compareBySort);
+  const sortedTests = [...filteredTests].sort(compareBySort);
 
   // Shuffle questions for quiz (memoized to keep same order during session)
   const mappedQuestions = useMemo(() => {
@@ -459,7 +762,16 @@ const Index = () => {
   };
 
   const showBottomNav = ["home", "gallery", "leaderboard", "profile"].includes(currentScreen);
-  const displayQuizzes = quizTab === "trending" ? trendingQuizzes : sortedQuizzes;
+  const displayQuizzes = sortedQuizzes.length > 0 || normalizedSearchQuery ? sortedQuizzes : [...normalizedQuizzes].sort(compareBySort);
+  const displayTests = sortedTests.length > 0 || normalizedSearchQuery ? sortedTests : [...normalizedTests].sort(compareBySort);
+  const topPredictions = [...predictions]
+    .filter((prediction) => prediction.status === "open" && !prediction.is_hidden)
+    .sort((a, b) => {
+      const poolDiff = (b.pool_a + b.pool_b) - (a.pool_a + a.pool_b);
+      if (poolDiff !== 0) return poolDiff;
+      return b.participant_count - a.participant_count;
+    })
+    .slice(0, 3);
 
   if (showOnboarding) {
     return <OnboardingCarousel onComplete={handleOnboardingComplete} />;
@@ -546,10 +858,13 @@ const Index = () => {
                       haptic.impact('medium');
                       setCurrentScreen("squad_list");
                     }}
-                    className="tg-button-secondary text-sm py-3 flex items-center justify-center gap-2"
+                    className="tg-button text-sm py-3 flex items-center justify-center gap-2 cta-join cta-join-btn"
                   >
-                    <Users className="w-4 h-4" />
-                    {mySquad ? "Сменить" : "Вступить"}
+                    <span className="cta-join-shine" aria-hidden />
+                    <span className="cta-join-content">
+                      <Users className="w-4 h-4" />
+                      {mySquad ? "Сменить" : "Вступить"}
+                    </span>
                   </button>
                   <button
                     onClick={() => {
@@ -564,8 +879,19 @@ const Index = () => {
                 </div>
               </motion.div>
 
+              <PredictionTopBlock
+                predictions={topPredictions}
+                createHint={homeCreateHint}
+                onCreatePrediction={() => {
+                  void openCreatePrediction("home");
+                }}
+                onOpenAll={openPredictionList}
+                onOpenPrediction={(predictionId) => openPredictionDetails(predictionId, "home")}
+              />
+
               {/* Content Type Tabs: Quizzes / Tests */}
               <motion.div
+                ref={homeContentBlockRef}
                 className="flex gap-2"
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -599,78 +925,91 @@ const Index = () => {
                 </button>
               </motion.div>
 
-              {/* Sort chips + Search button (only for quizzes) */}
-              {contentType === "quizzes" && (
-                <motion.div
-                  className="space-y-3"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                >
-                  <AnimatePresence>
-                    {searchOpen && (
-                      <motion.div
-                        className="flex gap-2"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                      >
-                        <div className="relative flex-1">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          <Input
-                            placeholder="Поиск..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 bg-secondary border-0"
-                            autoFocus
-                          />
-                        </div>
-                        <button
-                          className="p-2.5 bg-secondary rounded-lg"
-                          onClick={() => {
-                            setSearchOpen(false);
-                            setSearchQuery("");
-                          }}
-                        >
-                          <X className="w-4 h-4 text-foreground" />
-                        </button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                    {(["popular", "saves", "newest"] as const).map((sort) => (
+              {/* Sort chips + direction + search */}
+              <motion.div
+                className="space-y-3"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                <AnimatePresence>
+                  {searchOpen && (
+                    <motion.div
+                      className="flex gap-2"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                    >
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          placeholder={contentType === "quizzes" ? "Поиск квизов..." : "Поиск тестов..."}
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-9 bg-secondary border-0"
+                          autoFocus
+                        />
+                      </div>
                       <button
-                        key={sort}
+                        className="p-2.5 bg-secondary rounded-lg"
                         onClick={() => {
-                          haptic.selection();
-                          setSortBy(sort);
+                          setSearchOpen(false);
+                          setSearchQuery("");
                         }}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${sortBy === sort
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-secondary text-muted-foreground"
-                          }`}
                       >
-                        {sort === "popular" && <><PopcornIcon className="w-3 h-3" /> Лайки</>}
-                        {sort === "saves" && <><BookmarkIcon className="w-3 h-3" /> Saves</>}
-                        {sort === "newest" && "✨ Новые"}
+                        <X className="w-4 h-4 text-foreground" />
                       </button>
-                    ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-                    {!searchOpen && (
-                      <button
-                        onClick={() => {
-                          haptic.selection();
-                          setSearchOpen(true);
-                        }}
-                        className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-secondary text-muted-foreground flex items-center gap-1"
-                      >
-                        <Search className="w-3 h-3" />
-                        Поиск
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      haptic.selection();
+                      setSortDirection((prev) => (prev === "desc" ? "asc" : "desc"));
+                    }}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-secondary text-muted-foreground flex items-center gap-1 shrink-0"
+                    aria-label={sortDirection === "desc" ? "Сортировка по убыванию" : "Сортировка по возрастанию"}
+                  >
+                    {sortDirection === "desc" ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
+                    {sortDirection === "desc" ? "Сначала больше" : "Сначала меньше"}
+                  </button>
+
+                  {!searchOpen && (
+                    <button
+                      onClick={() => {
+                        haptic.selection();
+                        setSearchOpen(true);
+                      }}
+                      className="px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap bg-secondary text-muted-foreground flex items-center gap-1 shrink-0"
+                    >
+                      <Search className="w-3 h-3" />
+                      Поиск
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                  {(["completed", "newest", "popular", "saves"] as const).map((sort) => (
+                    <button
+                      key={sort}
+                      onClick={() => {
+                        haptic.selection();
+                        setSortBy(sort);
+                      }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${sortBy === sort
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-muted-foreground"
+                        }`}
+                    >
+                      {sort === "completed" && <><Users className="w-3 h-3" /> Пройдено</>}
+                      {sort === "newest" && "✨ Новые"}
+                      {sort === "popular" && <><PopcornIcon className="w-3 h-3" /> Лайки</>}
+                      {sort === "saves" && <><BookmarkIcon className="w-3 h-3" /> В избранном</>}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
 
               {/* Content List */}
               <motion.div
@@ -720,26 +1059,30 @@ const Index = () => {
                 ) : (
                   // Personality Tests List
                   <>
-                    {!testsLoading && personalityTests.length === 0 ? (
+                    {!testsLoading && displayTests.length === 0 ? (
                       <div className="tg-section p-6 text-center">
                         <Sparkles className="w-10 h-10 text-purple-500 mx-auto mb-3" />
-                        <h3 className="font-semibold text-foreground mb-2">Нет тестов</h3>
+                        <h3 className="font-semibold text-foreground mb-2">
+                          {searchQuery ? "Ничего не найдено" : "Нет тестов"}
+                        </h3>
                         <p className="text-sm text-muted-foreground mb-4">
-                          Создай первый тест личности!
+                          {searchQuery ? "Попробуй изменить поисковый запрос" : "Создай первый тест личности!"}
                         </p>
-                        <button
-                          className="tg-button bg-purple-500 hover:bg-purple-600"
-                          onClick={() => {
-                            haptic.impact('medium');
-                            setCurrentScreen("create_test");
-                          }}
-                        >
-                          Создать тест
-                        </button>
+                        {!searchQuery && (
+                          <button
+                            className="tg-button bg-purple-500 hover:bg-purple-600"
+                            onClick={() => {
+                              haptic.impact('medium');
+                              setCurrentScreen("create_test");
+                            }}
+                          >
+                            Создать тест
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {personalityTests.map((test, index) => (
+                        {displayTests.map((test, index) => (
                           <motion.div
                             key={test.id}
                             initial={{ y: 20, opacity: 0 }}
@@ -756,6 +1099,7 @@ const Index = () => {
                               result_count={test.result_count}
                               like_count={test.like_count}
                               save_count={test.save_count}
+                              is_anonymous={test.is_anonymous}
                               creator={test.creator}
                               isCompleted={completedTestIds.has(test.id)}
                               isLiked={testLikeIds.has(test.id)}
@@ -771,6 +1115,78 @@ const Index = () => {
                   </>
                 )}
               </motion.div>
+            </motion.div>
+          )}
+
+          {currentScreen === "prediction_list" && (
+            <PredictionListScreen
+              key="prediction_list"
+              predictions={predictions}
+              mySquadId={mySquad?.id}
+              createQuotaBadge={listCreateBadge}
+              onCreatePrediction={() => {
+                void openCreatePrediction("prediction_list");
+              }}
+              onBack={() => {
+                setCurrentScreen("home");
+                setActiveTab("home");
+              }}
+              onOpenPrediction={(predictionId) => openPredictionDetails(predictionId, "prediction_list")}
+            />
+          )}
+
+          {currentScreen === "create_prediction" && (
+            <CreatePredictionScreen
+              key="create_prediction"
+              eligibility={uiEligibilityForView}
+              onBack={() => {
+                setCurrentScreen(predictionCreateEntry);
+                if (predictionCreateEntry === "home") {
+                  setActiveTab("home");
+                }
+              }}
+              onCreated={(pollId) => {
+                void handlePredictionCreated(pollId);
+              }}
+            />
+          )}
+
+          {currentScreen === "prediction_details" && selectedPrediction && (
+            <PredictionDetailsScreen
+              key={`prediction_details_${selectedPrediction.id}`}
+              prediction={selectedPrediction}
+              canManage={canManageSelectedPrediction}
+              hasPredictionAccess={hasPredictionAccess}
+              onPredictionChange={handlePredictionChange}
+              onBack={() => {
+                setCurrentScreen(predictionBackTarget);
+                if (predictionBackTarget === "home") {
+                  setActiveTab("home");
+                }
+              }}
+            />
+          )}
+
+          {currentScreen === "prediction_details" && !selectedPrediction && (
+            <motion.div
+              key="prediction_details_missing"
+              className="min-h-screen flex flex-col items-center justify-center p-6 text-center gap-3"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <h2 className="text-lg font-semibold text-foreground">Прогноз не найден</h2>
+              <p className="text-sm text-muted-foreground">
+                Возможно, ссылка устарела или прогноз был скрыт.
+              </p>
+              <button
+                onClick={() => {
+                  setCurrentScreen("prediction_list");
+                }}
+                className="tg-button"
+              >
+                К списку прогнозов
+              </button>
             </motion.div>
           )}
 
@@ -810,6 +1226,7 @@ const Index = () => {
                 participant_count: quizData.quiz.participant_count || 0,
                 like_count: quizData.quiz.like_count || 0,
                 save_count: quizData.quiz.save_count || 0,
+                is_anonymous: quizData.quiz.is_anonymous ?? false,
                 creator: quizData.quiz.creator,
               }}
               isLiked={likeIds.has(selectedQuizId)}
@@ -842,6 +1259,7 @@ const Index = () => {
                   verdict: "Время вышло!",
                   verdictEmoji: "⏰",
                 });
+                persistQuizCompletion(selectedQuizId, quizResult, answers);
                 setCurrentScreen("result");
               }}
             />
@@ -863,6 +1281,7 @@ const Index = () => {
                   participant_count: selectedTest.participant_count || 0,
                   like_count: selectedTest.like_count || 0,
                   save_count: selectedTest.save_count || 0,
+                  is_anonymous: selectedTest.is_anonymous ?? false,
                   creator: selectedTest.creator,
                 }}
                 isLiked={testLikeIds.has(selectedTestId)}
@@ -972,6 +1391,9 @@ const Index = () => {
             <AdminPanel
               key="admin"
               onBack={() => setCurrentScreen("profile")}
+              onOpenPrediction={(predictionId) => openPredictionDetails(predictionId, "admin")}
+              rolePreviewMode={rolePreviewMode}
+              onRolePreviewChange={setRolePreviewMode}
             />
           )}
 
@@ -1114,6 +1536,16 @@ const Index = () => {
           )}
         </AnimatePresence>
       </div>
+
+      <CreatePredictionGateModal
+        open={isCreateGateOpen}
+        onOpenChange={setIsCreateGateOpen}
+        eligibility={uiEligibilityForView}
+        quota={predictionQuota}
+        onGoToTests={handleGateGoToTests}
+        onCreateSquad={handleGateCreateSquad}
+        onOpenMySquad={handleGateOpenMySquad}
+      />
 
       {showBottomNav && (
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />

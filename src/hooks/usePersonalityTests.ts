@@ -69,6 +69,12 @@ export interface PersonalityTest {
   like_count: number;
   save_count: number;
   is_published: boolean;
+  is_anonymous: boolean;
+  status?: string | null;
+  rejection_reason?: string | null;
+  submitted_at?: string | null;
+  moderated_by?: string | null;
+  moderated_at?: string | null;
   created_at: string;
   updated_at: string;
   creator?: CreatorInfo | null;
@@ -141,24 +147,46 @@ export const usePublishedPersonalityTests = () => {
   return useQuery({
     queryKey: ["personalityTests", "published"],
     queryFn: async (): Promise<PersonalityTest[]> => {
-      // First, get tests
-      const { data: tests, error: testError } = await supabase
-        .from("personality_tests")
+      // Primary source: public view (with anonymous masking).
+      const { data: viewTests, error: viewError } = await supabase
+        .from("personality_tests_public")
         .select("*")
         .eq("is_published", true)
         .order("created_at", { ascending: false });
 
-      if (testError) {
-        console.error("Error fetching personality tests:", testError);
-        throw testError;
+      let tests = viewTests || [];
+
+      // Fallback source: base table.
+      if ((viewError || tests.length === 0)) {
+        const { data: tableTests, error: tableError } = await supabase
+          .from("personality_tests")
+          .select("*")
+          .eq("is_published", true)
+          .order("created_at", { ascending: false });
+
+        if (tableError && viewError) {
+          console.error("Error fetching personality tests from view and table:", viewError, tableError);
+          throw tableError;
+        }
+
+        if (tableTests && tableTests.length > 0) {
+          tests = tableTests;
+        }
       }
 
-      if (!tests || tests.length === 0) {
+      const visibleTests = (tests || []).filter((test) => test && test.is_published === true);
+
+      if (visibleTests.length === 0) {
         return [];
       }
 
       // Get unique creator IDs
-      const creatorIds = [...new Set(tests.map(t => t.created_by).filter(Boolean))];
+      const creatorIds = [...new Set(
+        visibleTests
+          .filter((t) => !t.is_anonymous)
+          .map(t => t.created_by)
+          .filter(Boolean)
+      )];
 
       // Fetch creators separately
       let creatorsMap: Record<string, CreatorInfo> = {};
@@ -201,9 +229,9 @@ export const usePublishedPersonalityTests = () => {
       }
 
       // Merge tests with creators
-      return tests.map(test => ({
+      return visibleTests.map(test => ({
         ...test,
-        creator: test.created_by ? creatorsMap[test.created_by] || null : null,
+        creator: !test.is_anonymous && test.created_by ? creatorsMap[test.created_by] || null : null,
       })) as PersonalityTest[];
     },
   });
@@ -251,6 +279,40 @@ export const usePendingPersonalityTests = () => {
 };
 
 /**
+ * Get all personality tests for admin panel with creator info
+ */
+export const useAdminPersonalityTests = () => {
+  return useQuery({
+    queryKey: ["personalityTests", "admin"],
+    queryFn: async (): Promise<PersonalityTest[]> => {
+      const { data, error } = await supabase
+        .from("personality_tests")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const tests = (data || []) as PersonalityTest[];
+      if (tests.length === 0) return [];
+
+      const creatorIds = [...new Set(
+        tests
+          .filter((test) => !test.is_anonymous)
+          .map((test) => test.created_by)
+          .filter(Boolean)
+      )] as string[];
+
+      const creatorsMap = await fetchCreatorsMap(creatorIds);
+
+      return tests.map((test) => ({
+        ...test,
+        creator: !test.is_anonymous && test.created_by ? creatorsMap[test.created_by] || null : null,
+      }));
+    },
+  });
+};
+
+/**
  * Get a single personality test with all questions, answers, and results
  */
 export const usePersonalityTestWithDetails = (testId: string | null) => {
@@ -259,14 +321,31 @@ export const usePersonalityTestWithDetails = (testId: string | null) => {
     queryFn: async () => {
       if (!testId) return null;
 
-      // Fetch test
-      const { data: test, error: testError } = await supabase
-        .from("personality_tests")
+      const { data: viewTest, error: viewError } = await supabase
+        .from("personality_tests_public")
         .select("*")
         .eq("id", testId)
         .single();
 
-      if (testError) throw testError;
+      let test = viewTest;
+
+      if (!test) {
+        const { data: tableTest, error: tableError } = await supabase
+          .from("personality_tests")
+          .select("*")
+          .eq("id", testId)
+          .single();
+
+        if (tableError && viewError) {
+          throw tableError;
+        }
+
+        test = tableTest;
+      }
+
+      if (!test) {
+        throw viewError ?? new Error("Personality test not found");
+      }
 
       // Fetch questions
       const { data: questions, error: questionsError } = await supabase
@@ -302,8 +381,17 @@ export const usePersonalityTestWithDetails = (testId: string | null) => {
         answers: (answers || []).filter(a => a.question_id === q.id)
       })) || [];
 
+      let creator: CreatorInfo | null = null;
+      if (test.created_by && !test.is_anonymous) {
+        const creatorsMap = await fetchCreatorsMap([test.created_by]);
+        creator = creatorsMap[test.created_by] || null;
+      }
+
       return {
-        test: test as PersonalityTest,
+        test: {
+          ...(test as PersonalityTest),
+          creator,
+        },
         questions: questionsWithAnswers as PersonalityTestQuestion[],
         results: (results || []) as PersonalityTestResult[],
       };
@@ -320,6 +408,7 @@ interface CreatePersonalityTestInput {
   title: string;
   description?: string;
   image_url?: string;
+  is_anonymous?: boolean;
   results: {
     result_key: string;
     title: string;
@@ -361,6 +450,7 @@ export const useCreatePersonalityTest = () => {
           question_count: input.questions.length,
           result_count: input.results.length,
           is_published: false,
+          is_anonymous: input.is_anonymous ?? false,
         })
         .select()
         .single();
@@ -518,38 +608,114 @@ export const useMyPersonalityTestCompletions = () => {
     queryKey: ["personalityTestCompletions", "my"],
     queryFn: async (): Promise<PersonalityTestCompletion[]> => {
       const profileId = await getProfileId();
-      if (!profileId) return [];
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      const candidateUserIds = [...new Set([profileId, authUser?.id].filter(Boolean) as string[])];
+      if (candidateUserIds.length === 0) return [];
 
       const { data, error } = await supabase
         .from("personality_test_completions")
-        .select(`
-          *,
-          result:personality_test_results(*),
-          test:personality_tests(*)
-        `)
-        .eq("user_id", profileId)
+        .select("id, user_id, test_id, result_id, answers, completed_at")
+        .in("user_id", candidateUserIds)
         .order("completed_at", { ascending: false });
 
       if (error) throw error;
 
       const completions = (data || []) as PersonalityTestCompletion[];
+      const testIds = [
+        ...new Set(completions.map(c => c.test_id).filter(Boolean) as string[])
+      ];
+      const resultIds = [
+        ...new Set(completions.map(c => c.result_id).filter(Boolean) as string[])
+      ];
+
+      let tests: any[] = [];
+
+      if (testIds.length > 0) {
+        const viewWithAnon = await supabase
+          .from("personality_tests_public")
+          .select("id, title, description, image_url, created_by, is_anonymous")
+          .in("id", testIds);
+
+        if (!viewWithAnon.error && (viewWithAnon.data?.length || 0) > 0) {
+          tests = viewWithAnon.data || [];
+        } else {
+          const viewLegacy = await supabase
+            .from("personality_tests_public")
+            .select("id, title, description, image_url, created_by")
+            .in("id", testIds);
+
+          if (!viewLegacy.error && (viewLegacy.data?.length || 0) > 0) {
+            tests = (viewLegacy.data || []).map((test: any) => ({
+              ...test,
+              is_anonymous: false,
+            }));
+          } else {
+            const tableWithAnon = await supabase
+              .from("personality_tests")
+              .select("id, title, description, image_url, created_by, is_anonymous, is_published")
+              .in("id", testIds);
+
+            if (!tableWithAnon.error && (tableWithAnon.data?.length || 0) > 0) {
+              tests = (tableWithAnon.data || [])
+                .filter((test: any) => test && test.is_published !== false)
+                .map((test: any) => ({
+                  ...test,
+                  is_anonymous: test.is_anonymous === true,
+                }));
+            } else {
+              const tableLegacy = await supabase
+                .from("personality_tests")
+                .select("id, title, description, image_url, created_by, is_published")
+                .in("id", testIds);
+
+              tests = (tableLegacy.data || [])
+                .filter((test: any) => test && test.is_published !== false)
+                .map((test: any) => ({
+                  ...test,
+                  is_anonymous: false,
+                }));
+            }
+          }
+        }
+      }
+
+      let results: any[] = [];
+      if (resultIds.length > 0) {
+        const { data: rawResults, error: resultsError } = await supabase
+          .from("personality_test_results")
+          .select("*")
+          .in("id", resultIds);
+
+        if (resultsError) {
+          console.warn("Failed to load personality test results for history:", resultsError);
+        } else {
+          results = rawResults || [];
+        }
+      }
+
       const creatorIds = [
-        ...new Set(
-          completions
-            .map(c => c.test?.created_by)
-            .filter(Boolean) as string[]
-        ),
+        ...new Set(tests.map((t: any) => t.created_by).filter(Boolean) as string[])
       ];
       const creatorsMap = await fetchCreatorsMap(creatorIds);
 
+      const testsMap = new Map(
+        tests.map((t: any) => [
+          t.id,
+          {
+            ...t,
+            creator: t.created_by ? creatorsMap[t.created_by] || null : null,
+          }
+        ])
+      );
+
+      const resultsMap = new Map(results.map((r: any) => [r.id, r]));
+
       return completions.map(c => ({
         ...c,
-        test: c.test
-          ? {
-              ...c.test,
-              creator: c.test.created_by ? creatorsMap[c.test.created_by] || null : null,
-            }
-          : c.test,
+        test: testsMap.get(c.test_id) || null,
+        result: resultsMap.get(c.result_id) || null,
       })) as PersonalityTestCompletion[];
     },
   });
@@ -787,19 +953,57 @@ export const useModeratePersonalityTest = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ testId, publish }: { testId: string; publish: boolean }) => {
-      const { data, error } = await supabase
+    mutationFn: async ({
+      testId,
+      action,
+      rejectionReason,
+    }: {
+      testId: string;
+      action: "approve" | "reject";
+      rejectionReason?: string;
+    }) => {
+      const now = new Date().toISOString();
+      const normalizedReason = rejectionReason?.trim() || null;
+      const primaryPayload = action === "approve"
+        ? {
+            is_published: true,
+            status: "published",
+            rejection_reason: null,
+            moderated_at: now,
+          }
+        : {
+            is_published: false,
+            status: "rejected",
+            rejection_reason: normalizedReason || "Причина не указана",
+            moderated_at: now,
+          };
+
+      const { data, error } = await (supabase as any)
         .from("personality_tests")
-        .update({ is_published: publish })
+        .update(primaryPayload)
         .eq("id", testId)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Fallback for environments where moderation columns are not migrated yet.
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("personality_tests")
+          .update({ is_published: action === "approve" })
+          .eq("id", testId)
+          .select()
+          .single();
+
+        if (fallbackError) throw error;
+        return fallbackData as PersonalityTest;
+      }
+
       return data as PersonalityTest;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["personalityTests"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "tests"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "quizzes"] });
     },
   });
 };

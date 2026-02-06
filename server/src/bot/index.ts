@@ -10,6 +10,7 @@ if (!BOT_TOKEN) {
 }
 
 export const bot = new Bot(BOT_TOKEN);
+let botStarted = false;
 
 // Mini App URL
 const MINI_APP_URL = process.env.VITE_MINI_APP_URL || 'https://t.me/YourBotUsername/app';
@@ -305,6 +306,11 @@ bot.catch((err) => {
  * Start the bot
  */
 export async function startBot() {
+  if (botStarted) {
+    return;
+  }
+  botStarted = true;
+
   console.log('🤖 Starting Telegram bot...');
 
   // Use long polling in development
@@ -319,6 +325,3 @@ export async function startBot() {
     console.log('ℹ️ Bot in production mode - set up webhook separately');
   }
 }
-
-// Auto-start the bot when this file is run directly
-startBot();
