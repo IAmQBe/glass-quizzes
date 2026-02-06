@@ -23,6 +23,14 @@ export interface CreatorInfo {
   } | null;
 }
 
+const isMissingAnonymousColumnError = (error: unknown): boolean => {
+  const message = (error as { message?: string } | null)?.message ?? "";
+  return (
+    message.includes("is_anonymous") &&
+    (message.includes("schema cache") || message.includes("column"))
+  );
+};
+
 async function fetchCreatorsMap(creatorIds: string[]): Promise<Record<string, CreatorInfo>> {
   if (creatorIds.length === 0) return {};
 
@@ -517,7 +525,7 @@ export const useCreatePersonalityTest = () => {
         question_count: input.questions.length,
         result_count: input.results.length,
         is_published: publishImmediately,
-        is_anonymous: input.is_anonymous ?? false,
+        ...(input.is_anonymous ? { is_anonymous: true } : {}),
       };
 
       let test: any = null;
@@ -534,13 +542,22 @@ export const useCreatePersonalityTest = () => {
         .single();
 
       if (testWithStatusError) {
+        if (input.is_anonymous && isMissingAnonymousColumnError(testWithStatusError)) {
+          throw new Error("Для анонимной публикации нужно применить миграцию 20260206120000_add_anonymous_publishing.sql");
+        }
+
         const { data: fallbackTest, error: fallbackError } = await supabase
           .from("personality_tests")
           .insert(baseInsertPayload)
           .select()
           .single();
 
-        if (fallbackError) throw fallbackError;
+        if (fallbackError) {
+          if (input.is_anonymous && isMissingAnonymousColumnError(fallbackError)) {
+            throw new Error("Для анонимной публикации нужно применить миграцию 20260206120000_add_anonymous_publishing.sql");
+          }
+          throw fallbackError;
+        }
         test = fallbackTest;
       } else {
         test = testWithStatus;
@@ -685,6 +702,8 @@ export const useSubmitPersonalityTestCompletion = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["personalityTests"] });
       queryClient.invalidateQueries({ queryKey: ["personalityTestCompletions"] });
+      queryClient.invalidateQueries({ queryKey: ["completedTestIds"] });
+      queryClient.invalidateQueries({ queryKey: ["predictionCreationEligibility"] });
     },
   });
 };

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BannerCarousel } from "@/components/BannerCarousel";
 import { QuizShowcase } from "@/components/QuizShowcase";
@@ -21,15 +21,18 @@ import { useTrackEvent } from "@/hooks/useTrackEvent";
 import { QuizScreen } from "@/screens/QuizScreen";
 import { ResultScreen } from "@/screens/ResultScreen";
 import { CompareScreen } from "@/screens/CompareScreen";
-import { ProfileScreen } from "@/screens/ProfileScreen";
+import { ProfileScreen, type ProfileTabType } from "@/screens/ProfileScreen";
 import { AdminPanel } from "@/screens/AdminPanel";
 import { LeaderboardScreen } from "@/screens/LeaderboardScreen";
-import { CreateQuizScreen } from "@/screens/CreateQuizScreen";
+import { CreateQuizScreen, type CreateQuizSuccessPayload } from "@/screens/CreateQuizScreen";
 import { CreatorsScreen } from "@/screens/CreatorsScreen";
 import { PvpLobbyScreen } from "@/screens/PvpLobbyScreen";
 import { PersonalityTestScreen } from "@/screens/PersonalityTestScreen";
 import { PersonalityTestResultScreen } from "@/screens/PersonalityTestResultScreen";
-import { CreatePersonalityTestScreen } from "@/screens/CreatePersonalityTestScreen";
+import {
+  CreatePersonalityTestScreen,
+  type CreatePersonalityTestSuccessPayload,
+} from "@/screens/CreatePersonalityTestScreen";
 import { PersonalityTestCard } from "@/components/PersonalityTestCard";
 import {
   usePublishedPersonalityTests,
@@ -39,17 +42,28 @@ import {
   useTogglePersonalityTestFavorite,
   useCompletedTestIds,
   useMyPersonalityTests,
+  usePersonalityTestWithDetails,
   PersonalityTestResult
 } from "@/hooks/usePersonalityTests";
 import { toast } from "@/hooks/use-toast";
 import { UserStats, QuizResult } from "@/types/quiz";
-import { initTelegramApp, backButton, isTelegramWebApp, shareResult, getTelegramUserData, getTelegram } from "@/lib/telegram";
+import {
+  initTelegramApp,
+  backButton,
+  isTelegramWebApp,
+  shareResult,
+  shareQuizInvite,
+  sharePersonalityTestInvite,
+  getTelegramUserData,
+  getTelegram,
+} from "@/lib/telegram";
 import { initUser } from "@/lib/user";
 import { calculateResult, getVerdict } from "@/data/quizData";
 import { TrendingUp, Sparkles, Search, X, Swords, Users, Plus, ArrowDown, ArrowUp } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Input } from "@/components/ui/input";
+import { ToastAction } from "@/components/ui/toast";
 import { haptic } from "@/lib/telegram";
 import { SquadScreen } from "@/screens/SquadScreen";
 import { SquadListScreen } from "@/screens/SquadListScreen";
@@ -70,6 +84,7 @@ import {
   useSquadPredictionQuota,
 } from "@/hooks/usePredictions";
 import { useRolePreview } from "@/hooks/useRolePreview";
+import { isCurrentUserAdmin } from "@/lib/user";
 
 type AppScreen = "home" | "quiz_preview" | "quiz" | "result" | "compare" | "profile" | "admin" | "leaderboard" | "create" | "gallery" | "pvp" | "test_preview" | "personality_test" | "personality_result" | "create_test" | "squad_list" | "squad_detail" | "create_squad" | "create_select" | "prediction_list" | "prediction_details" | "create_prediction";
 type TabId = "home" | "gallery" | "create" | "leaderboard" | "profile";
@@ -78,6 +93,21 @@ type SortType = "completed" | "newest" | "popular" | "saves";
 type SortDirection = "desc" | "asc";
 type PredictionBackTarget = "home" | "prediction_list" | "admin";
 type PredictionCreateEntry = "home" | "prediction_list";
+const HOME_CONTENT_TYPE_STORAGE_KEY = "home_content_type";
+
+type NavigationSnapshot = {
+  screen: AppScreen;
+  activeTab: TabId;
+  selectedQuizId: string | null;
+  selectedTestId: string | null;
+  selectedPredictionId: string | null;
+  predictionBackTarget: PredictionBackTarget;
+  predictionCreateEntry: PredictionCreateEntry;
+  selectedSquad: Squad | null;
+  contentType: ContentType;
+  profileTab: ProfileTabType;
+  scrollY: number;
+};
 
 
 const Index = () => {
@@ -112,7 +142,12 @@ const Index = () => {
   const [testResult, setTestResult] = useState<PersonalityTestResult | null>(null);
   const [testResultTitle, setTestResultTitle] = useState("");
   const [testResultTestId, setTestResultTestId] = useState("");
-  const [contentType, setContentType] = useState<ContentType>("quizzes");
+  const [contentType, setContentType] = useState<ContentType>(() => {
+    if (typeof window === "undefined") return "quizzes";
+    const stored = window.localStorage.getItem(HOME_CONTENT_TYPE_STORAGE_KEY);
+    return stored === "tests" ? "tests" : "quizzes";
+  });
+  const [profileTab, setProfileTab] = useState<ProfileTabType>("my");
 
   // Squad state
   const [selectedSquad, setSelectedSquad] = useState<Squad | null>(null);
@@ -135,8 +170,8 @@ const Index = () => {
   } = usePredictionCreationEligibility();
   const { rolePreviewMode, setRolePreviewMode, forcedRole } = useRolePreview();
   const { data: predictionQuota } = useSquadPredictionQuota(
-    predictionEligibility?.squad_id,
-    Boolean(predictionEligibility?.squad_id)
+    predictionEligibility?.squad_id || gateEligibility?.squad_id || mySquad?.id,
+    Boolean(predictionEligibility?.squad_id || gateEligibility?.squad_id || mySquad?.id)
   );
 
   const [sortBy, setSortBy] = useState<SortType>("completed");
@@ -146,13 +181,21 @@ const Index = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [shouldScrollToContentBlock, setShouldScrollToContentBlock] = useState(false);
   const homeContentBlockRef = useRef<HTMLDivElement | null>(null);
+  const currentScrollYRef = useRef(0);
+  const navigationStackRef = useRef<NavigationSnapshot[]>([]);
+  const previousSnapshotRef = useRef<NavigationSnapshot | null>(null);
+  const isNavigatingBackRef = useRef(false);
 
   const { data: quizData } = useQuizWithQuestions(selectedQuizId);
+  const { data: selectedTestDetails } = usePersonalityTestWithDetails(selectedTestId);
 
   // Profile and tracking
   const ensureProfile = useEnsureProfile();
   const { track, trackScreen } = useTrackEvent();
   const profileInitialized = useRef(false);
+  const quizStartTime = useRef<number>(Date.now());
+  const questionStartTime = useRef<number>(Date.now());
+  const quizCompletedRef = useRef(false);
 
   useEffect(() => {
     if (predictionPolls.length > 0) {
@@ -175,6 +218,11 @@ const Index = () => {
       window.clearTimeout(timeoutId);
     };
   }, [shouldScrollToContentBlock, currentScreen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(HOME_CONTENT_TYPE_STORAGE_KEY, contentType);
+  }, [contentType]);
 
   useEffect(() => {
     const onboardingCompleted = localStorage.getItem("onboarding_completed");
@@ -231,6 +279,12 @@ const Index = () => {
         const pollMatch = startParam.match(/poll(?:=|:|_)([a-z0-9-]+)/i);
         if (pollMatch) {
           const predictionId = pollMatch[1];
+          track("deep_link_open", {
+            start_param: startParam,
+            deep_link_type: "prediction_poll",
+            content_id: predictionId,
+            source: "telegram_start_param",
+          });
           setTimeout(() => {
             setSelectedPredictionId(predictionId);
             setPredictionBackTarget("home");
@@ -247,25 +301,40 @@ const Index = () => {
 
         if (uuidMatch) {
           const id = uuidMatch[1];
+          track("deep_link_open", {
+            start_param: startParam,
+            deep_link_type: isTest ? "personality_test" : isQuest ? "quiz" : "legacy_quiz",
+            content_id: id,
+            source: "telegram_start_param",
+          });
 
           // Delay screen change to allow React to render first
           setTimeout(() => {
             if (isTest) {
               console.log("Opening personality test:", id);
+              track("test_view", { test_id: id });
               setSelectedTestId(id);
               setCurrentScreen("test_preview");
             } else if (isQuest) {
               console.log("Opening quiz:", id);
+              track("quiz_view", { quiz_id: id }, id);
               setSelectedQuizId(id);
               setCurrentScreen("quiz_preview");
             } else {
               // Legacy format or unknown - try to determine by checking if it exists
               // For now, default to quiz
               console.log("Opening content (legacy format):", id);
+              track("quiz_view", { quiz_id: id }, id);
               setSelectedQuizId(id);
               setCurrentScreen("quiz_preview");
             }
           }, 100);
+        } else {
+          track("deep_link_open", {
+            start_param: startParam,
+            deep_link_type: "unknown",
+            source: "telegram_start_param",
+          });
         }
       }
     };
@@ -277,58 +346,156 @@ const Index = () => {
     trackScreen(currentScreen);
   }, [currentScreen, trackScreen]);
 
+  const trackQuizAbandon = useCallback(
+    (reason: string) => {
+      if (currentScreen !== "quiz" || !selectedQuizId || quizCompletedRef.current) return;
+
+      const timeSpentMs = Math.max(0, Date.now() - quizStartTime.current);
+      track(
+        "quiz_abandon",
+        {
+          quiz_id: selectedQuizId,
+          question_index: currentQuestion,
+          time_ms: timeSpentMs,
+          reason,
+        },
+        selectedQuizId
+      );
+      quizCompletedRef.current = true;
+    },
+    [currentQuestion, currentScreen, selectedQuizId, track]
+  );
+
+  const buildNavigationSnapshot = useCallback(
+    (): NavigationSnapshot => ({
+      screen: currentScreen,
+      activeTab,
+      selectedQuizId,
+      selectedTestId,
+      selectedPredictionId,
+      predictionBackTarget,
+      predictionCreateEntry,
+      selectedSquad,
+      contentType,
+      profileTab,
+      scrollY: currentScrollYRef.current,
+    }),
+    [
+      activeTab,
+      contentType,
+      currentScreen,
+      predictionBackTarget,
+      predictionCreateEntry,
+      profileTab,
+      selectedPredictionId,
+      selectedQuizId,
+      selectedSquad,
+      selectedTestId,
+    ]
+  );
+
+  const restoreScrollPosition = useCallback((scrollY: number) => {
+    if (typeof window === "undefined") return;
+    const safeScrollY = Number.isFinite(scrollY) ? Math.max(0, scrollY) : 0;
+    [0, 80, 220].forEach((delayMs) => {
+      window.setTimeout(() => {
+        window.scrollTo({ top: safeScrollY, behavior: "auto" });
+      }, delayMs);
+    });
+  }, []);
+
+  const restoreNavigationSnapshot = useCallback(
+    (snapshot: NavigationSnapshot) => {
+      setCurrentScreen(snapshot.screen);
+      setActiveTab(snapshot.activeTab);
+      setSelectedQuizId(snapshot.selectedQuizId);
+      setSelectedTestId(snapshot.selectedTestId);
+      setSelectedPredictionId(snapshot.selectedPredictionId);
+      setPredictionBackTarget(snapshot.predictionBackTarget);
+      setPredictionCreateEntry(snapshot.predictionCreateEntry);
+      setSelectedSquad(snapshot.selectedSquad);
+      setContentType(snapshot.contentType);
+      setProfileTab(snapshot.profileTab);
+      setShouldScrollToContentBlock(false);
+      restoreScrollPosition(snapshot.scrollY);
+    },
+    [restoreScrollPosition]
+  );
+
+  const handleBackNavigation = useCallback(() => {
+    if (currentScreen === "quiz") {
+      trackQuizAbandon("back_button");
+      setCurrentQuestion(0);
+      setAnswers([]);
+    }
+
+    if (currentScreen === "result") {
+      setResult(null);
+    }
+
+    const previousSnapshot = navigationStackRef.current.pop();
+
+    if (!previousSnapshot) {
+      setCurrentScreen("home");
+      setActiveTab("home");
+      setSelectedQuizId(null);
+      setSelectedTestId(null);
+      setShouldScrollToContentBlock(false);
+      restoreScrollPosition(0);
+      return;
+    }
+
+    isNavigatingBackRef.current = true;
+    restoreNavigationSnapshot(previousSnapshot);
+  }, [currentScreen, restoreNavigationSnapshot, restoreScrollPosition, trackQuizAbandon]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncWindowScroll = () => {
+      currentScrollYRef.current = window.scrollY || window.pageYOffset || 0;
+      if (previousSnapshotRef.current) {
+        previousSnapshotRef.current.scrollY = currentScrollYRef.current;
+      }
+    };
+
+    syncWindowScroll();
+    window.addEventListener("scroll", syncWindowScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", syncWindowScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    const snapshot = buildNavigationSnapshot();
+    const previousSnapshot = previousSnapshotRef.current;
+
+    if (!previousSnapshot) {
+      previousSnapshotRef.current = snapshot;
+      return;
+    }
+
+    if (previousSnapshot.screen !== snapshot.screen) {
+      if (isNavigatingBackRef.current) {
+        isNavigatingBackRef.current = false;
+      } else {
+        navigationStackRef.current.push(previousSnapshot);
+        if (navigationStackRef.current.length > 80) {
+          navigationStackRef.current.shift();
+        }
+      }
+    }
+
+    previousSnapshotRef.current = snapshot;
+  }, [buildNavigationSnapshot]);
+
   useEffect(() => {
     if (!isTelegramWebApp()) return;
 
     if (currentScreen !== "home") {
       backButton.show(() => {
-        if (currentScreen === "quiz_preview") {
-          setCurrentScreen("home");
-          setSelectedQuizId(null);
-        } else if (currentScreen === "quiz") {
-          setCurrentScreen("quiz_preview");
-          setCurrentQuestion(0);
-          setAnswers([]);
-        } else if (currentScreen === "test_preview") {
-          setCurrentScreen("home");
-          setSelectedTestId(null);
-        } else if (currentScreen === "personality_test") {
-          setCurrentScreen("test_preview");
-        } else if (currentScreen === "compare") {
-          setCurrentScreen("result");
-        } else if (currentScreen === "admin") {
-          setCurrentScreen("profile");
-        } else if (currentScreen === "create_select") {
-          setCurrentScreen("home");
-          setActiveTab("home");
-        } else if (currentScreen === "create") {
-          setCurrentScreen("create_select");
-        } else if (currentScreen === "create_test") {
-          setCurrentScreen("create_select");
-        } else if (currentScreen === "result") {
-          setCurrentScreen("home");
-          setSelectedQuizId(null);
-          setResult(null);
-        } else if (currentScreen === "pvp") {
-          setCurrentScreen("home");
-          setActiveTab("home");
-        } else if (currentScreen === "prediction_list") {
-          setCurrentScreen("home");
-          setActiveTab("home");
-        } else if (currentScreen === "prediction_details") {
-          setCurrentScreen(predictionBackTarget);
-          if (predictionBackTarget === "home") {
-            setActiveTab("home");
-          }
-        } else if (currentScreen === "create_prediction") {
-          setCurrentScreen(predictionCreateEntry);
-          if (predictionCreateEntry === "home") {
-            setActiveTab("home");
-          }
-        } else {
-          setCurrentScreen("home");
-          setActiveTab("home");
-        }
+        handleBackNavigation();
       });
     } else {
       backButton.hide();
@@ -337,9 +504,13 @@ const Index = () => {
     return () => {
       backButton.hide();
     };
-  }, [currentScreen, predictionBackTarget, predictionCreateEntry, result]);
+  }, [currentScreen, handleBackNavigation]);
 
   const handleTabChange = (tab: TabId) => {
+    if (currentScreen === "quiz") {
+      trackQuizAbandon("tab_change");
+    }
+
     if (tab === "create") {
       setCurrentScreen("create_select");
     } else if (tab === "leaderboard") {
@@ -353,10 +524,6 @@ const Index = () => {
     }
     setActiveTab(tab);
   };
-
-  // Track quiz start time for duration calculation
-  const quizStartTime = useRef<number>(Date.now());
-  const questionStartTime = useRef<number>(Date.now());
 
   const persistQuizCompletion = (quizId: string | null, quizResult: QuizResult, answerList: number[]) => {
     if (!quizId) return;
@@ -372,6 +539,7 @@ const Index = () => {
 
   const handleQuizSelect = (quizId: string) => {
     haptic.impact('medium');
+    track("quiz_view", { quiz_id: quizId }, quizId);
     setSelectedQuizId(quizId);
     setCurrentQuestion(0);
     setAnswers([]);
@@ -384,6 +552,7 @@ const Index = () => {
     // Track quiz start
     quizStartTime.current = Date.now();
     questionStartTime.current = Date.now();
+    quizCompletedRef.current = false;
     if (selectedQuizId) {
       track('quiz_start', { quiz_id: selectedQuizId }, selectedQuizId);
     }
@@ -419,6 +588,7 @@ const Index = () => {
     } else {
       setTimeout(() => {
         const quizResult = computeQuizResult(newAnswers);
+        quizCompletedRef.current = true;
         setResult(quizResult);
         setCurrentScreen("result");
         persistQuizCompletion(selectedQuizId, quizResult, newAnswers);
@@ -467,16 +637,25 @@ const Index = () => {
   // Personality test handlers
   const handleTestSelect = (testId: string) => {
     haptic.impact('light');
+    track("test_view", { test_id: testId });
     setSelectedTestId(testId);
     setCurrentScreen("test_preview");
   };
 
   const handleStartTest = () => {
     haptic.impact('medium');
+    if (selectedTestId) {
+      track("test_start", { test_id: selectedTestId });
+    }
     setCurrentScreen("personality_test");
   };
 
   const handleTestComplete = (result: PersonalityTestResult, testTitle: string, testId: string) => {
+    track("test_complete", {
+      test_id: testId,
+      test_title: testTitle,
+      result_id: result.id,
+    });
     setTestResult(result);
     setTestResultTitle(testTitle);
     setTestResultTestId(testId);
@@ -491,6 +670,58 @@ const Index = () => {
   const handleToggleTestSave = (testId: string) => {
     const isSaved = testSaveIds.has(testId);
     toggleTestSave.mutate({ testId, isFavorite: isSaved });
+  };
+
+  const handleQuizCreated = (payload: CreateQuizSuccessPayload) => {
+    if (payload.isPendingModeration) {
+      setCurrentScreen("profile");
+      setActiveTab("profile");
+      return;
+    }
+
+    setSelectedQuizId(payload.quizId);
+    setCurrentQuestion(0);
+    setAnswers([]);
+    setCurrentScreen("quiz_preview");
+    setActiveTab("home");
+
+    toast({
+      title: "Квиз опубликован",
+      description: "Можно сразу поделиться им с друзьями",
+      action: (
+        <ToastAction
+          altText="Поделиться квизом"
+          onClick={() => shareQuizInvite(payload.quizId, payload.title, payload.description)}
+        >
+          Поделиться
+        </ToastAction>
+      ),
+    });
+  };
+
+  const handlePersonalityTestCreated = (payload: CreatePersonalityTestSuccessPayload) => {
+    if (payload.isPendingModeration) {
+      setCurrentScreen("profile");
+      setActiveTab("profile");
+      return;
+    }
+
+    setSelectedTestId(payload.testId);
+    setCurrentScreen("test_preview");
+    setActiveTab("home");
+
+    toast({
+      title: "Тест опубликован",
+      description: "Можно сразу поделиться им с друзьями",
+      action: (
+        <ToastAction
+          altText="Поделиться тестом"
+          onClick={() => sharePersonalityTestInvite(payload.testId, payload.title, payload.description)}
+        >
+          Поделиться
+        </ToastAction>
+      ),
+    });
   };
 
   // Fetch real user stats from database
@@ -520,16 +751,60 @@ const Index = () => {
     blocking_reason_code: "need_progress",
   };
 
-  const uiEligibility = predictionEligibility || gateEligibility || fallbackEligibility;
-  const effectivePredictionIsAdmin = forcedRole === "admin"
+  const localCompletedCount = completedQuizIds.size + completedTestIds.size;
+  const rawEligibility = gateEligibility || predictionEligibility || fallbackEligibility;
+  const isAllowlistedPredictionAdmin = forcedRole === "admin"
     ? true
     : forcedRole === "user"
       ? false
-      : uiEligibility.is_admin;
-  const uiEligibilityForView = useMemo(
-    () => ({ ...uiEligibility, is_admin: effectivePredictionIsAdmin }),
-    [uiEligibility, effectivePredictionIsAdmin]
-  );
+      : isCurrentUserAdmin();
+  const uiEligibilityForView = useMemo(() => {
+    const requiredCompletedCount = Math.max(rawEligibility.required_completed_count || 3, 1);
+    const completedCount = Math.max(rawEligibility.completed_count || 0, localCompletedCount);
+    const effectiveIsAdmin = forcedRole === "admin"
+      ? true
+      : forcedRole === "user"
+        ? false
+        : (rawEligibility.is_admin || isAllowlistedPredictionAdmin);
+    const hasSquad = rawEligibility.has_squad || Boolean(rawEligibility.squad_id) || Boolean(mySquad?.id);
+    const squadId = rawEligibility.squad_id || mySquad?.id || null;
+    const squadTitle = rawEligibility.squad_title || mySquad?.title || null;
+    const monthlyLimit = Math.max(rawEligibility.monthly_limit || 5, 1);
+    const remaining = Math.max(rawEligibility.remaining_this_month ?? monthlyLimit, 0);
+    const cooldownHoursLeft = Math.max(rawEligibility.cooldown_hours_left || 0, 0);
+
+    let blockingReason = rawEligibility.blocking_reason_code;
+    if (effectiveIsAdmin) {
+      blockingReason = null;
+    } else if (completedCount < requiredCompletedCount) {
+      blockingReason = "need_progress";
+    } else if (!hasSquad) {
+      blockingReason = "need_squad";
+    } else if (!rawEligibility.is_squad_captain) {
+      blockingReason = "need_captain";
+    } else if (remaining <= 0) {
+      blockingReason = "month_limit";
+    } else if (cooldownHoursLeft > 0) {
+      blockingReason = "cooldown";
+    } else {
+      blockingReason = null;
+    }
+
+    return {
+      ...rawEligibility,
+      eligible: blockingReason === null,
+      required_completed_count: requiredCompletedCount,
+      completed_count: completedCount,
+      has_squad: hasSquad,
+      squad_id: squadId,
+      squad_title: squadTitle,
+      is_admin: effectiveIsAdmin,
+      monthly_limit: monthlyLimit,
+      remaining_this_month: remaining,
+      cooldown_hours_left: cooldownHoursLeft,
+      blocking_reason_code: blockingReason,
+    };
+  }, [rawEligibility, localCompletedCount, forcedRole, isAllowlistedPredictionAdmin, mySquad?.id, mySquad?.title]);
   const selectedPrediction = predictions.find((prediction) => prediction.id === selectedPredictionId) || null;
   const canManageSelectedPrediction = Boolean(selectedPrediction && uiEligibilityForView.is_admin);
   const hasPredictionAccess = (fetchedStats?.testsCompleted ?? 0) > 0 || (fetchedStats?.bestScore ?? 0) > 0;
@@ -565,13 +840,31 @@ const Index = () => {
 
     try {
       const { data } = await refetchPredictionEligibility();
-      const latest = data || predictionEligibility || fallbackEligibility;
-      if (latest.eligible) {
+      const latestRaw = data || predictionEligibility || fallbackEligibility;
+      setGateEligibility(latestRaw);
+
+      const latestCompletedCount = Math.max(latestRaw.completed_count || 0, localCompletedCount);
+      const latestHasProgress = latestCompletedCount >= (latestRaw.required_completed_count || 3);
+      const latestHasSquad = latestRaw.has_squad || Boolean(latestRaw.squad_id) || Boolean(mySquad?.id);
+      const latestIsAdmin = forcedRole === "admin"
+        ? true
+        : forcedRole === "user"
+          ? false
+          : (latestRaw.is_admin || isAllowlistedPredictionAdmin);
+      const latestCanCreate = latestIsAdmin || (
+        latestHasProgress &&
+        latestHasSquad &&
+        latestRaw.is_squad_captain &&
+        (latestRaw.remaining_this_month ?? 0) > 0 &&
+        (latestRaw.cooldown_hours_left ?? 0) <= 0
+      );
+
+      if (latestCanCreate) {
         setIsCreateGateOpen(false);
+        setGateEligibility(null);
         setCurrentScreen("create_prediction");
         return;
       }
-      setGateEligibility(latest);
       setIsCreateGateOpen(true);
     } catch {
       setGateEligibility(predictionEligibility || fallbackEligibility);
@@ -593,6 +886,12 @@ const Index = () => {
   };
 
   const handleGateGoToTests = () => {
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem(HOME_CONTENT_TYPE_STORAGE_KEY);
+      if (stored === "tests" || stored === "quizzes") {
+        setContentType(stored);
+      }
+    }
     setCurrentScreen("home");
     setActiveTab("home");
     setShouldScrollToContentBlock(true);
@@ -644,6 +943,10 @@ const Index = () => {
   const toSafeNumber = (value: unknown) => {
     const numeric = typeof value === "number" ? value : Number(value);
     return Number.isFinite(numeric) ? numeric : 0;
+  };
+  const getVisibleSaveCount = (entityId: string, rawSaveCount: unknown, savedSet: Set<string>) => {
+    const base = toSafeNumber(rawSaveCount);
+    return savedSet.has(entityId) ? Math.max(1, base) : base;
   };
   const normalizedQuizzes = safeQuizzes
     .map((quiz) => ({
@@ -764,6 +1067,14 @@ const Index = () => {
   const showBottomNav = ["home", "gallery", "leaderboard", "profile"].includes(currentScreen);
   const displayQuizzes = sortedQuizzes.length > 0 || normalizedSearchQuery ? sortedQuizzes : [...normalizedQuizzes].sort(compareBySort);
   const displayTests = sortedTests.length > 0 || normalizedSearchQuery ? sortedTests : [...normalizedTests].sort(compareBySort);
+  const displayQuizzesWithVisibleSaves = displayQuizzes.map((quiz) => ({
+    ...quiz,
+    save_count: getVisibleSaveCount(quiz.id, quiz.save_count, saveIds),
+  }));
+  const displayTestsWithVisibleSaves = displayTests.map((test) => ({
+    ...test,
+    save_count: getVisibleSaveCount(test.id, test.save_count, testSaveIds),
+  }));
   const topPredictions = [...predictions]
     .filter((prediction) => prediction.status === "open" && !prediction.is_hidden)
     .sort((a, b) => {
@@ -772,6 +1083,15 @@ const Index = () => {
       return b.participant_count - a.participant_count;
     })
     .slice(0, 3);
+  const selectedQuizIsPublished = Boolean(
+    (quizData?.quiz as any)?.is_published === true || (quizData?.quiz as any)?.status === "published"
+  );
+  const selectedTestPreview = selectedTestDetails?.test
+    ?? mergedTests.find((test) => test.id === selectedTestId)
+    ?? null;
+  const selectedTestIsPublished = Boolean(
+    (selectedTestPreview as any)?.is_published === true || (selectedTestPreview as any)?.status === "published"
+  );
 
   if (showOnboarding) {
     return <OnboardingCarousel onComplete={handleOnboardingComplete} />;
@@ -858,7 +1178,7 @@ const Index = () => {
                       haptic.impact('medium');
                       setCurrentScreen("squad_list");
                     }}
-                    className="tg-button text-sm py-3 flex items-center justify-center gap-2 cta-join cta-join-btn"
+                    className="h-10 rounded-xl text-sm font-semibold bg-primary text-primary-foreground flex items-center justify-center gap-2 cta-join cta-join-btn"
                   >
                     <span className="cta-join-shine" aria-hidden />
                     <span className="cta-join-content">
@@ -871,7 +1191,7 @@ const Index = () => {
                       haptic.impact('medium');
                       setCurrentScreen("create_squad");
                     }}
-                    className="tg-button-secondary text-sm py-3 flex items-center justify-center gap-2"
+                    className="h-10 rounded-xl text-sm font-semibold bg-secondary text-primary flex items-center justify-center gap-2 active:scale-[0.98]"
                   >
                     <Plus className="w-4 h-4" />
                     Создать
@@ -1045,7 +1365,7 @@ const Index = () => {
                       </div>
                     ) : (
                       <QuizShowcase
-                        quizzes={displayQuizzes}
+                        quizzes={displayQuizzesWithVisibleSaves}
                         isLoading={quizzesLoading}
                         onQuizSelect={handleQuizSelect}
                         likeIds={likeIds}
@@ -1082,7 +1402,7 @@ const Index = () => {
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {displayTests.map((test, index) => (
+                        {displayTestsWithVisibleSaves.map((test, index) => (
                           <motion.div
                             key={test.id}
                             initial={{ y: 20, opacity: 0 }}
@@ -1127,10 +1447,7 @@ const Index = () => {
               onCreatePrediction={() => {
                 void openCreatePrediction("prediction_list");
               }}
-              onBack={() => {
-                setCurrentScreen("home");
-                setActiveTab("home");
-              }}
+              onBack={handleBackNavigation}
               onOpenPrediction={(predictionId) => openPredictionDetails(predictionId, "prediction_list")}
             />
           )}
@@ -1139,12 +1456,7 @@ const Index = () => {
             <CreatePredictionScreen
               key="create_prediction"
               eligibility={uiEligibilityForView}
-              onBack={() => {
-                setCurrentScreen(predictionCreateEntry);
-                if (predictionCreateEntry === "home") {
-                  setActiveTab("home");
-                }
-              }}
+              onBack={handleBackNavigation}
               onCreated={(pollId) => {
                 void handlePredictionCreated(pollId);
               }}
@@ -1158,12 +1470,7 @@ const Index = () => {
               canManage={canManageSelectedPrediction}
               hasPredictionAccess={hasPredictionAccess}
               onPredictionChange={handlePredictionChange}
-              onBack={() => {
-                setCurrentScreen(predictionBackTarget);
-                if (predictionBackTarget === "home") {
-                  setActiveTab("home");
-                }
-              }}
+              onBack={handleBackNavigation}
             />
           )}
 
@@ -1193,10 +1500,7 @@ const Index = () => {
           {currentScreen === "pvp" && (
             <PvpLobbyScreen
               key="pvp"
-              onBack={() => {
-                setCurrentScreen("home");
-                setActiveTab("home");
-              }}
+              onBack={handleBackNavigation}
               onStartGame={(roomId, quizId) => {
                 console.log("Starting PvP game:", roomId, quizId);
               }}
@@ -1206,10 +1510,7 @@ const Index = () => {
           {currentScreen === "gallery" && (
             <CreatorsScreen
               key="gallery"
-              onBack={() => {
-                setCurrentScreen("home");
-                setActiveTab("home");
-              }}
+              onBack={handleBackNavigation}
             />
           )}
 
@@ -1225,23 +1526,22 @@ const Index = () => {
                 duration_seconds: quizData.quiz.duration_seconds || 60,
                 participant_count: quizData.quiz.participant_count || 0,
                 like_count: quizData.quiz.like_count || 0,
-                save_count: quizData.quiz.save_count || 0,
+                save_count: getVisibleSaveCount(selectedQuizId, quizData.quiz.save_count || 0, saveIds),
                 is_anonymous: quizData.quiz.is_anonymous ?? false,
                 creator: quizData.quiz.creator,
+                is_published: (quizData.quiz as any).is_published ?? true,
+                status: (quizData.quiz as any).status ?? null,
               }}
               isLiked={likeIds.has(selectedQuizId)}
               isSaved={saveIds.has(selectedQuizId)}
-              onBack={() => {
-                setCurrentScreen("home");
-                setSelectedQuizId(null);
-              }}
+              onBack={handleBackNavigation}
               onStart={handleStartQuiz}
-              onToggleLike={() =>
-                toggleLike.mutate({ quizId: selectedQuizId, isLiked: likeIds.has(selectedQuizId) })
-              }
-              onToggleSave={() =>
-                toggleSave.mutate({ quizId: selectedQuizId, isFavorite: saveIds.has(selectedQuizId) })
-              }
+              onToggleLike={selectedQuizIsPublished
+                ? () => toggleLike.mutate({ quizId: selectedQuizId, isLiked: likeIds.has(selectedQuizId) })
+                : undefined}
+              onToggleSave={selectedQuizIsPublished
+                ? () => toggleSave.mutate({ quizId: selectedQuizId, isFavorite: saveIds.has(selectedQuizId) })
+                : undefined}
             />
           )}
 
@@ -1254,61 +1554,79 @@ const Index = () => {
               durationSeconds={quizData?.quiz?.duration_seconds || 0}
               onTimeUp={() => {
                 const quizResult = computeQuizResult(answers);
+                quizCompletedRef.current = true;
                 setResult({
                   ...quizResult,
                   verdict: "Время вышло!",
                   verdictEmoji: "⏰",
                 });
                 persistQuizCompletion(selectedQuizId, quizResult, answers);
+                track(
+                  "quiz_complete",
+                  {
+                    score: quizResult.score,
+                    max_score: quizResult.maxScore,
+                    time_total_ms: Math.max(0, Date.now() - quizStartTime.current),
+                    percentile: quizResult.percentile,
+                  },
+                  selectedQuizId || undefined
+                );
                 setCurrentScreen("result");
               }}
             />
           )}
 
-          {currentScreen === "test_preview" && selectedTestId && (() => {
-            const selectedTest = personalityTests.find(t => t.id === selectedTestId);
-            if (!selectedTest) return null;
-            return (
-              <PersonalityTestPreviewScreen
-                key="test_preview"
-                test={{
-                  id: selectedTest.id,
-                  title: selectedTest.title,
-                  description: selectedTest.description,
-                  image_url: selectedTest.image_url,
-                  question_count: selectedTest.question_count || 0,
-                  result_count: selectedTest.result_count || 0,
-                  participant_count: selectedTest.participant_count || 0,
-                  like_count: selectedTest.like_count || 0,
-                  save_count: selectedTest.save_count || 0,
-                  is_anonymous: selectedTest.is_anonymous ?? false,
-                  creator: selectedTest.creator,
-                }}
-                isLiked={testLikeIds.has(selectedTestId)}
-                isSaved={testSaveIds.has(selectedTestId)}
-                onBack={() => {
-                  setCurrentScreen("home");
-                  setSelectedTestId(null);
-                }}
-                onStart={handleStartTest}
-                onToggleLike={() =>
-                  toggleTestLike.mutate({ testId: selectedTestId, isLiked: testLikeIds.has(selectedTestId) })
-                }
-                onToggleSave={() =>
-                  toggleTestSave.mutate({ testId: selectedTestId, isFavorite: testSaveIds.has(selectedTestId) })
-                }
-              />
-            );
-          })()}
+          {currentScreen === "test_preview" && selectedTestId && selectedTestPreview && (
+            <PersonalityTestPreviewScreen
+              key="test_preview"
+              test={{
+                id: selectedTestPreview.id,
+                title: selectedTestPreview.title,
+                description: selectedTestPreview.description,
+                image_url: selectedTestPreview.image_url,
+                question_count: selectedTestPreview.question_count || 0,
+                result_count: selectedTestPreview.result_count || 0,
+                participant_count: selectedTestPreview.participant_count || 0,
+                like_count: selectedTestPreview.like_count || 0,
+                save_count: getVisibleSaveCount(selectedTestId, selectedTestPreview.save_count || 0, testSaveIds),
+                is_anonymous: selectedTestPreview.is_anonymous ?? false,
+                creator: selectedTestPreview.creator,
+                is_published: (selectedTestPreview as any).is_published ?? true,
+                status: (selectedTestPreview as any).status ?? null,
+              }}
+              isLiked={testLikeIds.has(selectedTestId)}
+              isSaved={testSaveIds.has(selectedTestId)}
+              onBack={handleBackNavigation}
+              onStart={handleStartTest}
+              onToggleLike={selectedTestIsPublished
+                ? () => toggleTestLike.mutate({ testId: selectedTestId, isLiked: testLikeIds.has(selectedTestId) })
+                : undefined}
+              onToggleSave={selectedTestIsPublished
+                ? () => toggleTestSave.mutate({ testId: selectedTestId, isFavorite: testSaveIds.has(selectedTestId) })
+                : undefined}
+            />
+          )}
+
+          {currentScreen === "test_preview" && selectedTestId && !selectedTestPreview && (
+            <motion.div
+              key="test_preview_loading"
+              className="min-h-screen flex items-center justify-center p-6"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Sparkles className="w-4 h-4 animate-pulse text-purple-500" />
+                Загружаем тест...
+              </div>
+            </motion.div>
+          )}
 
           {currentScreen === "personality_test" && selectedTestId && (
             <PersonalityTestScreen
               key="personality_test"
               testId={selectedTestId}
-              onBack={() => {
-                setCurrentScreen("home");
-                setSelectedTestId(null);
-              }}
+              onBack={handleBackNavigation}
               onComplete={handleTestComplete}
             />
           )}
@@ -1336,11 +1654,8 @@ const Index = () => {
           {currentScreen === "create_test" && (
             <CreatePersonalityTestScreen
               key="create_test"
-              onBack={() => setCurrentScreen("create_select")}
-              onSuccess={() => {
-                setCurrentScreen("profile");
-                setActiveTab("profile");
-              }}
+              onBack={handleBackNavigation}
+              onSuccess={handlePersonalityTestCreated}
             />
           )}
 
@@ -1370,7 +1685,7 @@ const Index = () => {
               userResult={result}
               onInvite={() => toast({ title: "Invite sent!" })}
               onPostComparison={() => toast({ title: "Posted!" })}
-              onBack={() => setCurrentScreen("result")}
+              onBack={handleBackNavigation}
             />
           )}
 
@@ -1378,19 +1693,19 @@ const Index = () => {
             <ProfileScreen
               key="profile"
               stats={userStats}
-              onBack={() => {
-                setCurrentScreen("home");
-                setActiveTab("home");
-              }}
+              activeTab={profileTab}
+              onTabChange={setProfileTab}
+              onBack={handleBackNavigation}
               onOpenAdmin={() => setCurrentScreen("admin")}
               onQuizSelect={handleQuizSelect}
+              onTestSelect={handleTestSelect}
             />
           )}
 
           {currentScreen === "admin" && (
             <AdminPanel
               key="admin"
-              onBack={() => setCurrentScreen("profile")}
+              onBack={handleBackNavigation}
               onOpenPrediction={(predictionId) => openPredictionDetails(predictionId, "admin")}
               rolePreviewMode={rolePreviewMode}
               onRolePreviewChange={setRolePreviewMode}
@@ -1400,10 +1715,7 @@ const Index = () => {
           {currentScreen === "leaderboard" && (
             <LeaderboardScreen
               key="leaderboard"
-              onBack={() => {
-                setCurrentScreen("home");
-                setActiveTab("home");
-              }}
+              onBack={handleBackNavigation}
               onSquadSelect={(squad) => {
                 setSelectedSquad(squad);
                 setCurrentScreen("squad_detail");
@@ -1414,9 +1726,7 @@ const Index = () => {
           {currentScreen === "squad_list" && (
             <SquadListScreen
               key="squad_list"
-              onBack={() => {
-                setCurrentScreen("home");
-              }}
+              onBack={handleBackNavigation}
               onSquadSelect={(squad) => {
                 setSelectedSquad(squad);
                 setCurrentScreen("squad_detail");
@@ -1431,19 +1741,14 @@ const Index = () => {
             <SquadScreen
               key="squad_detail"
               squad={selectedSquad}
-              onBack={() => {
-                setSelectedSquad(null);
-                setCurrentScreen("squad_list");
-              }}
+              onBack={handleBackNavigation}
             />
           )}
 
           {currentScreen === "create_squad" && (
             <CreateSquadGuide
               key="create_squad"
-              onBack={() => {
-                setCurrentScreen("home");
-              }}
+              onBack={handleBackNavigation}
             />
           )}
 
@@ -1462,8 +1767,7 @@ const Index = () => {
                     className="p-2 -ml-2 text-primary"
                     onClick={() => {
                       haptic.selection();
-                      setCurrentScreen("home");
-                      setActiveTab("home");
+                      handleBackNavigation();
                     }}
                   >
                     <X className="w-6 h-6" />
@@ -1525,13 +1829,8 @@ const Index = () => {
           {currentScreen === "create" && (
             <CreateQuizScreen
               key="create"
-              onBack={() => {
-                setCurrentScreen("create_select");
-              }}
-              onSuccess={() => {
-                setCurrentScreen("profile");
-                setActiveTab("profile");
-              }}
+              onBack={handleBackNavigation}
+              onSuccess={handleQuizCreated}
             />
           )}
         </AnimatePresence>
@@ -1539,7 +1838,12 @@ const Index = () => {
 
       <CreatePredictionGateModal
         open={isCreateGateOpen}
-        onOpenChange={setIsCreateGateOpen}
+        onOpenChange={(open) => {
+          setIsCreateGateOpen(open);
+          if (!open) {
+            setGateEligibility(null);
+          }
+        }}
         eligibility={uiEligibilityForView}
         quota={predictionQuota}
         onGoToTests={handleGateGoToTests}

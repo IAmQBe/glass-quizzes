@@ -1,11 +1,19 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, CalendarClock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { haptic } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
 import { useCreatePredictionPoll } from "@/hooks/usePredictions";
+import { useSquads } from "@/hooks/useSquads";
 import { PredictionCreationEligibility } from "@/types/prediction";
 
 interface CreatePredictionScreenProps {
@@ -31,6 +39,7 @@ const getDefaultDeadline = () => {
 
 export const CreatePredictionScreen = ({ onBack, onCreated, eligibility }: CreatePredictionScreenProps) => {
   const createPrediction = useCreatePredictionPoll();
+  const { data: squads = [] } = useSquads();
 
   const [title, setTitle] = useState("");
   const [optionA, setOptionA] = useState("");
@@ -39,27 +48,56 @@ export const CreatePredictionScreen = ({ onBack, onCreated, eligibility }: Creat
   const [deadlineAt, setDeadlineAt] = useState(getDefaultDeadline);
   const [stakeEnabled, setStakeEnabled] = useState(true);
   const [voteEnabled, setVoteEnabled] = useState(true);
+  const [selectedSquadId, setSelectedSquadId] = useState<string>("");
 
-  const squadName = eligibility?.squad_title || "Мой сквад";
+  const isAdmin = Boolean(eligibility?.is_admin);
+  const fallbackSquadId = eligibility?.squad_id || "";
+  const effectiveSquadId = isAdmin ? (selectedSquadId || fallbackSquadId) : fallbackSquadId;
+  const selectedSquadName = useMemo(() => {
+    if (!effectiveSquadId) {
+      return eligibility?.squad_title || "Выбери сквад";
+    }
+    const match = squads.find((squad) => squad.id === effectiveSquadId);
+    return match?.title || eligibility?.squad_title || "Сквад";
+  }, [effectiveSquadId, eligibility?.squad_title, squads]);
   const monthlyLimit = eligibility?.monthly_limit ?? 5;
   const remaining = eligibility?.remaining_this_month ?? monthlyLimit;
+
+  useEffect(() => {
+    if (eligibility?.squad_id) {
+      setSelectedSquadId(eligibility.squad_id);
+      return;
+    }
+    if (isAdmin && squads.length > 0) {
+      setSelectedSquadId((prev) => prev || squads[0].id);
+    }
+  }, [eligibility?.squad_id, isAdmin, squads]);
 
   const canSubmit = useMemo(() => {
     return (
       Boolean(title.trim()) &&
       Boolean(optionA.trim()) &&
       Boolean(optionB.trim()) &&
+      Boolean(effectiveSquadId) &&
       Boolean(deadlineAt) &&
       (stakeEnabled || voteEnabled) &&
       !createPrediction.isPending
     );
-  }, [title, optionA, optionB, deadlineAt, stakeEnabled, voteEnabled, createPrediction.isPending]);
+  }, [title, optionA, optionB, effectiveSquadId, deadlineAt, stakeEnabled, voteEnabled, createPrediction.isPending]);
 
   const handleSubmit = async () => {
     if (!(eligibility?.eligible ?? false)) {
       toast({
         title: "Доступ ограничен",
         description: "Сначала выполните требования создания прогноза.",
+      });
+      return;
+    }
+
+    if (!effectiveSquadId) {
+      toast({
+        title: "Выбери сквад",
+        description: "Для создания прогноза нужно выбрать команду.",
       });
       return;
     }
@@ -88,6 +126,7 @@ export const CreatePredictionScreen = ({ onBack, onCreated, eligibility }: Creat
         title: title.trim(),
         option_a_label: optionA.trim(),
         option_b_label: optionB.trim(),
+        squad_id: effectiveSquadId,
         cover_image_url: coverImageUrl.trim() || undefined,
         deadline_at: parsedDeadline.toISOString(),
         stake_enabled: stakeEnabled,
@@ -136,10 +175,28 @@ export const CreatePredictionScreen = ({ onBack, onCreated, eligibility }: Creat
 
       <div className="p-4 space-y-3">
         <div className="rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-          Сквад {squadName} · Осталось {remaining}/{monthlyLimit}
+          Сквад {selectedSquadName} · Осталось {remaining}/{monthlyLimit}
         </div>
 
         <div className="tg-section p-4 space-y-3">
+          {isAdmin ? (
+            <div>
+              <label className="text-xs text-muted-foreground">Сквад (админ-режим)</label>
+              <Select value={effectiveSquadId || undefined} onValueChange={setSelectedSquadId}>
+                <SelectTrigger className="mt-1 bg-secondary border-0">
+                  <SelectValue placeholder="Выбери сквад" />
+                </SelectTrigger>
+                <SelectContent>
+                  {squads.map((squad) => (
+                    <SelectItem key={squad.id} value={squad.id}>
+                      {squad.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
           <div>
             <label className="text-xs text-muted-foreground">Заголовок</label>
             <Input

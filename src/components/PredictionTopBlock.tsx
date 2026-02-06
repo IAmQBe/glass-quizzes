@@ -32,8 +32,8 @@ const formatTimeLeft = (deadlineAt: string) => {
 };
 
 const shortOption = (text: string) => {
-  if (text.length <= 14) return text;
-  return `${text.slice(0, 14)}...`;
+  if (text.length <= 12) return text;
+  return `${text.slice(0, 12)}...`;
 };
 
 export const PredictionTopBlock = ({
@@ -48,9 +48,9 @@ export const PredictionTopBlock = ({
       initial={{ y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ delay: 0.145 }}
-      className="space-y-3"
+      className="space-y-2.5"
     >
-      <div className="tg-section p-4 space-y-2.5">
+      <div className="tg-section p-3 space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground flex items-center gap-2">
             <Flame className="w-4 h-4 text-orange-500" />
@@ -72,29 +72,29 @@ export const PredictionTopBlock = ({
                 haptic.impact("light");
                 onOpenPrediction(prediction.id);
               }}
-              className="w-[248px] shrink-0 rounded-xl border border-border p-2.5 text-left bg-card"
+              className="w-[208px] shrink-0 rounded-xl border border-border px-2.5 py-2 text-left bg-card"
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start justify-between gap-1.5">
                 <p className="text-sm font-medium text-foreground leading-snug line-clamp-2">{prediction.title}</p>
                 <span className="text-[10px] px-2 py-1 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">
                   {formatTimeLeft(prediction.deadline_at)}
                 </span>
               </div>
 
-              <p className="text-xs text-muted-foreground mt-1.5">
+              <p className="text-xs text-muted-foreground mt-1">
                 Пул: {formatPopcorn(getPredictionPoolTotal(prediction))}
               </p>
 
-              <div className="mt-1.5 flex gap-1 flex-wrap">
-                <span className="text-[10px] px-2 py-1 rounded-full bg-secondary text-foreground">
+              <div className="mt-1 flex gap-1 flex-wrap">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-foreground">
                   A: {shortOption(prediction.option_a_label)}
                 </span>
-                <span className="text-[10px] px-2 py-1 rounded-full bg-secondary text-foreground">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-foreground">
                   B: {shortOption(prediction.option_b_label)}
                 </span>
               </div>
 
-              <div className="mt-2 flex justify-end">
+              <div className="mt-1.5 flex justify-end">
                 <span className="text-xs text-primary font-medium inline-flex items-center gap-1">
                   Открыть
                   <ChevronRight className="w-3 h-3" />
@@ -110,7 +110,7 @@ export const PredictionTopBlock = ({
               haptic.selection();
               onOpenAll();
             }}
-            className="rounded-xl py-2 text-sm font-medium bg-secondary text-foreground inline-flex items-center justify-center gap-2"
+            className="h-10 rounded-xl px-3 text-sm font-medium bg-secondary text-foreground inline-flex items-center justify-center gap-1.5"
           >
             <Clock3 className="w-3.5 h-3.5" />
             Перейти
@@ -120,7 +120,7 @@ export const PredictionTopBlock = ({
               haptic.impact("medium");
               onCreatePrediction();
             }}
-            className="tg-button-secondary text-sm py-2 flex items-center justify-center gap-2"
+            className="h-10 rounded-xl px-3 text-sm font-semibold bg-secondary text-primary inline-flex items-center justify-center gap-1.5 active:scale-[0.98]"
           >
             <Plus className="w-3.5 h-3.5" />
             Создать событие

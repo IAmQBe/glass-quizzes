@@ -16,6 +16,14 @@ export interface CreatorInfo {
   } | null;
 }
 
+const isMissingAnonymousColumnError = (error: unknown): boolean => {
+  const message = (error as { message?: string } | null)?.message ?? "";
+  return (
+    message.includes("is_anonymous") &&
+    (message.includes("schema cache") || message.includes("column"))
+  );
+};
+
 async function fetchCreatorsMap(creatorIds: string[]): Promise<Record<string, CreatorInfo>> {
   if (creatorIds.length === 0) return {};
 
@@ -382,7 +390,7 @@ export const useCreateQuiz = () => {
         question_count: quiz.questions?.length || 0,
         is_published: publishImmediately,
         created_by: profileId,
-        is_anonymous: quiz.is_anonymous ?? false,
+        ...(quiz.is_anonymous ? { is_anonymous: true } : {}),
       };
 
       let quizData: any = null;
@@ -399,6 +407,10 @@ export const useCreateQuiz = () => {
         .single();
 
       if (quizWithStatusError) {
+        if (quiz.is_anonymous && isMissingAnonymousColumnError(quizWithStatusError)) {
+          throw new Error("Для анонимной публикации нужно применить миграцию 20260206120000_add_anonymous_publishing.sql");
+        }
+
         const { data: fallbackQuiz, error: fallbackQuizError } = await supabase
           .from("quizzes")
           .insert(insertPayload)
@@ -406,6 +418,9 @@ export const useCreateQuiz = () => {
           .single();
 
         if (fallbackQuizError) {
+          if (quiz.is_anonymous && isMissingAnonymousColumnError(fallbackQuizError)) {
+            throw new Error("Для анонимной публикации нужно применить миграцию 20260206120000_add_anonymous_publishing.sql");
+          }
           console.error("Quiz creation error:", fallbackQuizError);
           throw new Error(`Ошибка создания квиза: ${fallbackQuizError.message}`);
         }
@@ -443,21 +458,33 @@ export const useCreateQuiz = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["quizzes", "completedIds"] });
+      queryClient.invalidateQueries({ queryKey: ["quizResults", "my"] });
+      queryClient.invalidateQueries({ queryKey: ["predictionCreationEligibility"] });
+      queryClient.invalidateQueries({ queryKey: ["userStats"] });
     },
   });
 };
 
-// Submit quiz for review (optional - just logs, API may not be available)
+// Submit content for review (optional - API may be unavailable in some environments)
+type ReviewContentType = "quiz" | "personality_test";
+
 export const useSubmitForReview = () => {
   return useMutation({
-    mutationFn: async (quizId: string) => {
-      console.log("Quiz submitted for review:", quizId);
+    mutationFn: async ({
+      contentId,
+      contentType = "quiz",
+    }: {
+      contentId: string;
+      contentType?: ReviewContentType;
+    }) => {
+      console.log("Content submitted for review:", { contentType, contentId });
 
       // Try to notify API if available
       const apiUrl = import.meta.env.VITE_API_URL;
       if (!apiUrl) {
         console.log("No API URL configured, skipping review notification");
-        return { success: true, message: 'Quiz created (API not configured)' };
+        return { success: true, message: "Content created (API not configured)" };
       }
 
       try {
@@ -470,18 +497,23 @@ export const useSubmitForReview = () => {
             'Content-Type': 'application/json',
             'Authorization': `tma ${initData}`,
           },
-          body: JSON.stringify({ quizId }),
+          body: JSON.stringify({
+            contentId,
+            contentType,
+            quizId: contentType === "quiz" ? contentId : undefined,
+            testId: contentType === "personality_test" ? contentId : undefined,
+          }),
         });
 
         if (!response.ok) {
-          console.warn("Review submission failed, but quiz was created");
-          return { success: true, message: 'Quiz created (notification failed)' };
+          console.warn("Review submission failed, but content was created");
+          return { success: true, message: "Content created (notification failed)" };
         }
 
         return response.json();
       } catch (e) {
         console.warn("Review API error:", e);
-        return { success: true, message: 'Quiz created' };
+        return { success: true, message: "Content created" };
       }
     },
   });
@@ -569,6 +601,10 @@ export const useSubmitQuizResult = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quizzes"] });
+      queryClient.invalidateQueries({ queryKey: ["quizzes", "completedIds"] });
+      queryClient.invalidateQueries({ queryKey: ["quizResults", "my"] });
+      queryClient.invalidateQueries({ queryKey: ["predictionCreationEligibility"] });
+      queryClient.invalidateQueries({ queryKey: ["userStats"] });
     },
   });
 };

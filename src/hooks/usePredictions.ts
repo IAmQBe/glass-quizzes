@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
+import { trackEvent } from "@/hooks/useTrackEvent";
 import {
   CreatePredictionPayload,
   CreatePredictionResult,
@@ -353,16 +354,43 @@ export const useCreatePredictionPoll = () => {
         throw new Error("Профиль не найден");
       }
 
-      const { data, error } = await (supabase as any).rpc("prediction_create_poll", {
+      const rpcArgs = {
         p_user_id: profile.id,
         p_title: payload.title,
         p_option_a_label: payload.option_a_label,
         p_option_b_label: payload.option_b_label,
+        p_squad_id: payload.squad_id || null,
         p_cover_image_url: payload.cover_image_url || null,
         p_deadline_at: payload.deadline_at || null,
         p_stake_enabled: payload.stake_enabled ?? true,
         p_vote_enabled: payload.vote_enabled ?? true,
-      });
+      };
+
+      let { data, error } = await (supabase as any).rpc("prediction_create_poll", rpcArgs);
+
+      if (error) {
+        const message = String(error.message || "");
+        const isLegacySignature =
+          message.includes("p_squad_id") ||
+          message.includes("function public.prediction_create_poll") ||
+          message.includes("Could not find the function");
+
+        if (isLegacySignature) {
+          const legacyArgs = {
+            p_user_id: profile.id,
+            p_title: payload.title,
+            p_option_a_label: payload.option_a_label,
+            p_option_b_label: payload.option_b_label,
+            p_cover_image_url: payload.cover_image_url || null,
+            p_deadline_at: payload.deadline_at || null,
+            p_stake_enabled: payload.stake_enabled ?? true,
+            p_vote_enabled: payload.vote_enabled ?? true,
+          };
+          const legacyCall = await (supabase as any).rpc("prediction_create_poll", legacyArgs);
+          data = legacyCall.data;
+          error = legacyCall.error;
+        }
+      }
 
       if (error) {
         throw error;
@@ -394,6 +422,13 @@ export const useCreatePredictionPoll = () => {
       queryClient.invalidateQueries({ queryKey: ["predictionPolls"] });
       queryClient.invalidateQueries({ queryKey: ["predictionCreationEligibility"] });
       queryClient.invalidateQueries({ queryKey: ["predictionSquadQuota"] });
+
+      if (result.poll_id) {
+        void trackEvent("prediction_create", {
+          poll_id: result.poll_id,
+          next_status: result.next_status,
+        });
+      }
 
       if (result.poll_id && result.next_status === "pending") {
         void notifyPredictionModerationEvent(result.poll_id, "pending");
@@ -463,6 +498,13 @@ export const useReportPredictionPoll = () => {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["predictionPolls"] });
+
+      if (result.poll_id) {
+        void trackEvent("prediction_report", {
+          poll_id: result.poll_id,
+          transitioned_to_under_review: result.transitioned_to_under_review,
+        });
+      }
 
       if (result.poll_id && result.transitioned_to_under_review) {
         void notifyPredictionModerationEvent(result.poll_id, "under_review");

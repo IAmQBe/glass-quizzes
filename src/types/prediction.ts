@@ -49,6 +49,7 @@ export interface CreatePredictionPayload {
   title: string;
   option_a_label: string;
   option_b_label: string;
+  squad_id?: string;
   cover_image_url?: string;
   deadline_at?: string;
   stake_enabled?: boolean;
