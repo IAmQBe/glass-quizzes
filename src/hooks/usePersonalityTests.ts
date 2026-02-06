@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getTelegramUser, haptic } from "@/lib/telegram";
+import { toast } from "@/hooks/use-toast";
 
 // ============================================
 // Types
@@ -862,17 +863,6 @@ export const useTogglePersonalityTestFavorite = () => {
           .eq("test_id", testId)
           .eq("user_id", profileId);
 
-        // Keep legacy favorites table in sync (for profile saved list)
-        try {
-          await supabase
-            .from("favorites")
-            .delete()
-            .eq("user_id", profileId)
-            .eq("test_id", testId);
-        } catch {
-          // ignore if table doesn't support tests
-        }
-
         // Manual decrement save_count (no trigger in DB)
         const { data: test } = await supabase
           .from("personality_tests")
@@ -889,15 +879,6 @@ export const useTogglePersonalityTestFavorite = () => {
         await supabase
           .from("personality_test_favorites")
           .insert({ test_id: testId, user_id: profileId });
-
-        // Keep legacy favorites table in sync (for profile saved list)
-        try {
-          await supabase
-            .from("favorites")
-            .insert({ user_id: profileId, test_id: testId });
-        } catch {
-          // ignore if table doesn't support tests
-        }
 
         // Manual increment save_count (no trigger in DB)
         const { data: test } = await supabase
@@ -934,8 +915,14 @@ export const useTogglePersonalityTestFavorite = () => {
       if (context?.previous) {
         queryClient.setQueryData(["personalityTestFavorites"], context.previous);
       }
+      toast({
+        title: "Ошибка",
+        description: "Не удалось обновить избранное",
+        variant: "destructive",
+      });
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["favorites"] });
       queryClient.invalidateQueries({ queryKey: ["personalityTestFavorites"] });
       queryClient.invalidateQueries({ queryKey: ["personalityTests"] });
     },

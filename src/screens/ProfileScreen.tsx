@@ -423,7 +423,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
             }}
           >
             <BookmarkIcon className="w-3.5 h-3.5" />
-            Saved
+            Избранное
           </button>
         </motion.div>
 
