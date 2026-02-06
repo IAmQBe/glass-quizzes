@@ -179,7 +179,7 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
         imageUrl = coverPreview;
       }
 
-      // Step 2: Create quiz with status='pending'
+      // Step 2: Create quiz (pending or auto-published based on moderation settings)
       const quiz = await createQuiz.mutateAsync({
         title,
         description,
@@ -193,18 +193,27 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
         })),
       });
 
-      // Step 3: Submit for review (notify admins)
-      try {
-        await submitForReview.mutateAsync(quiz.id);
-      } catch (reviewError) {
-        console.error("Submit for review error:", reviewError);
-        // Quiz created, but notification failed - not critical
+      const quizStatus = (quiz as any)?.status;
+      const isPendingModeration = quizStatus
+        ? quizStatus === "pending"
+        : (quiz as any)?.is_published !== true;
+
+      // Step 3: Submit for review (notify admins) only for pending content
+      if (isPendingModeration) {
+        try {
+          await submitForReview.mutateAsync(quiz.id);
+        } catch (reviewError) {
+          console.error("Submit for review error:", reviewError);
+          // Quiz created, but notification failed - not critical
+        }
       }
 
       haptic.notification("success");
       toast({
         title: "Квиз создан! 🎉",
-        description: "Отправлен на модерацию. Мы уведомим когда опубликуем."
+        description: isPendingModeration
+          ? "Отправлен на модерацию. Мы уведомим когда опубликуем."
+          : "Сразу опубликован в прод."
       });
       onSuccess();
     } catch (error: any) {

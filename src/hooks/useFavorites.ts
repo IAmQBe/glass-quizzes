@@ -78,12 +78,23 @@ async function ensureAuthUserId(): Promise<string | null> {
   if (user?.id) return user.id;
 
   const initialized = await initUser();
-  if (!initialized) return null;
+  if (!initialized) {
+    return null;
+  }
 
   const {
     data: { user: refreshedUser },
   } = await supabase.auth.getUser();
-  return refreshedUser?.id || null;
+  if (refreshedUser?.id) return refreshedUser.id;
+
+  // Last-resort fallback for stale sessions.
+  const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
+  if (anonError) {
+    console.error("ensureAuthUserId anonymous fallback failed:", anonError);
+    return null;
+  }
+
+  return anonData.user?.id || null;
 }
 
 async function getCandidateUserIds(preferAuthFirst: boolean): Promise<string[]> {

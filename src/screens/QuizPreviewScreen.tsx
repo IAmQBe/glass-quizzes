@@ -15,6 +15,7 @@ interface CreatorInfo {
     id: string;
     title: string;
     username: string | null;
+    invite_link?: string | null;
   } | null;
 }
 
@@ -52,7 +53,10 @@ export const QuizPreviewScreen = ({
   const handleSquadClick = () => {
     if (quiz.is_anonymous || !quiz.creator?.squad) return;
     haptic.impact('light');
-    const url = resolveSquadTelegramUrl({ username: quiz.creator.squad.username });
+    const url = resolveSquadTelegramUrl({
+      username: quiz.creator.squad.username,
+      inviteLink: quiz.creator.squad.invite_link,
+    });
     openTelegramTarget(url);
   };
 

@@ -124,6 +124,26 @@ const TELEGRAM_HOSTS = new Set(['t.me', 'telegram.me', 'www.t.me', 'www.telegram
 
 const trimSlash = (value: string): string => value.replace(/^\/+|\/+$/g, '');
 const isTelegramUsername = (value: string): boolean => /^[a-zA-Z0-9_]{3,}$/.test(value);
+const splitTelegramPath = (path: string): string[] => path.split('/').filter(Boolean);
+
+type TelegramLinkKind = 'username' | 'invite' | 'other';
+
+const detectTelegramLinkKind = (url: string): TelegramLinkKind => {
+  try {
+    const parsed = new URL(url);
+    if (!TELEGRAM_HOSTS.has(parsed.hostname.toLowerCase())) {
+      return 'other';
+    }
+
+    const [first = ''] = splitTelegramPath(parsed.pathname);
+    if (!first) return 'other';
+    if (first.startsWith('+') || first.toLowerCase() === 'joinchat') return 'invite';
+    if (isTelegramUsername(first)) return 'username';
+    return 'other';
+  } catch {
+    return 'other';
+  }
+};
 
 const parseTelegramResolveDomain = (value: string): string | null => {
   if (!value.toLowerCase().startsWith('tg://resolve')) return null;
@@ -183,6 +203,8 @@ export const normalizeTelegramLink = (rawValue: string | null | undefined): stri
     try {
       const parsed = new URL(value);
       if (!TELEGRAM_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+      const pathSegments = splitTelegramPath(parsed.pathname);
+      if (pathSegments.length === 0) return null;
       const path = parsed.pathname.startsWith('/') ? parsed.pathname : `/${parsed.pathname}`;
       return `https://t.me${path}${parsed.search}${parsed.hash}`;
     } catch {
@@ -191,7 +213,11 @@ export const normalizeTelegramLink = (rawValue: string | null | undefined): stri
   }
 
   if (value.toLowerCase().startsWith('t.me/') || value.toLowerCase().startsWith('telegram.me/')) {
-    return `https://${value.replace(/^https?:\/\//i, '')}`;
+    const normalized = value.replace(/^https?:\/\//i, '');
+    const slashIndex = normalized.indexOf('/');
+    const rawPath = slashIndex >= 0 ? normalized.slice(slashIndex + 1) : '';
+    if (!rawPath || splitTelegramPath(rawPath).length === 0) return null;
+    return `https://${normalized}`;
   }
 
   if (value.startsWith('@') || /^[a-zA-Z0-9_]{3,}$/.test(value)) {
@@ -220,6 +246,10 @@ export const resolveSquadTelegramUrl = ({
 
   const normalizedInviteLink = normalizeTelegramLink(inviteLink);
   if (normalizedInviteLink) {
+    const inviteUsername = normalizeTelegramUsername(normalizedInviteLink);
+    if (inviteUsername && inviteUsername.toLowerCase() === normalizedBot) {
+      return null;
+    }
     return normalizedInviteLink;
   }
 
@@ -231,13 +261,25 @@ export const openTelegramTarget = (url: string | null | undefined): boolean => {
 
   const tg = getTelegram();
   try {
-    if (tg?.openTelegramLink && (url.startsWith('https://t.me/') || url.startsWith('http://t.me/') || url.startsWith('tg://'))) {
+    const linkKind = detectTelegramLinkKind(url);
+
+    if (linkKind === 'username' && tg?.openTelegramLink) {
       tg.openTelegramLink(url);
+      return true;
+    }
+
+    if (linkKind === 'invite' && tg?.openLink) {
+      tg.openLink(url);
       return true;
     }
 
     if (tg?.openLink) {
       tg.openLink(url);
+      return true;
+    }
+
+    if (tg?.openTelegramLink && (url.startsWith('https://t.me/') || url.startsWith('http://t.me/') || url.startsWith('tg://'))) {
+      tg.openTelegramLink(url);
       return true;
     }
 

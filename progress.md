@@ -340,3 +340,65 @@ Original prompt: давай также сделаем возможность п�
   - Re-verified after hotfix:
     - `npm run build` passed.
     - `npm run test` passed.
+
+## 2026-02-06 (profile history card polish: media + author/team)
+- User report: in Profile -> History one result card (`D. J. Trump`) showed broken media icon, and author/squad metadata looked visually broken.
+- Implemented in `src/screens/ProfileScreen.tsx`:
+  - Added `normalizeMediaUrl()` guard to ignore invalid media placeholders like `"null"` / empty strings.
+  - In `TestResultItem`, added resilient image chain:
+    - primary: `result.image_url`,
+    - fallback: `test.image_url`,
+    - if both fail on load -> emoji placeholder instead of broken browser image icon.
+  - Introduced reusable `CreatorMeta` block with stable layout:
+    - `Автор: <name>` line,
+    - `Команда: <title>` line with popcorn icon,
+    - truncation (`truncate`) for long names to avoid ugly wrapping.
+  - Applied `CreatorMeta` to Saved cards, quiz history cards, and personality-test history cards.
+  - Replaced `UNNAMED` with `Анонимный автор` in profile card metadata.
+- Verification:
+  - `npm run build` passed.
+  - `npm run test -- --run` passed.
+
+## 2026-02-06 (global moderation toggle + auto-publish mode)
+- New request: add admin-controlled global content filtering mode:
+  - ON: user-generated quizzes/tests/events require manual moderation.
+  - OFF: user-generated quizzes/tests/events auto-publish immediately.
+- Added frontend moderation settings helper:
+  - `src/lib/moderationSettings.ts`
+  - key: `moderation_settings` (`manual_moderation_enabled: boolean`, default `true`).
+- Admin panel update (`src/screens/AdminPanel.tsx`):
+  - added "Фильтрация контента" switch in header area,
+  - persisted via `app_settings` upsert,
+  - clear ON/OFF descriptions and success/error toasts.
+- Quiz creation flow update:
+  - `src/hooks/useQuizzes.ts` `useCreateQuiz` now reads moderation setting and creates quiz as:
+    - pending/unpublished when filtering ON,
+    - published immediately when filtering OFF.
+  - keeps fallback for environments missing moderation columns.
+  - `src/screens/CreateQuizScreen.tsx` now conditionally submits for review only when pending and shows correct toast.
+- Personality test creation flow update:
+  - `src/hooks/usePersonalityTests.ts` `useCreatePersonalityTest` now applies same ON/OFF moderation behavior with fallback.
+  - `src/screens/CreatePersonalityTestScreen.tsx` now shows moderation vs auto-published toast based on actual created status.
+- Prediction event creation flow update:
+  - `src/hooks/usePredictions.ts` enriches create result with `next_status` and sends pending notification only for pending items.
+  - `src/types/prediction.ts` extended `CreatePredictionResult` with `next_status`.
+  - `src/screens/CreatePredictionScreen.tsx` now shows moderation vs published message according to created status.
+- Added DB migration:
+  - `supabase/migrations/20260206232500_content_moderation_toggle.sql`
+  - ensures default setting row (`moderation_settings`),
+  - adds `is_manual_moderation_enabled()` helper,
+  - adds insert triggers for quizzes/personality tests to enforce global moderation toggle for non-admin creators,
+  - updates `prediction_create_poll` to create `pending` when filtering ON and `open` when filtering OFF.
+- Tasks UX/auth safety follow-up:
+  - `src/hooks/useTasks.ts`: verifiable Telegram tasks (`subscribe_channel`, `channel_boost`, `telegram_premium`) no longer fall back to direct completion on auth/network failure; fallback remains for non-verifiable tasks.
+  - `src/components/TasksBlock.tsx`: completion now passes `{taskId, taskType}` and link opening uses normalized Telegram target helper.
+  - `server/src/api/index.ts`: Telegram chat parser hardened for additional link formats (`telegram.me`, `/s/...`) and rejects invite/private path forms that cannot be verified by bot.
+- Verification after changes:
+  - `npm run build` passed.
+  - `npm run test` passed.
+  - `npm run server:build` passed.
+- Follow-up (admin access UX):
+  - Fixed missing Admin Panel button for real admins when role RPC/session check is flaky.
+  - `useIsAdmin` now has safe fallback by Telegram allowlist (`VITE_ADMIN_TELEGRAM_IDS`).
+  - `ProfileScreen` now shows admin entry when either DB admin check passes or allowlist confirms admin Telegram ID.
+  - Re-verified: `npm run test` and `npm run build` pass.

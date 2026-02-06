@@ -20,6 +20,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Switch } from "@/components/ui/switch";
 import { useGifAnimations } from "@/hooks/useGifAnimations";
 import { formatQuestionCount } from "@/lib/utils";
+import { isCurrentUserAdmin } from "@/lib/user";
 
 // Fun avatar placeholders for users without photos
 const FUNNY_AVATARS = [
@@ -71,6 +72,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
 
   // Find my squad rank
   const mySquadRank = mySquad ? squadLeaderboard.findIndex(s => s.id === mySquad.id) + 1 : 0;
+  const canOpenAdminPanel = Boolean(onOpenAdmin && (isRealAdmin || isCurrentUserAdmin()));
 
   const [activeTab, setActiveTab] = useState<TabType>("my");
   const [sortBy, setSortBy] = useState<FilterType>("date");
@@ -379,12 +381,12 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
           </div>
 
           {/* Admin Button */}
-          {isRealAdmin && onOpenAdmin && (
+          {canOpenAdminPanel && (
             <button
               className="w-full flex items-center justify-between p-4"
               onClick={() => {
                 haptic.impact('medium');
-                onOpenAdmin();
+                onOpenAdmin?.();
               }}
             >
               <div className="flex items-center gap-3">

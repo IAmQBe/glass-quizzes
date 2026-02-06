@@ -1,10 +1,27 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useRolePreview } from "@/hooks/useRolePreview";
+import { getTelegramUser } from "@/lib/telegram";
 
 interface AuthHookOptions {
   respectRolePreview?: boolean;
 }
+
+const getAdminTelegramIds = (): number[] => {
+  const raw = import.meta.env.VITE_ADMIN_TELEGRAM_IDS as string | undefined;
+  if (!raw) return [];
+
+  return raw
+    .split(",")
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isFinite(value) && value > 0);
+};
+
+const isTelegramUserInAdminAllowlist = (): boolean => {
+  const tgUser = getTelegramUser();
+  if (!tgUser?.id) return false;
+  return getAdminTelegramIds().includes(tgUser.id);
+};
 
 export const useIsAdmin = ({ respectRolePreview = true }: AuthHookOptions = {}) => {
   const { forcedRole } = useRolePreview();
@@ -16,6 +33,10 @@ export const useIsAdmin = ({ respectRolePreview = true }: AuthHookOptions = {}) 
       if (roleOverride === "admin") return true;
       if (roleOverride === "user") return false;
 
+      if (isTelegramUserInAdminAllowlist()) {
+        return true;
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return false;
 
@@ -25,7 +46,7 @@ export const useIsAdmin = ({ respectRolePreview = true }: AuthHookOptions = {}) 
 
       if (error) {
         console.error("Error checking admin role:", error);
-        return false;
+        return isTelegramUserInAdminAllowlist();
       }
 
       return Boolean(data);

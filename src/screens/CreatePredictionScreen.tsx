@@ -94,9 +94,12 @@ export const CreatePredictionScreen = ({ onBack, onCreated, eligibility }: Creat
         vote_enabled: voteEnabled,
       });
 
+      const isPendingModeration = result.next_status === "pending";
       toast({
-        title: "Отправлено на модерацию",
-        description: "После одобрения администратором прогноз появится в ленте.",
+        title: isPendingModeration ? "Отправлено на модерацию" : "Прогноз опубликован",
+        description: isPendingModeration
+          ? "После одобрения администратором прогноз появится в ленте."
+          : "Событие сразу доступно в прод.",
       });
       onCreated(result.poll_id || "");
     } catch (error: any) {

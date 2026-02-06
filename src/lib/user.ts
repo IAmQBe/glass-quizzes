@@ -92,8 +92,18 @@ export const initUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
 
     if (!session) {
-      // Create anonymous session for Telegram user
+      // Ensure profile exists/updated for Telegram user.
       await getOrCreateUser();
+
+      // Some legacy flows can return from getOrCreateUser without creating an auth session.
+      const { data: { session: afterProfileSession } } = await supabase.auth.getSession();
+      if (!afterProfileSession) {
+        const { error } = await supabase.auth.signInAnonymously();
+        if (error) {
+          console.error("Anonymous sign-in fallback failed:", error);
+          return false;
+        }
+      }
     }
 
     return true;

@@ -15,6 +15,7 @@ interface CreatorInfo {
     id: string;
     title: string;
     username: string | null;
+    invite_link?: string | null;
   } | null;
 }
 
@@ -83,10 +84,13 @@ export const PersonalityTestCard = ({
 
   const handleSquadClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (is_anonymous || !creator?.squad?.username) return;
+    if (is_anonymous || !creator?.squad) return;
 
     haptic.impact('light');
-    const url = resolveSquadTelegramUrl({ username: creator.squad.username });
+    const url = resolveSquadTelegramUrl({
+      username: creator.squad.username,
+      inviteLink: creator.squad.invite_link,
+    });
     openTelegramTarget(url);
   };
 

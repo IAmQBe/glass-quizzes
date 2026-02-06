@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { loadManualModerationEnabled } from "@/lib/moderationSettings";
 
 // Creator info for display
 export interface CreatorInfo {
@@ -11,6 +12,7 @@ export interface CreatorInfo {
     id: string;
     title: string;
     username: string | null;
+    invite_link?: string | null;
   } | null;
 }
 
@@ -31,12 +33,12 @@ async function fetchCreatorsMap(creatorIds: string[]): Promise<Record<string, Cr
   if (!creators || creators.length === 0) return {};
 
   const squadIds = [...new Set(creators.map(c => c.squad_id).filter(Boolean))];
-  let squadsMap: Record<string, { id: string; title: string; username: string | null }> = {};
+  let squadsMap: Record<string, { id: string; title: string; username: string | null; invite_link?: string | null }> = {};
 
   if (squadIds.length > 0) {
     const { data: squads } = await supabase
       .from("squads")
-      .select("id, title, username")
+      .select("id, title, username, invite_link")
       .in("id", squadIds);
 
     if (squads) {
@@ -153,12 +155,12 @@ export const usePublishedQuizzes = () => {
         if (creators) {
           // Get squad info for creators who have squads
           const squadIds = [...new Set(creators.map(c => c.squad_id).filter(Boolean))];
-          let squadsMap: Record<string, { id: string; title: string; username: string | null }> = {};
+          let squadsMap: Record<string, { id: string; title: string; username: string | null; invite_link?: string | null }> = {};
 
           if (squadIds.length > 0) {
             const { data: squads } = await supabase
               .from("squads")
-              .select("id, title, username")
+              .select("id, title, username, invite_link")
               .in("id", squadIds);
 
             if (squads) {
@@ -368,24 +370,49 @@ export const useCreateQuiz = () => {
       }
 
       // Step 2: Create quiz
-      const { data: quizData, error: quizError } = await supabase
+      const manualModerationEnabled = await loadManualModerationEnabled();
+      const publishImmediately = !manualModerationEnabled;
+      const now = new Date().toISOString();
+
+      const insertPayload = {
+        title: quiz.title,
+        description: quiz.description || null,
+        image_url: quiz.image_url || null,
+        duration_seconds: quiz.duration_seconds || 60,
+        question_count: quiz.questions?.length || 0,
+        is_published: publishImmediately,
+        created_by: profileId,
+        is_anonymous: quiz.is_anonymous ?? false,
+      };
+
+      let quizData: any = null;
+      const { data: quizWithStatus, error: quizWithStatusError } = await (supabase as any)
         .from("quizzes")
         .insert({
-          title: quiz.title,
-          description: quiz.description || null,
-          image_url: quiz.image_url || null,
-          duration_seconds: quiz.duration_seconds || 60,
-          question_count: quiz.questions?.length || 0,
-          is_published: false, // Not published until admin approves
-          created_by: profileId,
-          is_anonymous: quiz.is_anonymous ?? false,
+          ...insertPayload,
+          status: publishImmediately ? "published" : "pending",
+          rejection_reason: null,
+          submitted_at: manualModerationEnabled ? now : null,
+          moderated_at: publishImmediately ? now : null,
         })
         .select()
         .single();
 
-      if (quizError) {
-        console.error("Quiz creation error:", quizError);
-        throw new Error(`Ошибка создания квиза: ${quizError.message}`);
+      if (quizWithStatusError) {
+        const { data: fallbackQuiz, error: fallbackQuizError } = await supabase
+          .from("quizzes")
+          .insert(insertPayload)
+          .select()
+          .single();
+
+        if (fallbackQuizError) {
+          console.error("Quiz creation error:", fallbackQuizError);
+          throw new Error(`Ошибка создания квиза: ${fallbackQuizError.message}`);
+        }
+
+        quizData = fallbackQuiz;
+      } else {
+        quizData = quizWithStatus;
       }
 
       console.log("Quiz created:", quizData.id);

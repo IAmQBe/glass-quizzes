@@ -58,6 +58,7 @@ export interface CreatePredictionPayload {
 export interface CreatePredictionResult {
   success: boolean;
   poll_id: string | null;
+  next_status: PredictionStatus | null;
   error_code: string | null;
   error_message: string | null;
 }

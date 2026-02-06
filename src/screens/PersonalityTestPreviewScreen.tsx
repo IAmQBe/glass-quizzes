@@ -15,6 +15,7 @@ interface CreatorInfo {
     id: string;
     title: string;
     username: string | null;
+    invite_link?: string | null;
   } | null;
 }
 
@@ -52,7 +53,10 @@ export const PersonalityTestPreviewScreen = ({
   const handleSquadClick = () => {
     if (test.is_anonymous || !test.creator?.squad) return;
     haptic.impact('light');
-    const url = resolveSquadTelegramUrl({ username: test.creator.squad.username });
+    const url = resolveSquadTelegramUrl({
+      username: test.creator.squad.username,
+      inviteLink: test.creator.squad.invite_link,
+    });
     openTelegramTarget(url);
   };
 

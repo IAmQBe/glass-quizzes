@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { Check, ChevronRight, Gift, ExternalLink } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { useTasks, useCompletedTasks, useCompleteTask } from "@/hooks/useTasks";
-import { haptic, getTelegram } from "@/lib/telegram";
+import { haptic, normalizeTelegramLink, openTelegramTarget } from "@/lib/telegram";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const TasksBlock = () => {
@@ -18,18 +18,12 @@ export const TasksBlock = () => {
 
     // Open link if present
     if (task.action_url) {
-      const tg = getTelegram();
-      if (tg && task.action_url.startsWith('https://t.me/')) {
-        tg.openTelegramLink(task.action_url);
-      } else if (tg) {
-        tg.openLink(task.action_url);
-      } else {
-        window.open(task.action_url, '_blank');
-      }
+      const normalizedLink = normalizeTelegramLink(task.action_url) || task.action_url;
+      openTelegramTarget(normalizedLink);
     }
 
     // Mark as completed
-    completeTask.mutate(task.id);
+    completeTask.mutate({ taskId: task.id, taskType: task.task_type });
   };
 
   if (isLoading) {

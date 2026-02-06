@@ -214,7 +214,7 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
 
       const validResults = results.filter(r => r.title.trim() && r.description.trim());
 
-      await createTest.mutateAsync({
+      const createdTest = await createTest.mutateAsync({
         title,
         description,
         image_url: imageUrl || undefined,
@@ -223,8 +223,16 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
         questions: questions,
       });
 
+      const testStatus = (createdTest as any)?.status;
+      const isPendingModeration = testStatus
+        ? testStatus === "pending"
+        : (createdTest as any)?.is_published !== true;
+
       haptic.notification('success');
-      toast({ title: "Тест создан!", description: "Отправлен на модерацию" });
+      toast({
+        title: "Тест создан!",
+        description: isPendingModeration ? "Отправлен на модерацию" : "Сразу опубликован в прод.",
+      });
       onSuccess();
     } catch (error: any) {
       console.error("Create test error:", error);

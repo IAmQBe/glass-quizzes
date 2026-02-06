@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { getTelegram, getTelegramUser } from "@/lib/telegram";
+import { initUser } from "@/lib/user";
 
 interface Task {
   id: string;
@@ -15,6 +16,17 @@ interface Task {
   is_active: boolean;
   display_order: number;
 }
+
+const VERIFIABLE_TASK_TYPES = new Set([
+  "subscribe_channel",
+  "channel_boost",
+  "telegram_premium",
+]);
+
+type CompleteTaskInput = {
+  taskId: string;
+  taskType?: string | null;
+};
 
 const getApiUrl = () => {
   const url = import.meta.env.VITE_API_URL as string | undefined;
@@ -130,7 +142,8 @@ export const useCompleteTask = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (taskId: string) => {
+    mutationFn: async ({ taskId, taskType }: CompleteTaskInput) => {
+      const isVerifiableTask = Boolean(taskType && VERIFIABLE_TASK_TYPES.has(taskType));
       const apiUrl = getApiUrl();
       const authHeader = getInitDataAuthHeader();
 
@@ -160,6 +173,10 @@ export const useCompleteTask = () => {
             throw new Error(message);
           }
 
+          if (isVerifiableTask) {
+            throw new Error("Для этого задания нужна проверка в Telegram. Открой Mini App и попробуй снова.");
+          }
+
           console.warn("Tasks API auth failed, trying direct completion fallback:", message);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
@@ -167,8 +184,22 @@ export const useCompleteTask = () => {
           if (!isNetworkLikeError) {
             throw error;
           }
+
+          if (isVerifiableTask) {
+            throw new Error("Не удалось проверить задание. Попробуй еще раз внутри Telegram.");
+          }
+
           console.warn("Tasks API network failed, trying direct completion fallback:", message);
         }
+      }
+
+      if (isVerifiableTask) {
+        throw new Error("Для этого задания нужна проверка Telegram. Открой приложение в Telegram.");
+      }
+
+      const authReady = await initUser();
+      if (!authReady) {
+        throw new Error("Не удалось авторизовать пользователя");
       }
 
       const profileId = await getProfileId();

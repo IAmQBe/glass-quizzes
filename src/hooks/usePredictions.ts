@@ -123,6 +123,7 @@ const normalizeQuota = (row: any): PredictionSquadMonthlyQuota => ({
 const normalizeCreateResult = (row: any): CreatePredictionResult => ({
   success: toBoolean(row?.success),
   poll_id: toNullableString(row?.poll_id),
+  next_status: (toNullableString(row?.next_status) as PredictionStatus) || null,
   error_code: toNullableString(row?.error_code),
   error_message: toNullableString(row?.error_message),
 });
@@ -374,6 +375,19 @@ export const useCreatePredictionPoll = () => {
         buildPredictionError(result.error_message || "Не удалось создать прогноз", result.error_code);
       }
 
+      if (result.poll_id && !result.next_status) {
+        const { data: createdPoll } = await (supabase as any)
+          .from("prediction_polls")
+          .select("status")
+          .eq("id", result.poll_id)
+          .maybeSingle();
+
+        return {
+          ...result,
+          next_status: (toNullableString(createdPoll?.status) as PredictionStatus) || null,
+        };
+      }
+
       return result;
     },
     onSuccess: (result) => {
@@ -381,7 +395,7 @@ export const useCreatePredictionPoll = () => {
       queryClient.invalidateQueries({ queryKey: ["predictionCreationEligibility"] });
       queryClient.invalidateQueries({ queryKey: ["predictionSquadQuota"] });
 
-      if (result.poll_id) {
+      if (result.poll_id && result.next_status === "pending") {
         void notifyPredictionModerationEvent(result.poll_id, "pending");
       }
     },

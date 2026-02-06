@@ -83,11 +83,16 @@ const parseTelegramChatId = (value: string | null): string | null => {
 
   try {
     const url = new URL(trimmed);
-    if (!url.hostname.includes('t.me')) return null;
+    const hostname = url.hostname.toLowerCase();
+    if (!hostname.includes('t.me') && !hostname.includes('telegram.me')) return null;
 
     const path = url.pathname.replace(/^\/+/, '');
-    const segment = path.split('/')[0];
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length === 0) return null;
+
+    const segment = (parts[0] === 's' ? parts[1] : parts[0]) || '';
     if (!segment) return null;
+    if (segment === 'joinchat' || segment.startsWith('+') || segment === 'c') return null;
     if (/^-?\d+$/.test(segment)) return segment;
     return `@${segment}`;
   } catch {

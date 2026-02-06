@@ -14,6 +14,11 @@ import { useQuizWithQuestions } from "@/hooks/useQuizzes";
 import { formatQuestionCount } from "@/lib/utils";
 import { PredictionModerationTab } from "@/components/admin/PredictionModerationTab";
 import { RolePreviewMode } from "@/hooks/useRolePreview";
+import {
+  MODERATION_SETTINGS_KEY,
+  buildModerationSettingsValue,
+  parseManualModerationEnabled,
+} from "@/lib/moderationSettings";
 
 interface AdminPanelProps {
   onBack: () => void;
@@ -180,6 +185,54 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
         acc[row.id] = row;
         return acc;
       }, {});
+    },
+  });
+
+  const { data: moderationSettingsRow, isLoading: moderationSettingsLoading } = useQuery({
+    queryKey: ["admin", MODERATION_SETTINGS_KEY],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("key, value")
+        .eq("key", MODERATION_SETTINGS_KEY)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const manualModerationEnabled = parseManualModerationEnabled(moderationSettingsRow?.value);
+
+  const updateModerationSettings = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const { error } = await supabase
+        .from("app_settings")
+        .upsert(
+          {
+            key: MODERATION_SETTINGS_KEY,
+            value: buildModerationSettingsValue(enabled),
+          },
+          { onConflict: "key" }
+        );
+
+      if (error) throw error;
+    },
+    onSuccess: (_, enabled) => {
+      queryClient.invalidateQueries({ queryKey: ["admin", MODERATION_SETTINGS_KEY] });
+      toast({
+        title: enabled ? "Фильтрация включена" : "Фильтрация отключена",
+        description: enabled
+          ? "Новый контент снова идет на ручную модерацию."
+          : "Новый контент публикуется автоматически.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Не удалось обновить фильтрацию",
+        description: error?.message || "Попробуйте еще раз",
+        variant: "destructive",
+      });
     },
   });
 
@@ -559,6 +612,27 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
         <p className="text-xs text-muted-foreground mt-2">
           Меняется только отображение интерфейса. Роль в базе не изменяется.
         </p>
+      </div>
+
+      <div className="tg-section p-4 mb-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">Фильтрация контента</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {manualModerationEnabled
+                ? "Вкл: тесты/квизы/события проходят ручную модерацию."
+                : "Выкл: тесты/квизы/события публикуются сразу в прод."}
+            </p>
+          </div>
+          <Switch
+            checked={manualModerationEnabled}
+            disabled={moderationSettingsLoading || updateModerationSettings.isPending}
+            onCheckedChange={(checked) => {
+              haptic.selection();
+              updateModerationSettings.mutate(checked);
+            }}
+          />
+        </div>
       </div>
 
       {/* Tabs */}

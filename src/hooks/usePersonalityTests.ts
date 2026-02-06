@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getTelegramUser, haptic } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
 import { initUser } from "@/lib/user";
+import { loadManualModerationEnabled } from "@/lib/moderationSettings";
 
 // ============================================
 // Types
@@ -17,6 +18,7 @@ export interface CreatorInfo {
     id: string;
     title: string;
     username: string | null;
+    invite_link?: string | null;
   } | null;
 }
 
@@ -37,12 +39,12 @@ async function fetchCreatorsMap(creatorIds: string[]): Promise<Record<string, Cr
   if (!creators || creators.length === 0) return {};
 
   const squadIds = [...new Set(creators.map(c => c.squad_id).filter(Boolean))];
-  let squadsMap: Record<string, { id: string; title: string; username: string | null }> = {};
+  let squadsMap: Record<string, { id: string; title: string; username: string | null; invite_link?: string | null }> = {};
 
   if (squadIds.length > 0) {
     const { data: squads } = await supabase
       .from("squads")
-      .select("id, title, username")
+      .select("id, title, username, invite_link")
       .in("id", squadIds);
 
     if (squads) {
@@ -150,7 +152,16 @@ async function ensureAuthUserId(): Promise<string | null> {
   const {
     data: { user: refreshedUser },
   } = await supabase.auth.getUser();
-  return refreshedUser?.id || null;
+  if (refreshedUser?.id) return refreshedUser.id;
+
+  // Last-resort fallback for stale sessions.
+  const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
+  if (anonError) {
+    console.error("ensureAuthUserId anonymous fallback failed:", anonError);
+    return null;
+  }
+
+  return anonData.user?.id || null;
 }
 
 async function getCandidateUserIds(preferProfileFirst: boolean): Promise<string[]> {
@@ -235,12 +246,12 @@ export const usePublishedPersonalityTests = () => {
         if (creators) {
           // Get squad info for creators who have squads
           const squadIds = [...new Set(creators.map(c => c.squad_id).filter(Boolean))];
-          let squadsMap: Record<string, { id: string; title: string; username: string | null }> = {};
+          let squadsMap: Record<string, { id: string; title: string; username: string | null; invite_link?: string | null }> = {};
 
           if (squadIds.length > 0) {
             const { data: squads } = await supabase
               .from("squads")
-              .select("id, title, username")
+              .select("id, title, username, invite_link")
               .in("id", squadIds);
 
             if (squads) {
@@ -469,23 +480,47 @@ export const useCreatePersonalityTest = () => {
         throw new Error("Нужно открыть через Telegram");
       }
 
+      const manualModerationEnabled = await loadManualModerationEnabled();
+      const publishImmediately = !manualModerationEnabled;
+      const now = new Date().toISOString();
+
       // 1. Create the test
-      const { data: test, error: testError } = await supabase
+      const baseInsertPayload = {
+        title: input.title,
+        description: input.description || null,
+        image_url: input.image_url || null,
+        created_by: profileId,
+        question_count: input.questions.length,
+        result_count: input.results.length,
+        is_published: publishImmediately,
+        is_anonymous: input.is_anonymous ?? false,
+      };
+
+      let test: any = null;
+      const { data: testWithStatus, error: testWithStatusError } = await (supabase as any)
         .from("personality_tests")
         .insert({
-          title: input.title,
-          description: input.description || null,
-          image_url: input.image_url || null,
-          created_by: profileId,
-          question_count: input.questions.length,
-          result_count: input.results.length,
-          is_published: false,
-          is_anonymous: input.is_anonymous ?? false,
+          ...baseInsertPayload,
+          status: publishImmediately ? "published" : "pending",
+          rejection_reason: null,
+          submitted_at: manualModerationEnabled ? now : null,
+          moderated_at: publishImmediately ? now : null,
         })
         .select()
         .single();
 
-      if (testError) throw testError;
+      if (testWithStatusError) {
+        const { data: fallbackTest, error: fallbackError } = await supabase
+          .from("personality_tests")
+          .insert(baseInsertPayload)
+          .select()
+          .single();
+
+        if (fallbackError) throw fallbackError;
+        test = fallbackTest;
+      } else {
+        test = testWithStatus;
+      }
 
       // 2. Create results
       const resultsToInsert = input.results.map((r, index) => ({
