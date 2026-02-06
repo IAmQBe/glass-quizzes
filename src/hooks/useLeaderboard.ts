@@ -61,6 +61,67 @@ export const useLeaderboard = (category: LeaderboardCategory, limit: number = 10
             quiz_count: Number(entry.quiz_count || 0),
             rank: Number(entry.rank),
           }));
+
+          // Fallback if RPC returns empty (e.g., status mismatch)
+          if (data.length === 0) {
+            const { data: quizzes } = await supabase
+              .from("quizzes")
+              .select("created_by, like_count, is_published, status");
+
+            const publishedQuizzes = (quizzes || []).filter((q: any) =>
+              q?.is_published === true || q?.status === 'published'
+            );
+
+            const agg = new Map<string, { total_popcorns: number; quiz_count: number }>();
+            publishedQuizzes.forEach((q: any) => {
+              if (!q.created_by) return;
+              const current = agg.get(q.created_by) || { total_popcorns: 0, quiz_count: 0 };
+              const likeCount = Number(q.like_count || 0);
+              current.total_popcorns += likeCount;
+              current.quiz_count += 1;
+              agg.set(q.created_by, current);
+            });
+
+            const creatorIds = Array.from(agg.keys());
+            if (creatorIds.length === 0) {
+              data = [];
+              break;
+            }
+
+            const { data: profiles } = await supabase
+              .from("profiles")
+              .select("id, username, first_name, avatar_url, has_telegram_premium")
+              .in("id", creatorIds);
+
+            const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+            const sorted = creatorIds
+              .map((id) => ({ user_id: id, ...agg.get(id)! }))
+              .filter((row) => row.total_popcorns > 0)
+              .sort((a, b) => b.total_popcorns - a.total_popcorns)
+              .slice(0, limit);
+
+            let lastScore: number | null = null;
+            let rank = 0;
+            data = sorted.map((row, index) => {
+              if (lastScore === null || row.total_popcorns !== lastScore) {
+                rank = index + 1;
+                lastScore = row.total_popcorns;
+              }
+              const profile = profileMap.get(row.user_id);
+              return {
+                user_id: row.user_id,
+                username: profile?.username ?? null,
+                first_name: profile?.first_name ?? null,
+                avatar_url: profile?.avatar_url ?? null,
+                has_premium: profile?.has_telegram_premium ?? false,
+                total_popcorns: row.total_popcorns,
+                popcorns: row.total_popcorns,
+                quiz_count: row.quiz_count,
+                rank,
+              } as LeaderboardEntry;
+            });
+          }
           break;
         }
         case 'score':

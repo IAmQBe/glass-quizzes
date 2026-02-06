@@ -14,6 +14,45 @@ export interface CreatorInfo {
   } | null;
 }
 
+async function fetchCreatorsMap(creatorIds: string[]): Promise<Record<string, CreatorInfo>> {
+  if (creatorIds.length === 0) return {};
+
+  const { data: creators } = await supabase
+    .from("profiles")
+    .select(`
+      id,
+      first_name,
+      username,
+      avatar_url,
+      squad_id
+    `)
+    .in("id", creatorIds);
+
+  if (!creators || creators.length === 0) return {};
+
+  const squadIds = [...new Set(creators.map(c => c.squad_id).filter(Boolean))];
+  let squadsMap: Record<string, { id: string; title: string; username: string | null }> = {};
+
+  if (squadIds.length > 0) {
+    const { data: squads } = await supabase
+      .from("squads")
+      .select("id, title, username")
+      .in("id", squadIds);
+
+    if (squads) {
+      squadsMap = Object.fromEntries(squads.map(s => [s.id, s]));
+    }
+  }
+
+  return Object.fromEntries(creators.map(c => [c.id, {
+    id: c.id,
+    first_name: c.first_name,
+    username: c.username,
+    avatar_url: c.avatar_url,
+    squad: c.squad_id ? squadsMap[c.squad_id] || null : null,
+  }]));
+}
+
 // Quiz interface matching actual Supabase schema
 export interface Quiz {
   id: string;
@@ -136,6 +175,12 @@ export const useQuizWithQuestions = (quizId: string | null) => {
 
       if (quizError) throw quizError;
 
+      let creator: CreatorInfo | null = null;
+      if (quiz?.created_by) {
+        const creatorsMap = await fetchCreatorsMap([quiz.created_by]);
+        creator = creatorsMap[quiz.created_by] || null;
+      }
+
       const { data: questions, error: questionsError } = await supabase
         .from("questions")
         .select("*")
@@ -145,7 +190,10 @@ export const useQuizWithQuestions = (quizId: string | null) => {
       if (questionsError) throw questionsError;
 
       return {
-        quiz,
+        quiz: {
+          ...quiz,
+          creator,
+        },
         questions: (questions || []).map(q => ({
           ...q,
           options: Array.isArray(q.options) ? (q.options as unknown as QuestionOption[]) : []
@@ -521,14 +569,35 @@ export const useMyQuizResults = () => {
             id,
             title,
             image_url,
-            question_count
+            question_count,
+            created_by
           )
         `)
         .eq("user_id", profile.id)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data || [];
+      const results = data || [];
+
+      const creatorIds = [
+        ...new Set(
+          results
+            .map(r => r.quiz?.created_by)
+            .filter(Boolean) as string[]
+        ),
+      ];
+
+      const creatorsMap = await fetchCreatorsMap(creatorIds);
+
+      return results.map(r => ({
+        ...r,
+        quiz: r.quiz
+          ? {
+              ...r.quiz,
+              creator: r.quiz.created_by ? creatorsMap[r.quiz.created_by] || null : null,
+            }
+          : r.quiz,
+      }));
     },
   });
 };

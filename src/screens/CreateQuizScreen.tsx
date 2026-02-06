@@ -287,7 +287,7 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
             <div className="tg-section p-4">
               <label className="text-sm font-medium text-foreground block mb-2">
                 <Clock className="w-4 h-4 inline mr-1" />
-                Time per question (seconds)
+                Общее время (секунды)
               </label>
               <div className="flex gap-2">
                 {[10, 15, 20, 30].map((d) => (
@@ -578,7 +578,7 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                 )}
                 <div className="flex gap-4 text-sm text-muted-foreground">
                   <span>{questions.length} вопросов</span>
-                  <span>{duration}с на вопрос</span>
+                  <span>{duration}с на квиз</span>
                 </div>
               </div>
             </div>

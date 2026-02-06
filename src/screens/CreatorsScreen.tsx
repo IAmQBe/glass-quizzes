@@ -50,7 +50,7 @@ export const CreatorsScreen = ({ onBack, onCreatorSelect }: CreatorsScreenProps)
 
   return (
     <motion.div
-      className="flex flex-col min-h-screen pb-32"
+      className="flex flex-col min-h-screen safe-bottom-nav"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

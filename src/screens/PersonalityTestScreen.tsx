@@ -111,7 +111,20 @@ export const PersonalityTestScreen = ({ testId, onBack, onComplete }: Personalit
 
   const { test } = data;
   const currentQuestion = shuffledQuestions[currentQuestionIndex];
-  const progress = ((currentQuestionIndex) / shuffledQuestions.length) * 100;
+
+  if (!currentQuestion) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <p className="text-muted-foreground mb-4">В этом тесте пока нет вопросов</p>
+        <button className="tg-button-secondary" onClick={onBack}>
+          Назад
+        </button>
+      </div>
+    );
+  }
+
+  const totalQuestions = Math.max(shuffledQuestions.length, 1);
+  const progress = (currentQuestionIndex / totalQuestions) * 100;
 
   return (
     <motion.div

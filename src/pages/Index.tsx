@@ -37,7 +37,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { UserStats, QuizResult } from "@/types/quiz";
 import { initTelegramApp, backButton, isTelegramWebApp, shareResult, getTelegramUserData, getTelegram } from "@/lib/telegram";
-import { calculateResult } from "@/data/quizData";
+import { calculateResult, getVerdict } from "@/data/quizData";
 import { TrendingUp, Sparkles, Search, X, Swords, Users, Plus } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
@@ -279,13 +279,15 @@ const Index = () => {
   };
 
   const handleAnswer = (answerIndex: number) => {
-    const questions = quizData?.questions || [];
-    const totalQuestions = questions.length > 0 ? questions.length : 5;
+    const totalQuestions = mappedQuestions.length > 0
+      ? mappedQuestions.length
+      : (quizData?.questions?.length || 5);
 
     // Track answer time
     const answerTimeMs = Date.now() - questionStartTime.current;
-    const correctAnswer = questions[currentQuestion]?.correct_answer;
-    const isCorrect = answerIndex === correctAnswer;
+    const correctAnswer = mappedQuestions[currentQuestion]?.correctAnswer
+      ?? quizData?.questions?.[currentQuestion]?.correct_answer;
+    const isCorrect = typeof correctAnswer === "number" ? answerIndex === correctAnswer : false;
 
     // Track this answer
     track('quiz_answer', {
@@ -305,7 +307,7 @@ const Index = () => {
       }, 300);
     } else {
       setTimeout(() => {
-        const quizResult = calculateResult(newAnswers);
+        const quizResult = computeQuizResult(newAnswers);
         setResult(quizResult);
         setCurrentScreen("result");
 
@@ -313,7 +315,7 @@ const Index = () => {
         const totalTimeMs = Date.now() - quizStartTime.current;
         track('quiz_complete', {
           score: quizResult.score,
-          max_score: 100,
+          max_score: quizResult.maxScore,
           time_total_ms: totalTimeMs,
           percentile: quizResult.percentile,
         }, selectedQuizId || undefined);
@@ -420,6 +422,7 @@ const Index = () => {
       id: i + 1,
       text: q.question_text,
       options: q.options.map(opt => opt.text),
+      correctAnswer: typeof q.correct_answer === "number" ? q.correct_answer : undefined,
     }));
 
     for (let i = questions.length - 1; i > 0; i--) {
@@ -429,6 +432,31 @@ const Index = () => {
 
     return questions;
   }, [quizData?.questions, selectedQuizId]); // Re-shuffle when quiz changes
+
+  const hasCorrectAnswers = mappedQuestions.some((q) => typeof q.correctAnswer === "number");
+
+  const computeQuizResult = (answersList: number[]): QuizResult => {
+    if (hasCorrectAnswers && mappedQuestions.length > 0) {
+      const total = mappedQuestions.length;
+      const correct = answersList.reduce((acc, answer, idx) => {
+        const correctAnswer = mappedQuestions[idx]?.correctAnswer;
+        return acc + (typeof correctAnswer === "number" && answer === correctAnswer ? 1 : 0);
+      }, 0);
+      const score = total > 0 ? Math.round((correct / total) * 100) : 0;
+      const verdict = getVerdict(score);
+      const percentile = Math.max(1, Math.min(99, Math.round(100 - score)));
+
+      return {
+        score,
+        maxScore: 100,
+        percentile,
+        verdict: verdict.text,
+        verdictEmoji: verdict.emoji,
+      };
+    }
+
+    return calculateResult(answersList);
+  };
 
   const showBottomNav = ["home", "gallery", "leaderboard", "profile"].includes(currentScreen);
   const displayQuizzes = quizTab === "trending" ? trendingQuizzes : sortedQuizzes;
@@ -444,7 +472,7 @@ const Index = () => {
           {currentScreen === "home" && (
             <motion.div
               key="home"
-              className="p-4 pb-32 safe-bottom space-y-4"
+              className="p-4 safe-bottom-nav space-y-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -791,8 +819,12 @@ const Index = () => {
                 setSelectedQuizId(null);
               }}
               onStart={handleStartQuiz}
-              onToggleLike={() => toggleLike.mutate(selectedQuizId)}
-              onToggleSave={() => toggleSave.mutate(selectedQuizId)}
+              onToggleLike={() =>
+                toggleLike.mutate({ quizId: selectedQuizId, isLiked: likeIds.has(selectedQuizId) })
+              }
+              onToggleSave={() =>
+                toggleSave.mutate({ quizId: selectedQuizId, isFavorite: saveIds.has(selectedQuizId) })
+              }
             />
           )}
 
@@ -804,17 +836,11 @@ const Index = () => {
               onAnswer={handleAnswer}
               durationSeconds={quizData?.quiz?.duration_seconds || 0}
               onTimeUp={() => {
-                // Auto-submit with current answers when time is up
-                const currentScore = answers.reduce((acc, ans, idx) => {
-                  const question = quizData?.questions?.[idx];
-                  const correctAnswer = question?.correct_answer ?? 0;
-                  return acc + (ans === correctAnswer ? 1 : 0);
-                }, 0);
-                const total = quizData?.questions?.length || 1;
+                const quizResult = computeQuizResult(answers);
                 setResult({
-                  score: Math.round((currentScore / total) * 100),
-                  percentile: 50,
+                  ...quizResult,
                   verdict: "Время вышло!",
+                  verdictEmoji: "⏰",
                 });
                 setCurrentScreen("result");
               }}
@@ -846,8 +872,12 @@ const Index = () => {
                   setSelectedTestId(null);
                 }}
                 onStart={handleStartTest}
-                onToggleLike={() => toggleTestLike.mutate(selectedTestId)}
-                onToggleSave={() => toggleTestSave.mutate(selectedTestId)}
+                onToggleLike={() =>
+                  toggleTestLike.mutate({ testId: selectedTestId, isLiked: testLikeIds.has(selectedTestId) })
+                }
+                onToggleSave={() =>
+                  toggleTestSave.mutate({ testId: selectedTestId, isFavorite: testSaveIds.has(selectedTestId) })
+                }
               />
             );
           })()}

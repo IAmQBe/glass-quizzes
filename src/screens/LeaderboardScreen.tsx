@@ -85,7 +85,7 @@ export const LeaderboardScreen = ({ onBack, onSquadSelect }: LeaderboardScreenPr
 
   return (
     <motion.div
-      className="flex flex-col min-h-screen pb-32"
+      className="flex flex-col min-h-screen safe-bottom-nav"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -236,7 +236,7 @@ export const LeaderboardScreen = ({ onBack, onSquadSelect }: LeaderboardScreenPr
               )}
 
               {/* Rest of squads */}
-              {squadLeaderboard.slice(3).map((squad, index) => (
+              {(squadLeaderboard.length >= 3 ? squadLeaderboard.slice(3) : squadLeaderboard).map((squad, index) => (
                 <motion.button
                   key={squad.id}
                   onClick={() => handleSquadClick(squad)}
@@ -377,7 +377,7 @@ export const LeaderboardScreen = ({ onBack, onSquadSelect }: LeaderboardScreenPr
               )}
 
               {/* Rest of creators */}
-              {creatorsLeaderboard.slice(3).map((entry, index) => (
+              {(creatorsLeaderboard.length >= 3 ? creatorsLeaderboard.slice(3) : creatorsLeaderboard).map((entry, index) => (
                 <motion.div
                   key={entry.user_id}
                   className="tg-section p-3 flex items-center gap-3"

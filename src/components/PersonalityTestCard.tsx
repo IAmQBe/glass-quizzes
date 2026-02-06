@@ -58,6 +58,13 @@ export const PersonalityTestCard = ({
     onClick();
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handleClick();
+    }
+  };
+
   const handleLike = (e: React.MouseEvent) => {
     e.stopPropagation();
     haptic.impact('light');
@@ -91,9 +98,12 @@ export const PersonalityTestCard = ({
   };
 
   return (
-    <motion.button
+    <motion.div
       className={`tg-section w-full text-left overflow-hidden rounded-2xl ${isCompleted ? 'ring-2 ring-green-500/50' : ''}`}
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
       whileTap={{ scale: 0.98 }}
       transition={{ type: "spring", stiffness: 400, damping: 25 }}
     >
@@ -123,32 +133,6 @@ export const PersonalityTestCard = ({
             <Check className="w-3 h-3 text-white" />
             <span className="text-xs text-white font-medium">Пройден</span>
           </div>
-        )}
-
-        {/* Top right - Popcorn (like) */}
-        {onToggleLike && (
-          <button
-            onClick={handleLike}
-            className={`absolute top-2 right-2 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${isLiked
-                ? "bg-amber-500 text-white"
-                : "bg-black/40 text-white hover:bg-black/60"
-              }`}
-          >
-            <PopcornIcon className="w-4 h-4" />
-          </button>
-        )}
-
-        {/* Bottom right - Save */}
-        {onToggleSave && (
-          <button
-            onClick={handleSave}
-            className={`absolute bottom-2 right-2 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-colors ${isSaved
-                ? "bg-purple-500 text-white"
-                : "bg-black/40 text-white hover:bg-black/60"
-              }`}
-          >
-            <BookmarkIcon className="w-4 h-4" filled={isSaved} />
-          </button>
         )}
 
         {/* Bottom left - Stats on image */}
@@ -181,8 +165,15 @@ export const PersonalityTestCard = ({
         {/* Creator info */}
         {creator && (
           <div className="flex items-center gap-2 mb-2">
+            <div className="w-6 h-6 rounded-full bg-purple-500/10 flex items-center justify-center overflow-hidden">
+              {creator.avatar_url ? (
+                <img src={creator.avatar_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[10px]">✨</span>
+              )}
+            </div>
             <span className="text-xs text-muted-foreground">
-              от {creator.first_name || creator.username || 'Аноним'}
+              {creator.first_name || creator.username || 'Аноним'}
             </span>
             {creator.squad && (
               <button
@@ -196,26 +187,40 @@ export const PersonalityTestCard = ({
           </div>
         )}
 
-        {/* Stats */}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        {/* Stats + Actions */}
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
             <HelpCircle className="w-3.5 h-3.5" />
             <span>{question_count} вопросов</span>
           </div>
-          {like_count > 0 && (
-            <div className="flex items-center gap-1">
-              <PopcornIcon className="w-3.5 h-3.5 text-amber-500" />
-              <span>{formatCount(like_count)}</span>
-            </div>
-          )}
-          {save_count > 0 && (
-            <div className="flex items-center gap-1">
-              <BookmarkIcon className="w-3.5 h-3.5" />
-              <span>{formatCount(save_count)}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-1.5">
+            {onToggleLike && (
+              <button
+                onClick={handleLike}
+                className={`flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium transition-colors ${isLiked
+                  ? "bg-amber-500/20 text-amber-600"
+                  : "bg-secondary text-muted-foreground"
+                  }`}
+              >
+                <PopcornIcon className="w-3.5 h-3.5" />
+                <span>{formatCount(like_count)}</span>
+              </button>
+            )}
+            {onToggleSave && (
+              <button
+                onClick={handleSave}
+                className={`flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium transition-colors ${isSaved
+                  ? "bg-purple-500/20 text-purple-500"
+                  : "bg-secondary text-muted-foreground"
+                  }`}
+              >
+                <BookmarkIcon className="w-3.5 h-3.5" filled={isSaved} />
+                <span>{formatCount(save_count)}</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
-    </motion.button>
+    </motion.div>
   );
 };

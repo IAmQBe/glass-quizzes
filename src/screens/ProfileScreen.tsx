@@ -129,7 +129,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
 
   return (
     <motion.div
-      className="flex flex-col min-h-screen pb-32"
+      className="flex flex-col min-h-screen safe-bottom-nav"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -526,6 +526,17 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                           </span>
                         </div>
                         <h3 className="font-medium text-foreground truncate">{item.title}</h3>
+                        {item.creator && (item.creator.first_name || item.creator.username) && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                            <span>от {item.creator.first_name || item.creator.username}</span>
+                            {item.creator.squad && (
+                              <span className="flex items-center gap-1 text-primary">
+                                <PopcornIcon className="w-3 h-3" />
+                                {item.creator.squad.title}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
                           <span className="flex items-center gap-1">
                             <Users className="w-3 h-3" />
@@ -574,6 +585,17 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                             <span className="text-xs px-1.5 py-0.5 rounded bg-primary/20 text-primary">Квиз</span>
                             <h3 className="font-medium text-foreground">{result.quiz?.title || 'Квиз'}</h3>
                           </div>
+                          {result.quiz?.creator && (result.quiz.creator.first_name || result.quiz.creator.username) && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                              <span>от {result.quiz.creator.first_name || result.quiz.creator.username}</span>
+                              {result.quiz.creator.squad && (
+                                <span className="flex items-center gap-1 text-primary">
+                                  <PopcornIcon className="w-3 h-3" />
+                                  {result.quiz.creator.squad.title}
+                                </span>
+                              )}
+                            </div>
+                          )}
                           <p className="text-sm text-muted-foreground">
                             {result.score}/{result.max_score} правильных · {result.percentile}%
                           </p>
@@ -703,6 +725,17 @@ const TestResultItem = ({ completion, onShare }: { completion: any; onShare: () 
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-foreground line-clamp-1">{result.title}</h3>
           <p className="text-xs text-purple-500 font-medium mt-0.5">{test.title}</p>
+          {test.creator && (test.creator.first_name || test.creator.username) && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+              <span>от {test.creator.first_name || test.creator.username}</span>
+              {test.creator.squad && (
+                <span className="flex items-center gap-1 text-purple-500">
+                  <PopcornIcon className="w-3 h-3" />
+                  {test.creator.squad.title}
+                </span>
+              )}
+            </div>
+          )}
           <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
             {result.description}
           </p>

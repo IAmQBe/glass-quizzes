@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getTelegramUser } from "@/lib/telegram";
+import { supabase } from "@/integrations/supabase/client";
 
 // Admin IDs from env
 const ADMIN_TELEGRAM_IDS = (import.meta.env.VITE_ADMIN_TELEGRAM_IDS || "")

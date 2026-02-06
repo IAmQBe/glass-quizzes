@@ -18,6 +18,45 @@ export interface CreatorInfo {
   } | null;
 }
 
+async function fetchCreatorsMap(creatorIds: string[]): Promise<Record<string, CreatorInfo>> {
+  if (creatorIds.length === 0) return {};
+
+  const { data: creators } = await supabase
+    .from("profiles")
+    .select(`
+      id,
+      first_name,
+      username,
+      avatar_url,
+      squad_id
+    `)
+    .in("id", creatorIds);
+
+  if (!creators || creators.length === 0) return {};
+
+  const squadIds = [...new Set(creators.map(c => c.squad_id).filter(Boolean))];
+  let squadsMap: Record<string, { id: string; title: string; username: string | null }> = {};
+
+  if (squadIds.length > 0) {
+    const { data: squads } = await supabase
+      .from("squads")
+      .select("id, title, username")
+      .in("id", squadIds);
+
+    if (squads) {
+      squadsMap = Object.fromEntries(squads.map(s => [s.id, s]));
+    }
+  }
+
+  return Object.fromEntries(creators.map(c => [c.id, {
+    id: c.id,
+    first_name: c.first_name,
+    username: c.username,
+    avatar_url: c.avatar_url,
+    squad: c.squad_id ? squadsMap[c.squad_id] || null : null,
+  }]));
+}
+
 export interface PersonalityTest {
   id: string;
   title: string;
@@ -457,25 +496,7 @@ export const useSubmitPersonalityTestCompletion = () => {
 
       if (completionError) throw completionError;
 
-      // Increment participant count
-      await supabase
-        .from("personality_tests")
-        .update({
-          participant_count: supabase.rpc ? undefined : 0 // Will be incremented manually
-        })
-        .eq("id", testId);
-
-      // Manual increment
-      const { data: test } = await supabase
-        .from("personality_tests")
-        .select("participant_count")
-        .eq("id", testId)
-        .single();
-
-      await supabase
-        .from("personality_tests")
-        .update({ participant_count: (test?.participant_count || 0) + 1 })
-        .eq("id", testId);
+      // participant_count is updated by DB trigger on completion insert
 
       return {
         completion,
@@ -510,7 +531,26 @@ export const useMyPersonalityTestCompletions = () => {
         .order("completed_at", { ascending: false });
 
       if (error) throw error;
-      return (data || []) as PersonalityTestCompletion[];
+
+      const completions = (data || []) as PersonalityTestCompletion[];
+      const creatorIds = [
+        ...new Set(
+          completions
+            .map(c => c.test?.created_by)
+            .filter(Boolean) as string[]
+        ),
+      ];
+      const creatorsMap = await fetchCreatorsMap(creatorIds);
+
+      return completions.map(c => ({
+        ...c,
+        test: c.test
+          ? {
+              ...c.test,
+              creator: c.test.created_by ? creatorsMap[c.test.created_by] || null : null,
+            }
+          : c.test,
+      })) as PersonalityTestCompletion[];
     },
   });
 };
@@ -655,11 +695,55 @@ export const useTogglePersonalityTestFavorite = () => {
           .delete()
           .eq("test_id", testId)
           .eq("user_id", profileId);
+
+        // Keep legacy favorites table in sync (for profile saved list)
+        try {
+          await supabase
+            .from("favorites")
+            .delete()
+            .eq("user_id", profileId)
+            .eq("test_id", testId);
+        } catch {
+          // ignore if table doesn't support tests
+        }
+
+        // Manual decrement save_count (no trigger in DB)
+        const { data: test } = await supabase
+          .from("personality_tests")
+          .select("save_count")
+          .eq("id", testId)
+          .single();
+
+        await supabase
+          .from("personality_tests")
+          .update({ save_count: Math.max(0, (test?.save_count || 1) - 1) })
+          .eq("id", testId);
       } else {
         // Add favorite - trigger will increment save_count
         await supabase
           .from("personality_test_favorites")
           .insert({ test_id: testId, user_id: profileId });
+
+        // Keep legacy favorites table in sync (for profile saved list)
+        try {
+          await supabase
+            .from("favorites")
+            .insert({ user_id: profileId, test_id: testId });
+        } catch {
+          // ignore if table doesn't support tests
+        }
+
+        // Manual increment save_count (no trigger in DB)
+        const { data: test } = await supabase
+          .from("personality_tests")
+          .select("save_count")
+          .eq("id", testId)
+          .single();
+
+        await supabase
+          .from("personality_tests")
+          .update({ save_count: (test?.save_count || 0) + 1 })
+          .eq("id", testId);
       }
     },
     onMutate: async ({ testId, isFavorite }) => {
