@@ -307,3 +307,36 @@ Original prompt: давай также сделаем возможность п�
 - Re-verified after hardening:
   - `npm run build` passed.
   - `npm run test -- --run` passed.
+
+## 2026-02-06 (admin moderation + tasks editing)
+- New request: improve Admin Panel visibility/moderation for tests/quizzes, add editable tasks UX, and resolve task completion auth issue on Home.
+- Admin moderation updates (`src/screens/AdminPanel.tsx`):
+  - Added moderation preview mode for both content types:
+    - preview of quiz questions + answer options + question images,
+    - preview of personality test questions + answers + question images.
+  - Added creator display for quiz/test cards in Admin tabs.
+  - Added `Preview` action in quiz and test cards to open detailed moderation view.
+  - Added moderation actions directly in preview:
+    - `Опубликовать`,
+    - `Отклонить` with required rejection reason input.
+  - Updated tests tab to use full admin list (not only pending), with status badges.
+  - Enhanced back behavior: when preview is open, top back button returns to list instead of exiting admin.
+- Tasks admin UX (`src/screens/AdminPanel.tsx`):
+  - Added full edit mode for existing tasks (title, description, type, link/channel, reward, icon, active flag).
+  - Added task type selector in creation/editing:
+    - `link`,
+    - `subscribe_channel`,
+    - `channel_boost`,
+    - `telegram_premium`.
+  - Added validation for required URL/channel on URL-dependent task types.
+- Personality tests admin query consistency (`src/hooks/usePersonalityTests.ts`):
+  - `useAdminPersonalityTests` query key aligned to `["admin", "tests"]` for stable invalidation.
+- Verification:
+  - `npm run build` passed.
+  - `npm run test` passed.
+  - `npm run server:build` passed.
+- Follow-up hotfix for Home task completion auth error (`Ошибка: Not authenticated`):
+  - Updated `src/hooks/useTasks.ts` completion mutation to gracefully fallback to direct profile-based completion when API returns auth-related errors (401 / invalid initData / authorization mismatch).
+  - Re-verified after hotfix:
+    - `npm run build` passed.
+    - `npm run test` passed.

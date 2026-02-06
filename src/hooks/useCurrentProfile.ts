@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { getTelegramUser, getTelegram } from "@/lib/telegram";
+import { getTelegramUser, getTelegram, parseReferralStartParam } from "@/lib/telegram";
 
 export interface Profile {
   id: string;
@@ -41,33 +41,6 @@ function getTelegramData() {
 function getStartParam(): string | null {
   const tg = getTelegram();
   return tg?.initDataUnsafe?.start_param || null;
-}
-
-/**
- * Parse referrer telegram_id from start_param
- * Supports multiple formats:
- * - ..._ref_<telegram_id>_... (legacy)
- * - ..._ref<telegram_id>_... (new compact)
- * - ...:<telegram_id> (inline share)
- */
-function getReferrerTelegramId(): number | null {
-  const startParam = getStartParam();
-  if (!startParam) return null;
-
-  // Format: ref_123456 or ref123456
-  const refMatch = startParam.match(/ref_?(\d+)/);
-  if (refMatch) {
-    return parseInt(refMatch[1], 10);
-  }
-
-  // Format from inline: test_result:testId:title:123456 (last part is userId)
-  const parts = startParam.split(/[_:]/);
-  const lastPart = parts[parts.length - 1];
-  if (lastPart && /^\d+$/.test(lastPart) && lastPart.length >= 5) {
-    return parseInt(lastPart, 10);
-  }
-
-  return null;
 }
 
 /**
@@ -214,41 +187,55 @@ export const useEnsureProfile = () => {
       console.log("Profile created:", created.id);
 
       // Track referral if this is a new user from a share link
-      const referrerTelegramId = getReferrerTelegramId();
-      if (referrerTelegramId && referrerTelegramId !== tgData.telegram_id) {
-        console.log("Referrer telegram_id:", referrerTelegramId);
+      const startParam = getStartParam();
+      const { referrerTelegramId, referralCode } = parseReferralStartParam(startParam);
 
-        // Find referrer's profile by telegram_id
-        const { data: referrer } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("telegram_id", referrerTelegramId)
-          .maybeSingle();
+      if (referrerTelegramId || referralCode) {
+        console.log("Referral source detected:", {
+          referrerTelegramId,
+          referralCode,
+        });
 
-        if (referrer) {
-          // Check if referral already exists (shouldn't due to UNIQUE constraint, but be safe)
-          const { data: existingReferral } = await supabase
-            .from("referrals")
+        let referrerProfileId: string | null = null;
+
+        if (referrerTelegramId && referrerTelegramId !== tgData.telegram_id) {
+          const { data: referrerByTelegram } = await supabase
+            .from("profiles")
             .select("id")
-            .eq("referred_id", created.id)
+            .eq("telegram_id", referrerTelegramId)
             .maybeSingle();
 
-          if (!existingReferral) {
-            const { error: referralError } = await supabase
-              .from("referrals")
-              .insert({
-                referrer_id: referrer.id,
-                referred_id: created.id,
-              });
+          referrerProfileId = referrerByTelegram?.id || null;
+        }
 
-            if (referralError) {
-              console.warn("Could not create referral:", referralError.message);
-            } else {
-              console.log("Referral recorded! Referrer:", referrer.id);
-            }
+        if (!referrerProfileId && referralCode) {
+          const { data: referrerByCode } = await supabase
+            .from("profiles")
+            .select("id, telegram_id")
+            .ilike("referral_code", referralCode)
+            .maybeSingle();
+
+          if (referrerByCode && referrerByCode.telegram_id !== tgData.telegram_id) {
+            referrerProfileId = referrerByCode.id;
+          }
+        }
+
+        if (referrerProfileId) {
+          const { data: tracked, error: trackError } = await (supabase as any).rpc("track_referral", {
+            p_referrer_profile_id: referrerProfileId,
+            p_referred_profile_id: created.id,
+          });
+
+          if (trackError) {
+            console.warn("Could not track referral via RPC:", trackError.message);
+          } else {
+            console.log("Referral tracking result:", tracked);
           }
         } else {
-          console.log("Referrer not found for telegram_id:", referrerTelegramId);
+          console.log("Referrer profile not found for source:", {
+            referrerTelegramId,
+            referralCode,
+          });
         }
       }
 

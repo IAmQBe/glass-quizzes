@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { UserStats } from "@/types/quiz";
 import { ArrowLeft, Trophy, Target, Globe, Bell, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Sun, Moon, Sparkles, History, Pencil, Lock, ExternalLink } from "lucide-react";
-import { haptic, getTelegramUser, shareReferralLink, sharePersonalityTestResult, getTelegram } from "@/lib/telegram";
+import { haptic, getTelegramUser, shareReferralLink, sharePersonalityTestResult, buildReferralUrl, resolveSquadTelegramUrl, openTelegramTarget } from "@/lib/telegram";
 import { useIsAdmin } from "@/hooks/useAuth";
 import { useRolePreview } from "@/hooks/useRolePreview";
 import { useMyQuizzes, useMyQuizResults } from "@/hooks/useQuizzes";
@@ -28,6 +28,14 @@ const FUNNY_AVATARS = [
 
 const getRandomAvatar = (seed: number) => {
   return FUNNY_AVATARS[seed % FUNNY_AVATARS.length];
+};
+
+const normalizeMediaUrl = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized.toLowerCase() === "null" || normalized.toLowerCase() === "undefined") return null;
+  return normalized;
 };
 
 interface ProfileScreenProps {
@@ -75,7 +83,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
 
   const handleCopyReferral = () => {
     if (profile?.referral_code) {
-      const referralUrl = `https://t.me/MindTestBot?start=${profile.referral_code}`;
+      const referralUrl = buildReferralUrl(profile.referral_code);
       navigator.clipboard.writeText(referralUrl);
       setCopied(true);
       haptic.notification('success');
@@ -105,8 +113,12 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
   };
 
   // Calculate actual stats
-  const totalTestsCompleted = quizResults.length + testCompletions.length;
+  const safeQuizResults = Array.isArray(quizResults) ? quizResults : [];
+  const safeTestCompletions = Array.isArray(testCompletions) ? testCompletions : [];
+  const totalTestsCompleted = safeQuizResults.length + safeTestCompletions.length;
   const totalCreated = myQuizzes.length + myTests.length;
+  const hasHistoryItems = safeQuizResults.length > 0 || safeTestCompletions.length > 0;
+  const historyIsInitialLoading = (quizResultsLoading || completionsLoading) && !hasHistoryItems;
 
   const statItems = [
     { icon: Target, label: "Пройдено", value: totalTestsCompleted, color: "text-primary" },
@@ -190,12 +202,24 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
             <button
               onClick={() => {
                 haptic.impact('light');
-                const tg = getTelegram();
-                const url = mySquad.username
-                  ? `https://t.me/${mySquad.username}`
-                  : mySquad.invite_link;
-                if (url && tg?.openTelegramLink) {
-                  tg.openTelegramLink(url);
+                const url = resolveSquadTelegramUrl({
+                  username: mySquad.username,
+                  inviteLink: mySquad.invite_link,
+                });
+
+                if (!url) {
+                  toast({
+                    title: "Ссылка недоступна",
+                    description: "У команды пока нет корректной ссылки.",
+                  });
+                  return;
+                }
+
+                if (!openTelegramTarget(url)) {
+                  toast({
+                    title: "Не удалось открыть ссылку",
+                    description: "Попробуй еще раз чуть позже.",
+                  });
                 }
               }}
               className="mt-2 flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-500 text-sm font-medium"
@@ -410,7 +434,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
             }}
           >
             <History className="w-3.5 h-3.5" />
-            История ({(quizResults?.length || 0) + (testCompletions?.length || 0)})
+            История ({safeQuizResults.length + safeTestCompletions.length})
           </button>
           <button
             className={`flex-1 py-2 rounded-xl font-medium transition-colors flex items-center justify-center gap-1 text-sm ${activeTab === "saved"
@@ -563,8 +587,9 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                 allSaved.map((item: any) => {
                   const isAnonymous = item.is_anonymous === true;
                   const creatorName = isAnonymous
-                    ? 'UNNAMED'
+                    ? 'Анонимный автор'
                     : (item.creator?.first_name || item.creator?.username || null);
+                  const squadTitle = !isAnonymous ? item.creator?.squad?.title || null : null;
 
                   return (
                     <div key={item.id} className="tg-section p-4">
@@ -587,17 +612,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                             </span>
                           </div>
                           <h3 className="font-medium text-foreground truncate">{item.title}</h3>
-                          {creatorName && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                              <span>от {creatorName}</span>
-                              {!isAnonymous && item.creator?.squad && (
-                                <span className="flex items-center gap-1 text-primary">
-                                  <PopcornIcon className="w-3 h-3" />
-                                  {item.creator.squad.title}
-                                </span>
-                              )}
-                            </div>
-                          )}
+                          <CreatorMeta creatorName={creatorName} squadTitle={squadTitle} accentClass="text-primary" />
                           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
                             <span className="flex items-center gap-1">
                               <Users className="w-3 h-3" />
@@ -620,19 +635,25 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
 
           {activeTab === "history" && (
             <>
-              {(quizResultsLoading || completionsLoading) ? (
+              {historyIsInitialLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
                 </div>
-              ) : (quizResults.length === 0 && testCompletions.length === 0) ? (
+              ) : !hasHistoryItems ? (
                 <div className="tg-section p-6 text-center">
                   <History className="w-10 h-10 text-purple-500 mx-auto mb-3" />
                   <p className="text-muted-foreground">Ты ещё ничего не прошёл</p>
                 </div>
               ) : (
                 <>
+                  {(quizResultsLoading || completionsLoading) && (
+                    <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Обновляем историю...
+                    </div>
+                  )}
                   {/* Quiz Results */}
-                  {quizResults.map((result: any) => (
+                  {safeQuizResults.map((result: any) => (
                     <div key={result.id} className="tg-section p-4">
                       <div className="flex items-center gap-3">
                         {result.quiz?.image_url ? (
@@ -650,21 +671,11 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                           {(() => {
                             const isAnonymous = result.quiz?.is_anonymous === true;
                             const creatorName = isAnonymous
-                              ? 'UNNAMED'
+                              ? 'Анонимный автор'
                               : (result.quiz?.creator?.first_name || result.quiz?.creator?.username || null);
+                            const squadTitle = !isAnonymous ? result.quiz?.creator?.squad?.title || null : null;
 
-                            if (!creatorName) return null;
-                            return (
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                                <span>от {creatorName}</span>
-                                {!isAnonymous && result.quiz?.creator?.squad && (
-                                  <span className="flex items-center gap-1 text-primary">
-                                    <PopcornIcon className="w-3 h-3" />
-                                    {result.quiz.creator.squad.title}
-                                  </span>
-                                )}
-                              </div>
-                            );
+                            return <CreatorMeta creatorName={creatorName} squadTitle={squadTitle} accentClass="text-primary" />;
                           })()}
                           <p className="text-sm text-muted-foreground">
                             {result.score}/{result.max_score} правильных · {result.percentile}%
@@ -677,7 +688,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                     </div>
                   ))}
                   {/* Personality Test Completions */}
-                  {testCompletions.map((completion: any) => (
+                  {safeTestCompletions.map((completion: any) => (
                     <TestResultItem
                       key={completion.id}
                       completion={completion}
@@ -772,6 +783,30 @@ const QuizListItem = ({ quiz, onClick, onEdit }: { quiz: any; onClick: () => voi
   );
 };
 
+const CreatorMeta = ({
+  creatorName,
+  squadTitle,
+  accentClass,
+}: {
+  creatorName: string | null;
+  squadTitle?: string | null;
+  accentClass: string;
+}) => {
+  if (!creatorName && !squadTitle) return null;
+
+  return (
+    <div className="mt-0.5 space-y-0.5 text-xs min-w-0">
+      {creatorName && <p className="text-muted-foreground truncate">Автор: {creatorName}</p>}
+      {squadTitle && (
+        <p className={`flex items-center gap-1 min-w-0 ${accentClass}`}>
+          <PopcornIcon className="w-3 h-3 shrink-0" />
+          <span className="truncate">Команда: {squadTitle}</span>
+        </p>
+      )}
+    </div>
+  );
+};
+
 // Test Result Item Component
 const TestResultItem = ({ completion, onShare }: { completion: any; onShare: () => void }) => {
   const result = completion.result;
@@ -780,14 +815,34 @@ const TestResultItem = ({ completion, onShare }: { completion: any; onShare: () 
   const resultTitle = result?.title || "Результат теста";
   const testTitle = test?.title || "Тест";
   const resultDescription = result?.description || "Детали результата временно недоступны.";
+  const primaryImageUrl = normalizeMediaUrl(result?.image_url);
+  const fallbackImageUrl = normalizeMediaUrl(test?.image_url);
+  const [imageUrl, setImageUrl] = useState<string | null>(primaryImageUrl || fallbackImageUrl);
+
+  useEffect(() => {
+    setImageUrl(primaryImageUrl || fallbackImageUrl);
+  }, [primaryImageUrl, fallbackImageUrl]);
 
   return (
     <div className="tg-section p-4">
       <div className="flex items-center gap-3">
         {/* Result Image */}
         <div className="w-14 h-14 rounded-xl bg-purple-500/10 flex items-center justify-center overflow-hidden">
-          {result?.image_url ? (
-            <GifImage src={result.image_url} alt={resultTitle} className="w-full h-full object-cover" />
+          {imageUrl ? (
+            <GifImage
+              src={imageUrl}
+              alt={resultTitle}
+              className="w-full h-full object-cover"
+              onError={() => {
+                setImageUrl((currentUrl) => {
+                  if (!currentUrl) return null;
+                  if (currentUrl === primaryImageUrl && fallbackImageUrl && fallbackImageUrl !== primaryImageUrl) {
+                    return fallbackImageUrl;
+                  }
+                  return null;
+                });
+              }}
+            />
           ) : (
             <span className="text-2xl">🎭</span>
           )}
@@ -800,21 +855,11 @@ const TestResultItem = ({ completion, onShare }: { completion: any; onShare: () 
           {(() => {
             const isAnonymous = test?.is_anonymous === true;
             const creatorName = isAnonymous
-              ? 'UNNAMED'
+              ? 'Анонимный автор'
               : (test?.creator?.first_name || test?.creator?.username || null);
+            const squadTitle = !isAnonymous ? test?.creator?.squad?.title || null : null;
 
-            if (!creatorName) return null;
-            return (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                <span>от {creatorName}</span>
-                {!isAnonymous && test?.creator?.squad && (
-                  <span className="flex items-center gap-1 text-purple-500">
-                    <PopcornIcon className="w-3 h-3" />
-                    {test.creator.squad.title}
-                  </span>
-                )}
-              </div>
-            );
+            return <CreatorMeta creatorName={creatorName} squadTitle={squadTitle} accentClass="text-purple-500" />;
           })()}
           <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
             {resultDescription}

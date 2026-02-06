@@ -1,8 +1,14 @@
 import { Context, InlineKeyboard, InlineQueryResultBuilder } from 'grammy';
 import type { InlineQueryResultArticle, InlineQueryResult } from 'grammy/types';
-import { getPublishedQuizzes, getRandomQuiz, getDailyQuiz, Quiz, getPublishedPersonalityTests, PersonalityTest, getPersonalityTestById } from '../../lib/supabase.js';
+import { getPublishedQuizzes, getRandomQuiz, getDailyQuiz, Quiz, getPublishedPersonalityTests, PersonalityTest } from '../../lib/supabase.js';
 import { buildStartParam } from '../../lib/telegram.js';
 import { supabase } from '../../lib/supabase.js';
+import {
+  escapeTelegramMarkdown,
+  parseQuizResultInlineQuery,
+  parseTestResultInlineQuery,
+  resolveInlineRefUserId,
+} from './inlineParsing.js';
 
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'QuipoBot';
 
@@ -214,15 +220,18 @@ export async function handleInlineQuery(ctx: Context) {
     // Check for quiz result share format: quiz_result:quizId:score:total:title
     // INSTANT RESPONSE - NO DATABASE CALLS!
     if (rawQuery.startsWith('quiz_result:')) {
-      const parts = rawQuery.split(':');
-      if (parts.length >= 5) {
-        const quizId = parts[1];
-        const score = parseInt(parts[2], 10);
-        const total = parseInt(parts[3], 10);
-        const quizTitle = decodeURIComponent(parts.slice(4).join(':'));
+      const parsedQuizResult = parseQuizResultInlineQuery(rawQuery);
+      if (parsedQuizResult) {
+        const { quizId, score, total, quizTitle, refUserId } = parsedQuizResult;
         const percentage = Math.round((score / total) * 100);
+        const safeQuizTitle = escapeTelegramMarkdown(quizTitle);
+        const finalRefUserId = resolveInlineRefUserId(refUserId, userId);
 
-        const startParam = buildStartParam({ questId: quizId, refUserId: userId, source: 'quiz_result_share' });
+        const startParam = buildStartParam({
+          questId: quizId,
+          refUserId: finalRefUserId,
+          source: 'quiz_result_share',
+        });
         const buttonUrl = buildDeepLink(startParam);
         const safeId = `qr${quizId.replace(/-/g, '').slice(0, 12)}${Date.now()}`;
 
@@ -234,7 +243,7 @@ export async function handleInlineQuery(ctx: Context) {
           description: `${percentage}% правильных • Сможешь лучше?`,
           thumbnail_url: 'https://placehold.co/100x100/3b82f6/white?text=%F0%9F%A7%A0',
           input_message_content: {
-            message_text: `🧠 *${quizTitle}*\n\n✅ Мой результат: *${score}/${total}* (${percentage}%)\n\nСможешь лучше? Попробуй 👇`,
+            message_text: `🧠 *${safeQuizTitle}*\n\n✅ Мой результат: *${score}/${total}* (${percentage}%)\n\nСможешь лучше? Попробуй 👇`,
             parse_mode: 'Markdown',
           },
           reply_markup: { inline_keyboard: [[{ text: '🎯 Пройти квиз', url: buttonUrl }]] },
@@ -248,16 +257,16 @@ export async function handleInlineQuery(ctx: Context) {
     // Check for test result share format: test_result:testId:resultTitle:userId
     // NOTE: Query is kept short (<256 chars) - we fetch description+image from DB
     if (rawQuery.startsWith('test_result:')) {
-      const parts = rawQuery.split(':');
-      console.log('[Inline] test_result query, parts:', parts.length, 'raw:', rawQuery.slice(0, 100));
+      const parsedTestResult = parseTestResultInlineQuery(rawQuery);
+      console.log('[Inline] test_result query:', parsedTestResult ? 'parsed' : 'invalid', 'raw:', rawQuery.slice(0, 100));
 
-      if (parts.length >= 3) {
-        const testId = parts[1];
-        const resultTitle = decodeURIComponent(parts[2]).trim();
+      if (parsedTestResult) {
+        const { testId, resultTitle, refUserId } = parsedTestResult;
+        const finalRefUserId = resolveInlineRefUserId(refUserId, userId);
 
-        console.log('[Inline] testId:', testId, '| resultTitle:', resultTitle);
+        console.log('[Inline] testId:', testId, '| resultTitle:', resultTitle, '| refUserId:', finalRefUserId);
 
-        const startParam = buildStartParam({ testId, refUserId: userId, source: 'result_share' });
+        const startParam = buildStartParam({ testId, refUserId: finalRefUserId, source: 'result_share' });
         const buttonUrl = buildDeepLink(startParam);
         const safeId = `tr${testId.replace(/-/g, '').slice(0, 12)}${Date.now()}`;
         const keyboard = new InlineKeyboard().url('🧪 Пройти тест', buttonUrl);
@@ -291,7 +300,9 @@ export async function handleInlineQuery(ctx: Context) {
 
         // Build caption
         const descriptionText = resultDescription || 'Пройди тест и узнай кто ты!';
-        const caption = `🎭 *Я — ${resultTitle}*\n\n${descriptionText}\n\n👇 А ты кто?`;
+        const safeResultTitle = escapeTelegramMarkdown(resultTitle);
+        const safeDescriptionText = escapeTelegramMarkdown(descriptionText);
+        const caption = `🎭 *Я — ${safeResultTitle}*\n\n${safeDescriptionText}\n\n👇 А ты кто?`;
 
         // Build result using InlineQueryResultBuilder
         let result: InlineQueryResult;

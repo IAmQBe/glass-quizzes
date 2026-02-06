@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getTelegramUser, haptic } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
+import { initUser } from "@/lib/user";
 
 interface CreatorInfo {
   id: string;
@@ -70,6 +71,34 @@ async function getProfileId(): Promise<string | null> {
   return data?.id || null;
 }
 
+async function ensureAuthUserId(): Promise<string | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user?.id) return user.id;
+
+  const initialized = await initUser();
+  if (!initialized) return null;
+
+  const {
+    data: { user: refreshedUser },
+  } = await supabase.auth.getUser();
+  return refreshedUser?.id || null;
+}
+
+async function getCandidateUserIds(preferAuthFirst: boolean): Promise<string[]> {
+  const [profileId, authUserId] = await Promise.all([
+    getProfileId(),
+    ensureAuthUserId(),
+  ]);
+
+  const ids = preferAuthFirst
+    ? [authUserId, profileId]
+    : [profileId, authUserId];
+
+  return [...new Set(ids.filter(Boolean) as string[])];
+}
+
 /**
  * Get all favorites with quiz details
  */
@@ -77,19 +106,19 @@ export const useFavorites = () => {
   return useQuery({
     queryKey: ["favorites"],
     queryFn: async () => {
-      const profileId = await getProfileId();
-      if (!profileId) return [];
+      const userIds = await getCandidateUserIds(true);
+      if (userIds.length === 0) return [];
 
       const [{ data: favoritesData, error: favoritesError }, { data: testFavorites, error: testFavError }] = await Promise.all([
         supabase
           .from("favorites")
           .select("id, quiz_id, created_at")
-          .eq("user_id", profileId)
+          .in("user_id", userIds)
           .order("created_at", { ascending: false }),
         supabase
           .from("personality_test_favorites")
           .select("id, test_id, created_at")
-          .eq("user_id", profileId)
+          .in("user_id", userIds)
           .order("created_at", { ascending: false }),
       ]);
 
@@ -196,13 +225,13 @@ export const useTestFavoriteIds = () => {
   return useQuery({
     queryKey: ["testFavoriteIds"],
     queryFn: async (): Promise<Set<string>> => {
-      const profileId = await getProfileId();
-      if (!profileId) return new Set<string>();
+      const userIds = await getCandidateUserIds(false);
+      if (userIds.length === 0) return new Set<string>();
 
       const { data, error } = await supabase
         .from("personality_test_favorites")
         .select("test_id")
-        .eq("user_id", profileId);
+        .in("user_id", userIds);
 
       if (error) {
         console.error("Error fetching test favorite IDs:", error);
@@ -222,47 +251,57 @@ export const useToggleTestFavorite = () => {
 
   return useMutation({
     mutationFn: async ({ testId, isFavorite }: { testId: string; isFavorite: boolean }) => {
-      const profileId = await getProfileId();
-      if (!profileId) {
+      const userIds = await getCandidateUserIds(false);
+      if (userIds.length === 0) {
         throw new Error("Нужно открыть через Telegram");
       }
 
+      let lastError: any = null;
+      let applied = false;
+
+      for (const userId of userIds) {
+        if (isFavorite) {
+          const { error } = await supabase
+            .from("personality_test_favorites")
+            .delete()
+            .eq("user_id", userId)
+            .eq("test_id", testId);
+
+          if (!error) {
+            applied = true;
+            break;
+          }
+          lastError = error;
+        } else {
+          const { error } = await supabase
+            .from("personality_test_favorites")
+            .insert({ user_id: userId, test_id: testId });
+
+          if (!error || error.code === "23505") {
+            applied = true;
+            break;
+          }
+          lastError = error;
+        }
+      }
+
+      if (!applied) {
+        throw lastError || new Error("Не удалось обновить избранное теста");
+      }
+
+      // Update aggregated counter for personality tests in environments without triggers.
+      const { data: test } = await supabase
+        .from("personality_tests")
+        .select("save_count")
+        .eq("id", testId)
+        .single();
+
       if (isFavorite) {
-        // Remove favorite
-        const { error } = await supabase
-          .from("personality_test_favorites")
-          .delete()
-          .eq("user_id", profileId)
-          .eq("test_id", testId);
-
-        if (error) throw error;
-
-        // Decrement save_count on test
-        const { data: test } = await supabase
-          .from("personality_tests")
-          .select("save_count")
-          .eq("id", testId)
-          .single();
-
         await supabase
           .from("personality_tests")
           .update({ save_count: Math.max(0, (test?.save_count || 1) - 1) })
           .eq("id", testId);
       } else {
-        // Add favorite
-        const { error } = await supabase
-          .from("personality_test_favorites")
-          .insert({ user_id: profileId, test_id: testId });
-
-        if (error) throw error;
-
-        // Increment save_count on test
-        const { data: test } = await supabase
-          .from("personality_tests")
-          .select("save_count")
-          .eq("id", testId)
-          .single();
-
         await supabase
           .from("personality_tests")
           .update({ save_count: (test?.save_count || 0) + 1 })
@@ -314,13 +353,13 @@ export const useFavoriteIds = () => {
   return useQuery({
     queryKey: ["favoriteIds"],
     queryFn: async (): Promise<Set<string>> => {
-      const profileId = await getProfileId();
-      if (!profileId) return new Set<string>();
+      const userIds = await getCandidateUserIds(true);
+      if (userIds.length === 0) return new Set<string>();
 
       const { data, error } = await supabase
         .from("favorites")
         .select("quiz_id")
-        .eq("user_id", profileId);
+        .in("user_id", userIds);
 
       if (error) {
         console.error("Error fetching favorite IDs:", error);
@@ -340,27 +379,42 @@ export const useToggleFavorite = () => {
 
   return useMutation({
     mutationFn: async ({ quizId, isFavorite }: { quizId: string; isFavorite: boolean }) => {
-      const profileId = await getProfileId();
-      if (!profileId) {
+      const userIds = await getCandidateUserIds(true);
+      if (userIds.length === 0) {
         throw new Error("Нужно открыть через Telegram");
       }
 
-      if (isFavorite) {
-        // Remove favorite - trigger will decrement save_count
-        const { error } = await supabase
-          .from("favorites")
-          .delete()
-          .eq("user_id", profileId)
-          .eq("quiz_id", quizId);
+      let lastError: any = null;
+      let applied = false;
 
-        if (error) throw error;
-      } else {
-        // Add favorite - trigger will increment save_count
-        const { error } = await supabase
-          .from("favorites")
-          .insert({ user_id: profileId, quiz_id: quizId });
+      for (const userId of userIds) {
+        if (isFavorite) {
+          const { error } = await supabase
+            .from("favorites")
+            .delete()
+            .eq("user_id", userId)
+            .eq("quiz_id", quizId);
 
-        if (error) throw error;
+          if (!error) {
+            applied = true;
+            break;
+          }
+          lastError = error;
+        } else {
+          const { error } = await supabase
+            .from("favorites")
+            .insert({ user_id: userId, quiz_id: quizId });
+
+          if (!error || error.code === "23505") {
+            applied = true;
+            break;
+          }
+          lastError = error;
+        }
+      }
+
+      if (!applied) {
+        throw lastError || new Error("Не удалось обновить избранное квиза");
       }
     },
     onMutate: async ({ quizId, isFavorite }) => {

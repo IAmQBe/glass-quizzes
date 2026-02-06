@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Users, Play, Crown, Zap, Star, Copy, Check } from "lucide-react";
-import { haptic, getTelegramUser } from "@/lib/telegram";
+import { haptic, getTelegramUser, buildBotStartUrl } from "@/lib/telegram";
 import {
   useLiveQuiz,
   useLiveQuizReactions,
@@ -101,7 +101,7 @@ export const LiveQuizScreen = ({ liveQuizId, onBack }: LiveQuizScreenProps) => {
   };
 
   const handleCopyLink = () => {
-    const link = `https://t.me/mindtest_bot?start=live_${liveQuizId}`;
+    const link = buildBotStartUrl(`live_${liveQuizId}`);
     navigator.clipboard.writeText(link);
     setCopied(true);
     haptic.notification('success');

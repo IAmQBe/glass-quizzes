@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Users, ExternalLink, Clock, AlertCircle } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { useSquads, useMySquad, useJoinSquad, useCanChangeSquad, Squad } from "@/hooks/useSquads";
-import { haptic, getTelegram } from "@/lib/telegram";
+import { haptic, openTelegramTarget, resolveSquadTelegramUrl } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
 import { SquadAvatar } from "@/components/SquadAvatar";
 
@@ -25,17 +25,24 @@ export const SquadScreen = ({ squad, onBack, onQuizSelect, onTestSelect }: Squad
 
   const handleOpenChannel = () => {
     haptic.impact('light');
-    const tg = getTelegram();
-    const url = squad.username
-      ? `https://t.me/${squad.username}`
-      : squad.invite_link;
+    const url = resolveSquadTelegramUrl({
+      username: squad.username,
+      inviteLink: squad.invite_link,
+    });
 
-    if (url) {
-      if (tg?.openTelegramLink) {
-        tg.openTelegramLink(url);
-      } else {
-        window.open(url, '_blank');
-      }
+    if (!url) {
+      toast({
+        title: "Ссылка недоступна",
+        description: "У этой команды нет валидной ссылки канала или чата.",
+      });
+      return;
+    }
+
+    if (!openTelegramTarget(url)) {
+      toast({
+        title: "Не удалось открыть ссылку",
+        description: "Попробуй еще раз чуть позже.",
+      });
     }
   };
 

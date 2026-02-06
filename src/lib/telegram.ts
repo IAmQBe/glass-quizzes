@@ -85,6 +85,8 @@ interface TelegramWebApp {
   setBackgroundColor: (color: string) => void;
 }
 
+export const BOT_USERNAME = 'QuipoBot';
+
 // Get Telegram WebApp instance
 export const getTelegram = (): TelegramWebApp | null => {
   if (typeof window !== 'undefined' && window.Telegram?.WebApp) {
@@ -116,6 +118,205 @@ export const getTelegramUserData = () => {
     last_name: user.last_name || null,
     has_telegram_premium: user.is_premium || false,
   };
+};
+
+const TELEGRAM_HOSTS = new Set(['t.me', 'telegram.me', 'www.t.me', 'www.telegram.me']);
+
+const trimSlash = (value: string): string => value.replace(/^\/+|\/+$/g, '');
+const isTelegramUsername = (value: string): boolean => /^[a-zA-Z0-9_]{3,}$/.test(value);
+
+const parseTelegramResolveDomain = (value: string): string | null => {
+  if (!value.toLowerCase().startsWith('tg://resolve')) return null;
+  const [, query = ''] = value.split('?');
+  const params = new URLSearchParams(query);
+  const domain = params.get('domain');
+  return domain ? trimSlash(domain) : null;
+};
+
+export const normalizeTelegramUsername = (rawValue: string | null | undefined): string | null => {
+  if (!rawValue) return null;
+
+  const value = rawValue.trim();
+  if (!value) return null;
+
+  const resolveDomain = parseTelegramResolveDomain(value);
+  if (resolveDomain) {
+    const normalized = resolveDomain.replace(/^@+/, '');
+    return isTelegramUsername(normalized) ? normalized : null;
+  }
+
+  if (value.toLowerCase().startsWith('http://') || value.toLowerCase().startsWith('https://')) {
+    try {
+      const parsed = new URL(value);
+      if (!TELEGRAM_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+      const firstPathPart = trimSlash(parsed.pathname).split('/')[0];
+      const domain = firstPathPart || parsed.searchParams.get('domain') || '';
+      const normalized = domain.replace(/^@+/, '');
+      return normalized && isTelegramUsername(normalized) ? normalized : null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (value.toLowerCase().startsWith('t.me/') || value.toLowerCase().startsWith('telegram.me/')) {
+    const path = value.split('/').slice(1).join('/');
+    const firstPathPart = trimSlash(path).split('/')[0];
+    const normalized = firstPathPart.replace(/^@+/, '');
+    return normalized && isTelegramUsername(normalized) ? normalized : null;
+  }
+
+  const normalized = trimSlash(value).replace(/^@+/, '');
+  return normalized && isTelegramUsername(normalized) ? normalized : null;
+};
+
+export const normalizeTelegramLink = (rawValue: string | null | undefined): string | null => {
+  if (!rawValue) return null;
+  const value = rawValue.trim();
+  if (!value) return null;
+
+  const resolveDomain = parseTelegramResolveDomain(value);
+  if (resolveDomain) {
+    return `https://t.me/${encodeURIComponent(resolveDomain.replace(/^@+/, ''))}`;
+  }
+
+  if (value.toLowerCase().startsWith('http://') || value.toLowerCase().startsWith('https://')) {
+    try {
+      const parsed = new URL(value);
+      if (!TELEGRAM_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+      const path = parsed.pathname.startsWith('/') ? parsed.pathname : `/${parsed.pathname}`;
+      return `https://t.me${path}${parsed.search}${parsed.hash}`;
+    } catch {
+      return null;
+    }
+  }
+
+  if (value.toLowerCase().startsWith('t.me/') || value.toLowerCase().startsWith('telegram.me/')) {
+    return `https://${value.replace(/^https?:\/\//i, '')}`;
+  }
+
+  if (value.startsWith('@') || /^[a-zA-Z0-9_]{3,}$/.test(value)) {
+    const username = normalizeTelegramUsername(value);
+    return username ? `https://t.me/${encodeURIComponent(username)}` : null;
+  }
+
+  return null;
+};
+
+export const resolveSquadTelegramUrl = ({
+  username,
+  inviteLink,
+  botUsername = BOT_USERNAME,
+}: {
+  username?: string | null;
+  inviteLink?: string | null;
+  botUsername?: string;
+}): string | null => {
+  const normalizedBot = normalizeTelegramUsername(botUsername)?.toLowerCase() || '';
+  const normalizedUsername = normalizeTelegramUsername(username);
+
+  if (normalizedUsername && normalizedUsername.toLowerCase() !== normalizedBot) {
+    return `https://t.me/${encodeURIComponent(normalizedUsername)}`;
+  }
+
+  const normalizedInviteLink = normalizeTelegramLink(inviteLink);
+  if (normalizedInviteLink) {
+    return normalizedInviteLink;
+  }
+
+  return null;
+};
+
+export const openTelegramTarget = (url: string | null | undefined): boolean => {
+  if (!url) return false;
+
+  const tg = getTelegram();
+  try {
+    if (tg?.openTelegramLink && (url.startsWith('https://t.me/') || url.startsWith('http://t.me/') || url.startsWith('tg://'))) {
+      tg.openTelegramLink(url);
+      return true;
+    }
+
+    if (tg?.openLink) {
+      tg.openLink(url);
+      return true;
+    }
+
+    if (typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return true;
+    }
+  } catch (error) {
+    console.error('[Telegram] Failed to open URL:', url, error);
+  }
+
+  return false;
+};
+
+export const buildBotStartUrl = (startParam: string, botUsername: string = BOT_USERNAME): string => {
+  const normalizedBot = normalizeTelegramUsername(botUsername) || BOT_USERNAME;
+  return `https://t.me/${normalizedBot}?start=${encodeURIComponent(startParam)}`;
+};
+
+export const buildReferralStartParam = (referralCodeOrTelegramId: string | number): string => {
+  const raw = String(referralCodeOrTelegramId ?? '').trim();
+  if (!raw) return 'ref_';
+  return /^\d+$/.test(raw) ? `ref_${raw}` : `refc_${raw}`;
+};
+
+export const buildReferralUrl = (
+  referralCodeOrTelegramId: string | number,
+  botUsername: string = BOT_USERNAME
+): string => {
+  const startParam = buildReferralStartParam(referralCodeOrTelegramId);
+  return buildBotStartUrl(startParam, botUsername);
+};
+
+export const parseReferralStartParam = (
+  startParam: string | null | undefined
+): { referrerTelegramId: number | null; referralCode: string | null } => {
+  if (!startParam) {
+    return { referrerTelegramId: null, referralCode: null };
+  }
+
+  const value = startParam.trim();
+  if (!value) {
+    return { referrerTelegramId: null, referralCode: null };
+  }
+
+  const refIdMatch = value.match(/(?:^|[_:])ref_(\d+)(?:$|[_:])/i);
+  if (refIdMatch) {
+    return { referrerTelegramId: parseInt(refIdMatch[1], 10), referralCode: null };
+  }
+
+  const compactRefMatch = value.match(/(?:^|[_:])ref(\d+)(?:$|[_:])/i);
+  if (compactRefMatch) {
+    return { referrerTelegramId: parseInt(compactRefMatch[1], 10), referralCode: null };
+  }
+
+  const refCodeMatch = value.match(/(?:^|[_:])refc_([a-zA-Z0-9_-]{4,128})(?:$|[_:])/i);
+  if (refCodeMatch) {
+    return { referrerTelegramId: null, referralCode: refCodeMatch[1] };
+  }
+
+  if (/^\d{5,}$/.test(value)) {
+    return { referrerTelegramId: parseInt(value, 10), referralCode: null };
+  }
+
+  if (/^[a-zA-Z0-9_-]{6,128}$/.test(value)) {
+    const blockedPrefixes = ['quest_', 'test_', 'share_', 'qshare_', 'live_', 'poll', 'moderate_', 'preview_'];
+    const lower = value.toLowerCase();
+    if (!blockedPrefixes.some((prefix) => lower.startsWith(prefix))) {
+      return { referrerTelegramId: null, referralCode: value };
+    }
+  }
+
+  const inlineParts = value.split(/[_:]/);
+  const lastInlinePart = inlineParts[inlineParts.length - 1];
+  if (/^\d{5,}$/.test(lastInlinePart)) {
+    return { referrerTelegramId: parseInt(lastInlinePart, 10), referralCode: null };
+  }
+
+  return { referrerTelegramId: null, referralCode: null };
 };
 
 // Haptic feedback
@@ -219,8 +420,6 @@ export const sharePersonalityTestResult = (
   }
 };
 
-const BOT_USERNAME = 'QuipoBot';
-
 const sanitizeTitleForStartParam = (title?: string, maxLength: number = 25) => {
   if (!title) return '';
   return title.slice(0, maxLength).replace(/:/g, ' ').trim();
@@ -235,20 +434,16 @@ const buildShareStartParam = (type: 'test' | 'quiz', id: string, title?: string,
   return `qshare_${id}${refPart}`;
 };
 
-const buildBotStartUrl = (type: 'test' | 'quiz', id: string, title?: string, refUserId?: number) => {
+const buildContentShareUrl = (type: 'test' | 'quiz', id: string, title?: string, refUserId?: number) => {
   const startParam = buildShareStartParam(type, id, title, refUserId);
-  return `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(startParam)}`;
+  return buildBotStartUrl(startParam, BOT_USERNAME);
 };
 
 const openShareDialog = (text: string, url: string) => {
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
   const tg = getTelegram();
   if (tg) {
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
-    if (tg.openTelegramLink) {
-      tg.openTelegramLink(shareUrl);
-    } else if (tg.openLink) {
-      tg.openLink(shareUrl);
-    } else {
+    if (!openTelegramTarget(shareUrl)) {
       tg.switchInlineQuery(`${text}\n\n${url}`, ['users', 'groups', 'channels']);
     }
     return;
@@ -272,7 +467,7 @@ export const shareQuizInvite = (quizId: string, title: string, description?: str
   const tg = getTelegram();
   const userId = tg?.initDataUnsafe?.user?.id;
   const text = buildInviteText('quiz', title, description);
-  const url = buildBotStartUrl('quiz', quizId, undefined, userId);
+  const url = buildContentShareUrl('quiz', quizId, undefined, userId);
   openShareDialog(text, url);
 };
 
@@ -280,38 +475,27 @@ export const sharePersonalityTestInvite = (testId: string, title: string, descri
   const tg = getTelegram();
   const userId = tg?.initDataUnsafe?.user?.id;
   const text = buildInviteText('test', title, description);
-  const url = buildBotStartUrl('test', testId, title, userId);
+  const url = buildContentShareUrl('test', testId, title, userId);
   openShareDialog(text, url);
 };
 
 // Fallback when switchInlineQuery doesn't work
 function fallbackShare(id: string, title: string, type: 'test' | 'quiz', refUserId?: number) {
-  const url = buildBotStartUrl(type, id, title, refUserId);
-
-  const tg = window.Telegram?.WebApp;
-  if (tg?.openTelegramLink) {
-    tg.openTelegramLink(url);
-  } else {
-    window.open(url, '_blank');
-  }
+  const url = buildContentShareUrl(type, id, title, refUserId);
+  openTelegramTarget(url);
 }
 
 // Share referral link to Telegram chat
-export const shareReferralLink = (referralCode: string, botUsername: string = 'QuipoBot') => {
+export const shareReferralLink = (referralCodeOrTelegramId: string | number, botUsername: string = BOT_USERNAME) => {
   const tg = getTelegram();
-  const referralUrl = `https://t.me/${botUsername}?start=ref_${referralCode}`;
+  const referralUrl = buildReferralUrl(referralCodeOrTelegramId, botUsername);
   const shareText = `🧠 Присоединяйся к Quipo!\n\nПроходи тесты, соревнуйся с друзьями и узнай себя лучше!`;
 
   if (tg) {
     // Use share URL which opens Telegram's share dialog
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralUrl)}&text=${encodeURIComponent(shareText)}`;
 
-    // Try openTelegramLink first (works in Mini Apps)
-    if (tg.openTelegramLink) {
-      tg.openTelegramLink(shareUrl);
-    } else if (tg.openLink) {
-      tg.openLink(shareUrl);
-    } else {
+    if (!openTelegramTarget(shareUrl)) {
       // Fallback to switchInlineQuery
       tg.switchInlineQuery(`${shareText}\n\n${referralUrl}`, ['users', 'groups', 'channels']);
     }

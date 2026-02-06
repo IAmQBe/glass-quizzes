@@ -3,7 +3,7 @@ import { ArrowLeft, Clock, Users, Play, ExternalLink, HelpCircle, Share2, Veneti
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { GifImage } from "@/components/GifImage";
-import { haptic, getTelegram, shareQuizInvite } from "@/lib/telegram";
+import { haptic, openTelegramTarget, resolveSquadTelegramUrl, shareQuizInvite } from "@/lib/telegram";
 import { formatQuestionCount } from "@/lib/utils";
 
 interface CreatorInfo {
@@ -52,13 +52,8 @@ export const QuizPreviewScreen = ({
   const handleSquadClick = () => {
     if (quiz.is_anonymous || !quiz.creator?.squad) return;
     haptic.impact('light');
-    const tg = getTelegram();
-    const url = quiz.creator.squad.username
-      ? `https://t.me/${quiz.creator.squad.username}`
-      : null;
-    if (url && tg?.openTelegramLink) {
-      tg.openTelegramLink(url);
-    }
+    const url = resolveSquadTelegramUrl({ username: quiz.creator.squad.username });
+    openTelegramTarget(url);
   };
 
   const handleLike = () => {

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getTelegramUser, haptic } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
+import { initUser } from "@/lib/user";
 
 // ============================================
 // Types
@@ -135,6 +136,34 @@ async function getProfileId(): Promise<string | null> {
     .maybeSingle();
 
   return data?.id || null;
+}
+
+async function ensureAuthUserId(): Promise<string | null> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user?.id) return user.id;
+
+  const initialized = await initUser();
+  if (!initialized) return null;
+
+  const {
+    data: { user: refreshedUser },
+  } = await supabase.auth.getUser();
+  return refreshedUser?.id || null;
+}
+
+async function getCandidateUserIds(preferProfileFirst: boolean): Promise<string[]> {
+  const [profileId, authUserId] = await Promise.all([
+    getProfileId(),
+    ensureAuthUserId(),
+  ]);
+
+  const ids = preferProfileFirst
+    ? [profileId, authUserId]
+    : [authUserId, profileId];
+
+  return [...new Set(ids.filter(Boolean) as string[])];
 }
 
 // ============================================
@@ -284,7 +313,7 @@ export const usePendingPersonalityTests = () => {
  */
 export const useAdminPersonalityTests = () => {
   return useQuery({
-    queryKey: ["personalityTests", "admin"],
+    queryKey: ["admin", "tests"],
     queryFn: async (): Promise<PersonalityTest[]> => {
       const { data, error } = await supabase
         .from("personality_tests")
@@ -830,13 +859,13 @@ export const usePersonalityTestFavoriteIds = () => {
   return useQuery({
     queryKey: ["personalityTestFavorites"],
     queryFn: async (): Promise<Set<string>> => {
-      const profileId = await getProfileId();
-      if (!profileId) return new Set();
+      const userIds = await getCandidateUserIds(true);
+      if (userIds.length === 0) return new Set();
 
       const { data, error } = await supabase
         .from("personality_test_favorites")
         .select("test_id")
-        .eq("user_id", profileId);
+        .in("user_id", userIds);
 
       if (error) return new Set();
       return new Set(data?.map(f => f.test_id) || []);
@@ -852,41 +881,55 @@ export const useTogglePersonalityTestFavorite = () => {
 
   return useMutation({
     mutationFn: async ({ testId, isFavorite }: { testId: string; isFavorite: boolean }) => {
-      const profileId = await getProfileId();
-      if (!profileId) throw new Error("Нужно открыть через Telegram");
+      const userIds = await getCandidateUserIds(true);
+      if (userIds.length === 0) throw new Error("Нужно открыть через Telegram");
+
+      let lastError: any = null;
+      let applied = false;
+
+      for (const userId of userIds) {
+        if (isFavorite) {
+          const { error } = await supabase
+            .from("personality_test_favorites")
+            .delete()
+            .eq("test_id", testId)
+            .eq("user_id", userId);
+
+          if (!error) {
+            applied = true;
+            break;
+          }
+          lastError = error;
+        } else {
+          const { error } = await supabase
+            .from("personality_test_favorites")
+            .insert({ test_id: testId, user_id: userId });
+
+          if (!error || error.code === "23505") {
+            applied = true;
+            break;
+          }
+          lastError = error;
+        }
+      }
+
+      if (!applied) {
+        throw lastError || new Error("Не удалось обновить избранное теста");
+      }
+
+      // Update aggregated counter for environments without DB trigger.
+      const { data: test } = await supabase
+        .from("personality_tests")
+        .select("save_count")
+        .eq("id", testId)
+        .single();
 
       if (isFavorite) {
-        // Remove favorite - trigger will decrement save_count
-        await supabase
-          .from("personality_test_favorites")
-          .delete()
-          .eq("test_id", testId)
-          .eq("user_id", profileId);
-
-        // Manual decrement save_count (no trigger in DB)
-        const { data: test } = await supabase
-          .from("personality_tests")
-          .select("save_count")
-          .eq("id", testId)
-          .single();
-
         await supabase
           .from("personality_tests")
           .update({ save_count: Math.max(0, (test?.save_count || 1) - 1) })
           .eq("id", testId);
       } else {
-        // Add favorite - trigger will increment save_count
-        await supabase
-          .from("personality_test_favorites")
-          .insert({ test_id: testId, user_id: profileId });
-
-        // Manual increment save_count (no trigger in DB)
-        const { data: test } = await supabase
-          .from("personality_tests")
-          .select("save_count")
-          .eq("id", testId)
-          .single();
-
         await supabase
           .from("personality_tests")
           .update({ save_count: (test?.save_count || 0) + 1 })

@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Users, HelpCircle, Clock, Check, Share2, VenetianMask } from "lucide-react";
-import { haptic, getTelegram, shareQuizInvite } from "@/lib/telegram";
+import { haptic, openTelegramTarget, resolveSquadTelegramUrl, shareQuizInvite } from "@/lib/telegram";
 import { formatQuestionCount } from "@/lib/utils";
 import { PopcornIcon } from "./icons/PopcornIcon";
 import { BookmarkIcon } from "./icons/BookmarkIcon";
@@ -86,13 +86,8 @@ export const QuizCard = ({
     if (is_anonymous || !creator?.squad?.username) return;
 
     haptic.impact('light');
-    const tg = getTelegram();
-    const url = `https://t.me/${creator.squad.username}`;
-    if (tg?.openTelegramLink) {
-      tg.openTelegramLink(url);
-    } else {
-      window.open(url, '_blank');
-    }
+    const url = resolveSquadTelegramUrl({ username: creator.squad.username });
+    openTelegramTarget(url);
   };
 
   const handleShare = (e: React.MouseEvent) => {

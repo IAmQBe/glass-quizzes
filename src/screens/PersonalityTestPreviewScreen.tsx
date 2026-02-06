@@ -3,7 +3,7 @@ import { ArrowLeft, Users, ExternalLink, Sparkles, HelpCircle, Award, Share2, Ve
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { GifImage } from "@/components/GifImage";
-import { haptic, getTelegram, sharePersonalityTestInvite } from "@/lib/telegram";
+import { haptic, openTelegramTarget, resolveSquadTelegramUrl, sharePersonalityTestInvite } from "@/lib/telegram";
 import { formatQuestionCount } from "@/lib/utils";
 
 interface CreatorInfo {
@@ -52,13 +52,8 @@ export const PersonalityTestPreviewScreen = ({
   const handleSquadClick = () => {
     if (test.is_anonymous || !test.creator?.squad) return;
     haptic.impact('light');
-    const tg = getTelegram();
-    const url = test.creator.squad.username
-      ? `https://t.me/${test.creator.squad.username}`
-      : null;
-    if (url && tg?.openTelegramLink) {
-      tg.openTelegramLink(url);
-    }
+    const url = resolveSquadTelegramUrl({ username: test.creator.squad.username });
+    openTelegramTarget(url);
   };
 
   const handleLike = () => {

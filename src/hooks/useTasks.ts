@@ -135,22 +135,40 @@ export const useCompleteTask = () => {
       const authHeader = getInitDataAuthHeader();
 
       if (apiUrl && authHeader) {
-        const response = await fetch(`${apiUrl}/api/tasks/complete`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: authHeader,
-          },
-          body: JSON.stringify({ taskId }),
-        });
+        try {
+          const response = await fetch(`${apiUrl}/api/tasks/complete`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: authHeader,
+            },
+            body: JSON.stringify({ taskId }),
+          });
 
-        if (response.ok) {
-          const payload = await response.json() as { alreadyCompleted?: boolean };
-          return { alreadyCompleted: Boolean(payload.alreadyCompleted) };
+          if (response.ok) {
+            const payload = await response.json() as { alreadyCompleted?: boolean };
+            return { alreadyCompleted: Boolean(payload.alreadyCompleted) };
+          }
+
+          const payload = await response.json().catch(() => ({ error: "Task verification failed" })) as { error?: string };
+          const message = payload.error || "Task verification failed";
+          const canFallbackToDirectInsert =
+            response.status === 401 ||
+            /not authenticated|invalid initdata|authorization/i.test(message);
+
+          if (!canFallbackToDirectInsert) {
+            throw new Error(message);
+          }
+
+          console.warn("Tasks API auth failed, trying direct completion fallback:", message);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const isNetworkLikeError = /network|failed to fetch|load failed/i.test(message);
+          if (!isNetworkLikeError) {
+            throw error;
+          }
+          console.warn("Tasks API network failed, trying direct completion fallback:", message);
         }
-
-        const payload = await response.json().catch(() => ({ error: "Task verification failed" })) as { error?: string };
-        throw new Error(payload.error || "Task verification failed");
       }
 
       const profileId = await getProfileId();

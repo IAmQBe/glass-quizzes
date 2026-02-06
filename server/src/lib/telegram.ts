@@ -116,11 +116,12 @@ export function parseStartParam(startParam: string | undefined): {
   questId?: string;
   testId?: string;
   refUserId?: string;
+  referralCode?: string;
   source?: string;
 } {
   if (!startParam) return {};
 
-  const result: { questId?: string; testId?: string; refUserId?: string; source?: string } = {};
+  const result: { questId?: string; testId?: string; refUserId?: string; referralCode?: string; source?: string } = {};
 
   const questMatch = startParam.match(/quest_([a-zA-Z0-9-]+)/);
   if (questMatch) result.questId = questMatch[1];
@@ -130,6 +131,9 @@ export function parseStartParam(startParam: string | undefined): {
 
   const refMatch = startParam.match(/ref_(\d+)/);
   if (refMatch) result.refUserId = refMatch[1];
+
+  const refCodeMatch = startParam.match(/refc_([a-zA-Z0-9_-]+)/);
+  if (refCodeMatch) result.referralCode = refCodeMatch[1];
 
   const srcMatch = startParam.match(/src_(\w+)/);
   if (srcMatch) result.source = srcMatch[1];

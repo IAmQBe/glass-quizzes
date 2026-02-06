@@ -430,6 +430,11 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
   };
 
   const handleBack = () => {
+    if (previewItem) {
+      haptic.selection();
+      closePreview();
+      return;
+    }
     haptic.selection();
     onBack();
   };
@@ -567,6 +572,7 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
               }`}
             onClick={() => {
               haptic.selection();
+              setPreviewItem(null);
               setActiveTab(tab);
             }}
           >
@@ -583,6 +589,240 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
 
       {/* Content */}
       <div className="flex-1 space-y-3 overflow-y-auto">
+        {previewItem ? (
+          <div className="space-y-3">
+            <button
+              className="w-full tg-section p-3 text-left text-sm text-primary"
+              onClick={() => {
+                haptic.selection();
+                closePreview();
+              }}
+            >
+              ← Назад к списку
+            </button>
+
+            {(previewQuizLoading || previewTestLoading) ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 text-primary animate-spin" />
+              </div>
+            ) : previewItem.type === "quiz" ? (
+              <div className="tg-section p-4 space-y-4">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Квиз</p>
+                  <h3 className="text-lg font-semibold text-foreground">{previewQuizData?.quiz?.title || "Без названия"}</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Автор: {getCreatorDisplay((previewQuizData?.quiz as any)?.created_by || null, (previewQuizData?.quiz as any)?.is_anonymous)}
+                  </p>
+                  {previewQuizData?.quiz?.description && (
+                    <p className="text-sm text-muted-foreground mt-2">{previewQuizData.quiz.description}</p>
+                  )}
+                </div>
+
+                {(previewQuizData?.quiz as any)?.image_url && (
+                  <img
+                    src={(previewQuizData?.quiz as any).image_url}
+                    alt={previewQuizData?.quiz?.title || "Quiz cover"}
+                    className="w-full rounded-xl object-cover max-h-56"
+                  />
+                )}
+
+                <div className="text-xs text-muted-foreground">
+                  {formatQuestionCount((previewQuizData?.questions || []).length)} · {(previewQuizData?.quiz as any)?.participant_count || 0} участий
+                </div>
+
+                <div className="space-y-3">
+                  {(previewQuizData?.questions || []).map((question: any, index: number) => (
+                    <div key={question.id} className="bg-secondary rounded-xl p-3 space-y-2">
+                      <p className="text-sm font-medium text-foreground">Q{index + 1}. {question.question_text}</p>
+                      {question.image_url && (
+                        <img
+                          src={question.image_url}
+                          alt={`Question ${index + 1}`}
+                          className="w-full rounded-lg object-cover max-h-44"
+                        />
+                      )}
+                      <div className="space-y-1">
+                        {(question.options || []).map((option: any, optionIndex: number) => (
+                          <p
+                            key={`${question.id}_${optionIndex}`}
+                            className={`text-xs px-2 py-1 rounded ${optionIndex === question.correct_answer
+                              ? "bg-green-500/15 text-green-600 dark:text-green-400"
+                              : "bg-background text-muted-foreground"
+                              }`}
+                          >
+                            {optionIndex + 1}. {option?.text || "Без текста"}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Причина отклонения</label>
+                  <Input
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Что исправить перед повторной отправкой"
+                    className="bg-secondary border-0"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-green-500/15 text-green-600 dark:text-green-400 font-medium flex items-center justify-center gap-2"
+                    onClick={() => {
+                      const quizId = previewQuizData?.quiz?.id;
+                      if (!quizId) return;
+                      moderateQuiz.mutate(
+                        { quizId, action: "approve" },
+                        {
+                          onSuccess: () => {
+                            toast({ title: "Квиз опубликован" });
+                            closePreview();
+                          },
+                        }
+                      );
+                    }}
+                    disabled={moderateQuiz.isPending}
+                  >
+                    {moderateQuiz.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    Опубликовать
+                  </button>
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-red-500/15 text-red-600 dark:text-red-400 font-medium flex items-center justify-center gap-2"
+                    onClick={() => {
+                      const quizId = previewQuizData?.quiz?.id;
+                      if (!quizId) return;
+                      if (!rejectReason.trim()) {
+                        toast({ title: "Укажи причину отклонения", variant: "destructive" });
+                        return;
+                      }
+                      moderateQuiz.mutate(
+                        { quizId, action: "reject", rejectionReason: rejectReason },
+                        {
+                          onSuccess: () => {
+                            toast({ title: "Квиз отклонён" });
+                            closePreview();
+                          },
+                        }
+                      );
+                    }}
+                    disabled={moderateQuiz.isPending}
+                  >
+                    {moderateQuiz.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                    Отклонить
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="tg-section p-4 space-y-4">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Тест личности</p>
+                  <h3 className="text-lg font-semibold text-foreground">{previewTestData?.test?.title || "Без названия"}</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Автор: {getCreatorDisplay((previewTestData?.test as any)?.created_by || null, (previewTestData?.test as any)?.is_anonymous)}
+                  </p>
+                  {previewTestData?.test?.description && (
+                    <p className="text-sm text-muted-foreground mt-2">{previewTestData.test.description}</p>
+                  )}
+                </div>
+
+                {(previewTestData?.test as any)?.image_url && (
+                  <img
+                    src={(previewTestData?.test as any).image_url}
+                    alt={previewTestData?.test?.title || "Test cover"}
+                    className="w-full rounded-xl object-cover max-h-56"
+                  />
+                )}
+
+                <div className="text-xs text-muted-foreground">
+                  {formatQuestionCount((previewTestData?.questions || []).length)} · {(previewTestData?.results || []).length} результатов
+                </div>
+
+                <div className="space-y-3">
+                  {(previewTestData?.questions || []).map((question: any, index: number) => (
+                    <div key={question.id} className="bg-secondary rounded-xl p-3 space-y-2">
+                      <p className="text-sm font-medium text-foreground">Q{index + 1}. {question.question_text}</p>
+                      {question.image_url && (
+                        <img
+                          src={question.image_url}
+                          alt={`Question ${index + 1}`}
+                          className="w-full rounded-lg object-cover max-h-44"
+                        />
+                      )}
+                      <div className="space-y-1">
+                        {(question.answers || []).map((answer: any, answerIndex: number) => (
+                          <p key={`${question.id}_${answer.id || answerIndex}`} className="text-xs px-2 py-1 rounded bg-background text-muted-foreground">
+                            {answerIndex + 1}. {answer.answer_text}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm text-muted-foreground">Причина отклонения</label>
+                  <Input
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Что исправить перед повторной отправкой"
+                    className="bg-secondary border-0"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-green-500/15 text-green-600 dark:text-green-400 font-medium flex items-center justify-center gap-2"
+                    onClick={() => {
+                      const testId = previewTestData?.test?.id;
+                      if (!testId) return;
+                      moderateTest.mutate(
+                        { testId, action: "approve" },
+                        {
+                          onSuccess: () => {
+                            toast({ title: "Тест опубликован" });
+                            closePreview();
+                          },
+                        }
+                      );
+                    }}
+                    disabled={moderateTest.isPending}
+                  >
+                    {moderateTest.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    Опубликовать
+                  </button>
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-red-500/15 text-red-600 dark:text-red-400 font-medium flex items-center justify-center gap-2"
+                    onClick={() => {
+                      const testId = previewTestData?.test?.id;
+                      if (!testId) return;
+                      if (!rejectReason.trim()) {
+                        toast({ title: "Укажи причину отклонения", variant: "destructive" });
+                        return;
+                      }
+                      moderateTest.mutate(
+                        { testId, action: "reject", rejectionReason: rejectReason },
+                        {
+                          onSuccess: () => {
+                            toast({ title: "Тест отклонён" });
+                            closePreview();
+                          },
+                        }
+                      );
+                    }}
+                    disabled={moderateTest.isPending}
+                  >
+                    {moderateTest.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                    Отклонить
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
         {activeTab === "analytics" && (
           <AdminAnalytics />
         )}
@@ -704,17 +944,30 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
                       <h3 className="font-semibold text-foreground">{quiz.title}</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Автор: {getCreatorDisplay((quiz as any).created_by || null, (quiz as any).is_anonymous)}
+                      </p>
                       <p className="text-sm text-muted-foreground">
                         {quiz.question_count} questions · {quiz.participant_count} participants
                       </p>
                     </div>
                     <span
-                      className={`text-xs px-2 py-1 rounded-full ${quiz.is_published
-                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                        : "bg-secondary text-muted-foreground"
+                      className={`text-xs px-2 py-1 rounded-full ${(quiz as any).status === "pending"
+                        ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                        : quiz.is_published
+                          ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                          : (quiz as any).status === "rejected"
+                            ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                            : "bg-secondary text-muted-foreground"
                         }`}
                     >
-                      {quiz.is_published ? "Published" : "Draft"}
+                      {(quiz as any).status === "pending"
+                        ? "На модерации"
+                        : (quiz as any).status === "rejected"
+                          ? "Отклонён"
+                          : quiz.is_published
+                            ? "Published"
+                            : "Draft"}
                     </span>
                   </div>
                   <div className="flex gap-2 mt-3">
@@ -736,6 +989,16 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
                           Publish
                         </>
                       )}
+                    </button>
+                    <button
+                      className="px-3 py-2 rounded-lg bg-secondary text-foreground text-sm flex items-center gap-1"
+                      onClick={() => {
+                        haptic.selection();
+                        openPreview({ type: "quiz", id: quiz.id }, (quiz as any).rejection_reason || "");
+                      }}
+                    >
+                      <Eye className="w-4 h-4" />
+                      Preview
                     </button>
                     <button
                       className="p-2 bg-destructive/10 rounded-lg text-destructive"
@@ -761,13 +1024,13 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
               <div className="flex justify-center py-8">
                 <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
               </div>
-            ) : pendingTests.length === 0 ? (
+            ) : allTests.length === 0 ? (
               <div className="tg-section p-6 text-center">
                 <Sparkles className="w-10 h-10 text-purple-500 mx-auto mb-3" />
-                <p className="text-muted-foreground">Нет тестов на модерации</p>
+                <p className="text-muted-foreground">Нет тестов</p>
               </div>
             ) : (
-              pendingTests.map((test) => (
+              allTests.map((test: any) => (
                 <div key={test.id} className="tg-section p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
@@ -775,6 +1038,9 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
                         <Sparkles className="w-4 h-4 text-purple-500" />
                         <h3 className="font-semibold text-foreground">{test.title}</h3>
                       </div>
+                      <p className="text-xs text-muted-foreground mb-1">
+                        Автор: {getCreatorDisplay(test.created_by || null, test.is_anonymous)}
+                      </p>
                       <p className="text-sm text-muted-foreground">
                         {formatQuestionCount(test.question_count)} · {test.result_count} результатов · {test.participant_count} участий
                       </p>
@@ -782,8 +1048,15 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{test.description}</p>
                       )}
                     </div>
-                    <span className="text-xs px-2 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
-                      На модерации
+                    <span className={`text-xs px-2 py-1 rounded-full ${test.is_published
+                      ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                      : test.status === "rejected"
+                        ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                        : test.status === "pending"
+                          ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+                          : "bg-secondary text-muted-foreground"
+                      }`}>
+                      {test.is_published ? "Published" : test.status === "rejected" ? "Отклонён" : test.status === "pending" ? "На модерации" : "Draft"}
                     </span>
                   </div>
                   <div className="flex gap-2 mt-3">
@@ -791,7 +1064,7 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
                       className="flex-1 py-2 text-sm flex items-center justify-center gap-1 rounded-xl bg-green-500/10 text-green-600 dark:text-green-400 font-medium"
                       onClick={() => {
                         haptic.notification('success');
-                        moderateTest.mutate({ testId: test.id, publish: true });
+                        moderateTest.mutate({ testId: test.id, action: "approve" });
                         toast({ title: "Тест опубликован!" });
                       }}
                     >
@@ -799,11 +1072,21 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
                       Одобрить
                     </button>
                     <button
-                      className="flex-1 py-2 text-sm flex items-center justify-center gap-1 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 font-medium"
+                      className="px-3 py-2 text-sm flex items-center justify-center gap-1 rounded-xl bg-secondary text-foreground font-medium"
+                      onClick={() => {
+                        haptic.selection();
+                        openPreview({ type: "test", id: test.id }, test.rejection_reason || "");
+                      }}
+                    >
+                      <Eye className="w-4 h-4" />
+                      Preview
+                    </button>
+                    <button
+                      className="py-2 px-3 text-sm flex items-center justify-center gap-1 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 font-medium"
                       onClick={() => {
                         haptic.notification('warning');
-                        if (confirm("Отклонить этот тест?")) {
-                          moderateTest.mutate({ testId: test.id, publish: false });
+                        if (confirm("Отклонить этот тест? Это скроет его из публикации.")) {
+                          moderateTest.mutate({ testId: test.id, action: "reject", rejectionReason: "Отклонено админом" });
                           toast({ title: "Тест отклонён" });
                         }
                       }}
@@ -1541,6 +1824,8 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
                 </div>
               </div>
             )}
+          </>
+        )}
           </>
         )}
       </div>
