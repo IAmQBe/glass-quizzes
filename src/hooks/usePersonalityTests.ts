@@ -4,6 +4,7 @@ import { getTelegramUser, haptic } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
 import { initUser } from "@/lib/user";
 import { loadManualModerationEnabled } from "@/lib/moderationSettings";
+import { getLocalFavoriteIds, setLocalFavorite } from "@/lib/favoritesStorage";
 
 // ============================================
 // Types
@@ -175,6 +176,29 @@ async function getCandidateUserIds(preferProfileFirst: boolean): Promise<string[
     : [authUserId, profileId];
 
   return [...new Set(ids.filter(Boolean) as string[])];
+}
+
+async function reconcilePersonalityTestSaveCount(testId: string): Promise<void> {
+  const { count, error: countError } = await supabase
+    .from("personality_test_favorites")
+    .select("id", { count: "exact", head: true })
+    .eq("test_id", testId);
+
+  if (countError || typeof count !== "number") {
+    if (countError) {
+      console.warn("Failed to count personality test favorites:", countError);
+    }
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from("personality_tests")
+    .update({ save_count: count })
+    .eq("id", testId);
+
+  if (updateError) {
+    console.warn("Failed to sync personality test save_count:", updateError);
+  }
 }
 
 // ============================================
@@ -894,16 +918,20 @@ export const usePersonalityTestFavoriteIds = () => {
   return useQuery({
     queryKey: ["personalityTestFavorites"],
     queryFn: async (): Promise<Set<string>> => {
+      const localIds = getLocalFavoriteIds("test");
       const userIds = await getCandidateUserIds(true);
-      if (userIds.length === 0) return new Set();
+      if (userIds.length === 0) return localIds;
 
       const { data, error } = await supabase
         .from("personality_test_favorites")
         .select("test_id")
         .in("user_id", userIds);
 
-      if (error) return new Set();
-      return new Set(data?.map(f => f.test_id) || []);
+      if (error) return localIds;
+
+      const merged = new Set(data?.map(f => f.test_id) || []);
+      localIds.forEach((id) => merged.add(id));
+      return merged;
     },
   });
 };
@@ -916,10 +944,10 @@ export const useTogglePersonalityTestFavorite = () => {
 
   return useMutation({
     mutationFn: async ({ testId, isFavorite }: { testId: string; isFavorite: boolean }) => {
+      const nextFavoriteState = !isFavorite;
       const userIds = await getCandidateUserIds(true);
-      if (userIds.length === 0) throw new Error("Нужно открыть через Telegram");
 
-      let lastError: any = null;
+      let lastError: any = userIds.length === 0 ? new Error("Нужно открыть через Telegram") : null;
       let applied = false;
 
       for (const userId of userIds) {
@@ -949,27 +977,18 @@ export const useTogglePersonalityTestFavorite = () => {
       }
 
       if (!applied) {
+        const localApplied = setLocalFavorite("test", testId, nextFavoriteState);
+        if (localApplied) {
+          console.warn("Using local fallback for personality test favorites toggle:", lastError);
+          return { remoteApplied: false, localApplied: true };
+        }
         throw lastError || new Error("Не удалось обновить избранное теста");
       }
 
-      // Update aggregated counter for environments without DB trigger.
-      const { data: test } = await supabase
-        .from("personality_tests")
-        .select("save_count")
-        .eq("id", testId)
-        .single();
+      setLocalFavorite("test", testId, nextFavoriteState);
+      await reconcilePersonalityTestSaveCount(testId);
 
-      if (isFavorite) {
-        await supabase
-          .from("personality_tests")
-          .update({ save_count: Math.max(0, (test?.save_count || 1) - 1) })
-          .eq("id", testId);
-      } else {
-        await supabase
-          .from("personality_tests")
-          .update({ save_count: (test?.save_count || 0) + 1 })
-          .eq("id", testId);
-      }
+      return { remoteApplied: true, localApplied: true };
     },
     onMutate: async ({ testId, isFavorite }) => {
       haptic.impact('light');

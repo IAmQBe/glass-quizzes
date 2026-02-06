@@ -3,6 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { getTelegramUser, haptic } from "@/lib/telegram";
 import { toast } from "@/hooks/use-toast";
 import { initUser } from "@/lib/user";
+import {
+  getLocalFavoriteIds,
+  getLocalFavoriteTimestampMap,
+  setLocalFavorite,
+} from "@/lib/favoritesStorage";
 
 interface CreatorInfo {
   id: string;
@@ -110,6 +115,147 @@ async function getCandidateUserIds(preferAuthFirst: boolean): Promise<string[]> 
   return [...new Set(ids.filter(Boolean) as string[])];
 }
 
+async function reconcilePersonalityTestSaveCount(testId: string): Promise<void> {
+  const { count, error: countError } = await supabase
+    .from("personality_test_favorites")
+    .select("id", { count: "exact", head: true })
+    .eq("test_id", testId);
+
+  if (countError || typeof count !== "number") {
+    if (countError) {
+      console.warn("Failed to count personality test favorites:", countError);
+    }
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from("personality_tests")
+    .update({ save_count: count })
+    .eq("id", testId);
+
+  if (updateError) {
+    console.warn("Failed to sync personality test save_count:", updateError);
+  }
+}
+
+async function fetchFavoriteQuizzesByIds(quizIds: string[]): Promise<any[]> {
+  if (quizIds.length === 0) return [];
+
+  let quizzes: any[] = [];
+
+  const viewWithAnon = await supabase
+    .from("quizzes_public")
+    .select("id, title, description, image_url, question_count, participant_count, duration_seconds, rating, rating_count, like_count, save_count, created_by, created_at, is_anonymous")
+    .in("id", quizIds);
+
+  if (!viewWithAnon.error && (viewWithAnon.data?.length || 0) > 0) {
+    quizzes = viewWithAnon.data || [];
+  } else {
+    const viewLegacy = await supabase
+      .from("quizzes_public")
+      .select("id, title, description, image_url, question_count, participant_count, duration_seconds, rating, rating_count, like_count, save_count, created_by, created_at")
+      .in("id", quizIds);
+
+    if (!viewLegacy.error && (viewLegacy.data?.length || 0) > 0) {
+      quizzes = (viewLegacy.data || []).map((quiz: any) => ({
+        ...quiz,
+        is_anonymous: false,
+      }));
+    } else {
+      const tableWithAnon = await supabase
+        .from("quizzes")
+        .select("id, title, description, image_url, question_count, participant_count, duration_seconds, rating, rating_count, like_count, save_count, created_by, created_at, is_anonymous")
+        .in("id", quizIds);
+
+      if (!tableWithAnon.error && (tableWithAnon.data?.length || 0) > 0) {
+        quizzes = (tableWithAnon.data || []).map((quiz: any) => ({
+          ...quiz,
+          is_anonymous: quiz.is_anonymous === true,
+        }));
+      } else {
+        const tableLegacy = await supabase
+          .from("quizzes")
+          .select("id, title, description, image_url, question_count, participant_count, duration_seconds, rating, rating_count, like_count, save_count, created_by, created_at")
+          .in("id", quizIds);
+
+        if (tableLegacy.error) {
+          console.error(
+            "Error fetching favorite quiz details:",
+            viewWithAnon.error || viewLegacy.error || tableWithAnon.error || tableLegacy.error
+          );
+          return [];
+        }
+
+        quizzes = (tableLegacy.data || []).map((quiz: any) => ({
+          ...quiz,
+          is_anonymous: false,
+        }));
+      }
+    }
+  }
+
+  return quizzes;
+}
+
+async function fetchFavoriteTestsByIds(testIds: string[]): Promise<any[]> {
+  if (testIds.length === 0) return [];
+
+  let tests: any[] = [];
+
+  const viewWithAnon = await supabase
+    .from("personality_tests_public")
+    .select("id, title, description, image_url, question_count, result_count, participant_count, like_count, save_count, created_by, created_at, is_anonymous")
+    .in("id", testIds);
+
+  if (!viewWithAnon.error && (viewWithAnon.data?.length || 0) > 0) {
+    tests = viewWithAnon.data || [];
+  } else {
+    const viewLegacy = await supabase
+      .from("personality_tests_public")
+      .select("id, title, description, image_url, question_count, result_count, participant_count, like_count, save_count, created_by, created_at")
+      .in("id", testIds);
+
+    if (!viewLegacy.error && (viewLegacy.data?.length || 0) > 0) {
+      tests = (viewLegacy.data || []).map((test: any) => ({
+        ...test,
+        is_anonymous: false,
+      }));
+    } else {
+      const tableWithAnon = await supabase
+        .from("personality_tests")
+        .select("id, title, description, image_url, question_count, result_count, participant_count, like_count, save_count, created_by, created_at, is_anonymous")
+        .in("id", testIds);
+
+      if (!tableWithAnon.error && (tableWithAnon.data?.length || 0) > 0) {
+        tests = (tableWithAnon.data || []).map((test: any) => ({
+          ...test,
+          is_anonymous: test.is_anonymous === true,
+        }));
+      } else {
+        const tableLegacy = await supabase
+          .from("personality_tests")
+          .select("id, title, description, image_url, question_count, result_count, participant_count, like_count, save_count, created_by, created_at")
+          .in("id", testIds);
+
+        if (tableLegacy.error) {
+          console.error(
+            "Error fetching favorite test details:",
+            viewWithAnon.error || viewLegacy.error || tableWithAnon.error || tableLegacy.error
+          );
+          return [];
+        }
+
+        tests = (tableLegacy.data || []).map((test: any) => ({
+          ...test,
+          is_anonymous: false,
+        }));
+      }
+    }
+  }
+
+  return tests;
+}
+
 /**
  * Get all favorites with quiz details
  */
@@ -118,60 +264,61 @@ export const useFavorites = () => {
     queryKey: ["favorites"],
     queryFn: async () => {
       const userIds = await getCandidateUserIds(true);
-      if (userIds.length === 0) return [];
+      const localQuizTimestampMap = getLocalFavoriteTimestampMap("quiz");
+      const localTestTimestampMap = getLocalFavoriteTimestampMap("test");
 
-      const [{ data: favoritesData, error: favoritesError }, { data: testFavorites, error: testFavError }] = await Promise.all([
-        supabase
-          .from("favorites")
-          .select("id, quiz_id, created_at")
-          .in("user_id", userIds)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("personality_test_favorites")
-          .select("id, test_id, created_at")
-          .in("user_id", userIds)
-          .order("created_at", { ascending: false }),
-      ]);
+      let favoritesList: any[] = [];
+      let testFavorites: any[] = [];
 
-      if (favoritesError) {
-        console.error("Error fetching quiz favorites:", favoritesError);
+      if (userIds.length > 0) {
+        const [
+          { data: favoritesData, error: favoritesError },
+          { data: remoteTestFavorites, error: testFavError },
+        ] = await Promise.all([
+          supabase
+            .from("favorites")
+            .select("id, quiz_id, created_at")
+            .in("user_id", userIds)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("personality_test_favorites")
+            .select("id, test_id, created_at")
+            .in("user_id", userIds)
+            .order("created_at", { ascending: false }),
+        ]);
+
+        if (favoritesError) {
+          console.error("Error fetching quiz favorites:", favoritesError);
+        }
+        if (testFavError) {
+          console.error("Error fetching test favorites:", testFavError);
+        }
+
+        favoritesList = favoritesData || [];
+        testFavorites = remoteTestFavorites || [];
       }
-      if (testFavError) {
-        console.error("Error fetching test favorites:", testFavError);
-      }
 
-      const favoritesList = favoritesData || [];
       const quizIds = [
-        ...new Set(favoritesList.map((f: any) => f.quiz_id).filter(Boolean) as string[])
+        ...new Set(
+          favoritesList
+            .map((f: any) => f.quiz_id)
+            .concat(Object.keys(localQuizTimestampMap))
+            .filter(Boolean) as string[]
+        )
       ];
       const testIds = [
-        ...new Set((testFavorites || []).map((f: any) => f.test_id).filter(Boolean) as string[])
+        ...new Set(
+          testFavorites
+            .map((f: any) => f.test_id)
+            .concat(Object.keys(localTestTimestampMap))
+            .filter(Boolean) as string[]
+        )
       ];
 
-      const [quizzesRes, testsRes] = await Promise.all([
-        quizIds.length > 0
-          ? supabase
-              .from("quizzes_public")
-              .select("id, title, description, image_url, question_count, participant_count, duration_seconds, rating, rating_count, like_count, save_count, created_by, created_at, is_anonymous")
-              .in("id", quizIds)
-          : Promise.resolve({ data: [] as any[] }),
-        testIds.length > 0
-          ? supabase
-              .from("personality_tests_public")
-              .select("id, title, description, image_url, question_count, result_count, participant_count, like_count, save_count, created_by, created_at, is_anonymous")
-              .in("id", testIds)
-          : Promise.resolve({ data: [] as any[] }),
+      const [quizzes, tests] = await Promise.all([
+        fetchFavoriteQuizzesByIds(quizIds),
+        fetchFavoriteTestsByIds(testIds),
       ]);
-
-      if ("error" in quizzesRes && quizzesRes.error) {
-        console.error("Error fetching favorite quizzes details:", quizzesRes.error);
-      }
-      if ("error" in testsRes && testsRes.error) {
-        console.error("Error fetching favorite tests details:", testsRes.error);
-      }
-
-      const quizzes = quizzesRes.data || [];
-      const tests = testsRes.data || [];
 
       const creatorIds = [
         ...new Set(
@@ -211,7 +358,21 @@ export const useFavorites = () => {
         personality_tests: null,
       }));
 
-      const testFavoriteRows = (testFavorites || []).map((f: any) => ({
+      const remoteQuizIdSet = new Set(
+        favoritesList.map((f: any) => f.quiz_id).filter(Boolean) as string[]
+      );
+      const localQuizRows = Object.entries(localQuizTimestampMap)
+        .filter(([quizId]) => !remoteQuizIdSet.has(quizId))
+        .map(([quizId, createdAt]) => ({
+          id: `local-quiz-${quizId}`,
+          quiz_id: quizId,
+          test_id: null,
+          created_at: createdAt || new Date().toISOString(),
+          quizzes: quizzesMap.get(quizId) || null,
+          personality_tests: null,
+        }));
+
+      const testFavoriteRows = testFavorites.map((f: any) => ({
         id: f.id,
         quiz_id: null,
         test_id: f.test_id,
@@ -220,9 +381,30 @@ export const useFavorites = () => {
         personality_tests: f.test_id ? testsMap.get(f.test_id) || null : null,
       }));
 
-      const merged = [...normalizedFavorites, ...testFavoriteRows].sort((a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      const remoteTestIdSet = new Set(
+        testFavorites.map((f: any) => f.test_id).filter(Boolean) as string[]
       );
+      const localTestRows = Object.entries(localTestTimestampMap)
+        .filter(([testId]) => !remoteTestIdSet.has(testId))
+        .map(([testId, createdAt]) => ({
+          id: `local-test-${testId}`,
+          quiz_id: null,
+          test_id: testId,
+          created_at: createdAt || new Date().toISOString(),
+          quizzes: null,
+          personality_tests: testsMap.get(testId) || null,
+        }));
+
+      const merged = [
+        ...normalizedFavorites,
+        ...localQuizRows,
+        ...testFavoriteRows,
+        ...localTestRows,
+      ]
+        .filter((item) => item.quizzes || item.personality_tests)
+        .sort((a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
 
       return merged;
     },
@@ -236,8 +418,9 @@ export const useTestFavoriteIds = () => {
   return useQuery({
     queryKey: ["testFavoriteIds"],
     queryFn: async (): Promise<Set<string>> => {
+      const localIds = getLocalFavoriteIds("test");
       const userIds = await getCandidateUserIds(false);
-      if (userIds.length === 0) return new Set<string>();
+      if (userIds.length === 0) return localIds;
 
       const { data, error } = await supabase
         .from("personality_test_favorites")
@@ -246,10 +429,12 @@ export const useTestFavoriteIds = () => {
 
       if (error) {
         console.error("Error fetching test favorite IDs:", error);
-        return new Set<string>();
+        return localIds;
       }
 
-      return new Set((data || []).map((f) => f.test_id).filter(Boolean) as string[]);
+      const merged = new Set((data || []).map((f) => f.test_id).filter(Boolean) as string[]);
+      localIds.forEach((id) => merged.add(id));
+      return merged;
     },
   });
 };
@@ -262,12 +447,10 @@ export const useToggleTestFavorite = () => {
 
   return useMutation({
     mutationFn: async ({ testId, isFavorite }: { testId: string; isFavorite: boolean }) => {
+      const nextFavoriteState = !isFavorite;
       const userIds = await getCandidateUserIds(false);
-      if (userIds.length === 0) {
-        throw new Error("Нужно открыть через Telegram");
-      }
 
-      let lastError: any = null;
+      let lastError: any = userIds.length === 0 ? new Error("Нужно открыть через Telegram") : null;
       let applied = false;
 
       for (const userId of userIds) {
@@ -300,24 +483,20 @@ export const useToggleTestFavorite = () => {
         throw lastError || new Error("Не удалось обновить избранное теста");
       }
 
-      // Update aggregated counter for personality tests in environments without triggers.
-      const { data: test } = await supabase
-        .from("personality_tests")
-        .select("save_count")
-        .eq("id", testId)
-        .single();
-
-      if (isFavorite) {
-        await supabase
-          .from("personality_tests")
-          .update({ save_count: Math.max(0, (test?.save_count || 1) - 1) })
-          .eq("id", testId);
-      } else {
-        await supabase
-          .from("personality_tests")
-          .update({ save_count: (test?.save_count || 0) + 1 })
-          .eq("id", testId);
+      if (!applied) {
+        const localApplied = setLocalFavorite("test", testId, nextFavoriteState);
+        if (localApplied) {
+          console.warn("Using local fallback for test favorites toggle:", lastError);
+          return { remoteApplied: false, localApplied: true };
+        }
+        throw lastError || new Error("Не удалось обновить избранное теста");
       }
+
+      // Keep local state in sync and reconcile counter to exact remote value.
+      setLocalFavorite("test", testId, nextFavoriteState);
+      await reconcilePersonalityTestSaveCount(testId);
+
+      return { remoteApplied: true, localApplied: true };
     },
     onMutate: async ({ testId, isFavorite }) => {
       haptic.impact('light');
@@ -364,8 +543,9 @@ export const useFavoriteIds = () => {
   return useQuery({
     queryKey: ["favoriteIds"],
     queryFn: async (): Promise<Set<string>> => {
+      const localIds = getLocalFavoriteIds("quiz");
       const userIds = await getCandidateUserIds(true);
-      if (userIds.length === 0) return new Set<string>();
+      if (userIds.length === 0) return localIds;
 
       const { data, error } = await supabase
         .from("favorites")
@@ -374,10 +554,12 @@ export const useFavoriteIds = () => {
 
       if (error) {
         console.error("Error fetching favorite IDs:", error);
-        return new Set<string>();
+        return localIds;
       }
 
-      return new Set((data || []).map((f) => f.quiz_id));
+      const merged = new Set((data || []).map((f) => f.quiz_id));
+      localIds.forEach((id) => merged.add(id));
+      return merged;
     },
   });
 };
@@ -390,12 +572,10 @@ export const useToggleFavorite = () => {
 
   return useMutation({
     mutationFn: async ({ quizId, isFavorite }: { quizId: string; isFavorite: boolean }) => {
+      const nextFavoriteState = !isFavorite;
       const userIds = await getCandidateUserIds(true);
-      if (userIds.length === 0) {
-        throw new Error("Нужно открыть через Telegram");
-      }
 
-      let lastError: any = null;
+      let lastError: any = userIds.length === 0 ? new Error("Нужно открыть через Telegram") : null;
       let applied = false;
 
       for (const userId of userIds) {
@@ -425,8 +605,16 @@ export const useToggleFavorite = () => {
       }
 
       if (!applied) {
+        const localApplied = setLocalFavorite("quiz", quizId, nextFavoriteState);
+        if (localApplied) {
+          console.warn("Using local fallback for quiz favorites toggle:", lastError);
+          return { remoteApplied: false, localApplied: true };
+        }
         throw lastError || new Error("Не удалось обновить избранное квиза");
       }
+
+      setLocalFavorite("quiz", quizId, nextFavoriteState);
+      return { remoteApplied: true, localApplied: true };
     },
     onMutate: async ({ quizId, isFavorite }) => {
       haptic.impact('light');
