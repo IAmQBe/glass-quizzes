@@ -197,6 +197,7 @@ const Index = () => {
   const { track, trackScreen } = useTrackEvent();
   const profileInitialized = useRef(false);
   const quizStartTime = useRef<number>(Date.now());
+  const testStartTime = useRef<number>(Date.now());
   const questionStartTime = useRef<number>(Date.now());
   const quizCompletedRef = useRef(false);
 
@@ -723,6 +724,7 @@ const Index = () => {
 
   const handleStartTest = () => {
     haptic.impact('medium');
+    testStartTime.current = Date.now();
     if (selectedTestId) {
       track("test_start", { test_id: selectedTestId });
     }
@@ -730,10 +732,12 @@ const Index = () => {
   };
 
   const handleTestComplete = (result: PersonalityTestResult, testTitle: string, testId: string) => {
+    const totalTimeMs = Math.max(0, Date.now() - testStartTime.current);
     track("test_complete", {
       test_id: testId,
       test_title: testTitle,
       result_id: result.id,
+      time_total_ms: totalTimeMs,
     });
     setTestResult(result);
     setTestResultTitle(testTitle);

@@ -67,6 +67,7 @@ export interface TestEventData {
   test_id?: string;
   result_id?: string;
   test_title?: string;
+  time_total_ms?: number;
   share_type?: "inline" | "link" | "story";
 }
 

@@ -8,7 +8,9 @@ import {
   Database,
   GitBranch,
   Loader2,
+  Share2,
   ShieldAlert,
+  Sparkles,
   Target,
   TrendingUp,
   Users,
@@ -72,6 +74,12 @@ const contentChartConfig = {
 const formatNumber = (value: number) => value.toLocaleString("ru-RU");
 
 const formatPercent = (value: number, digits = 1) => `${value.toFixed(digits)}%`;
+
+const formatSeconds = (value: number) => {
+  const rounded = Math.round(value);
+  if (!Number.isFinite(rounded) || rounded <= 0) return "-";
+  return `${rounded}s`;
+};
 
 const formatDateLabel = (value: string) => {
   if (!value) return "-";
@@ -152,8 +160,8 @@ export const AdminAnalytics = () => {
   const quizFunnelQuery = useAdminQuizFunnel(range, activeTab === "overview");
   const testsFunnelQuery = useAdminTestsFunnel(range, activeTab === "overview");
 
-  const topQuizzesQuery = useAdminTopQuizzes(range, 8, activeTab === "content");
-  const topTestsQuery = useAdminTopTests(range, 8, activeTab === "content");
+  const topQuizzesQuery = useAdminTopQuizzes(range, 8, activeTab === "content" || activeTab === "overview");
+  const topTestsQuery = useAdminTopTests(range, 8, activeTab === "content" || activeTab === "overview");
 
   const sourcesQuery = useAdminSources(range, activeTab === "acquisition");
   const transitionsQuery = useAdminScreenTransitions(range, 12, activeTab === "acquisition");
@@ -163,6 +171,8 @@ export const AdminAnalytics = () => {
   const eventHealthQuery = useAdminEventHealth(range, activeTab === "operations");
 
   const overview = overviewQuery.data;
+  const totalCompletes = (overview?.quiz_completes || 0) + (overview?.test_completes || 0);
+  const totalShares = (overview?.quiz_shares || 0) + (overview?.test_shares || 0);
 
   const quizFunnelMap = useMemo(() => toFunnelMap(quizFunnelQuery.data || []), [quizFunnelQuery.data]);
   const testsFunnelMap = useMemo(() => toFunnelMap(testsFunnelQuery.data || []), [testsFunnelQuery.data]);
@@ -261,6 +271,30 @@ export const AdminAnalytics = () => {
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3">
+                <StatCard
+                  icon={Users}
+                  label="Пользователей"
+                  value={formatNumber(overview.total_users)}
+                  hint={`Новых: ${formatNumber(overview.new_users)}`}
+                />
+                <StatCard icon={BarChart3} label="Квизы (опубл.)" value={formatNumber(overview.published_quizzes)} />
+                <StatCard icon={Sparkles} label="Тесты (опубл.)" value={formatNumber(overview.published_tests)} />
+                <StatCard
+                  icon={CheckCircle2}
+                  label="Прохождений"
+                  value={formatNumber(totalCompletes)}
+                  hint={`Квизы: ${formatNumber(overview.quiz_completes)} · Тесты: ${formatNumber(overview.test_completes)}`}
+                />
+                <StatCard
+                  icon={Share2}
+                  label="Шеров"
+                  value={formatNumber(totalShares)}
+                  hint={`Квизы: ${formatNumber(overview.quiz_shares)} · Тесты: ${formatNumber(overview.test_shares)}`}
+                />
+                <StatCard icon={GitBranch} label="Рефералы" value={formatNumber(overview.referrals)} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <StatCard icon={Activity} label="DAU" value={formatNumber(overview.dau)} />
                 <StatCard icon={Users} label="WAU" value={formatNumber(overview.wau)} />
                 <StatCard icon={BarChart3} label="MAU" value={formatNumber(overview.mau)} />
@@ -273,8 +307,17 @@ export const AdminAnalytics = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <StatCard icon={TrendingUp} label="Quiz completes" value={formatNumber(overview.quiz_completes)} />
-                <StatCard icon={CheckCircle2} label="Test completes" value={formatNumber(overview.test_completes)} />
+                <StatCard
+                  icon={Clock3}
+                  label="Среднее время квиза"
+                  value={formatSeconds(overview.avg_quiz_time_seconds)}
+                  hint={overview.avg_quiz_score_pct > 0 ? `Avg score: ${formatPercent(overview.avg_quiz_score_pct)}` : undefined}
+                />
+                <StatCard
+                  icon={Clock3}
+                  label="Среднее время теста"
+                  value={formatSeconds(overview.avg_test_time_seconds)}
+                />
                 <StatCard icon={ShieldAlert} label="Reports" value={formatNumber(overview.prediction_reports)} />
                 <StatCard icon={Zap} label="Task completions" value={formatNumber(overview.task_completions)} />
               </div>
@@ -365,6 +408,52 @@ export const AdminAnalytics = () => {
                     );
                   })}
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {(topQuizzesQuery.data || []).length > 0 ? (
+                  <div className="tg-section p-4">
+                    <h4 className="text-sm font-medium text-foreground mb-3">Топ квизы (по прохождениям)</h4>
+                    <div className="space-y-2">
+                      {(topQuizzesQuery.data || []).slice(0, 5).map((quiz, index) => (
+                        <div key={quiz.quiz_id || `${quiz.title}-${index}`} className="p-3 bg-secondary rounded-lg">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">{index + 1}. {quiz.title}</p>
+                            <span className="text-xs text-muted-foreground">{formatNumber(quiz.completes)}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-muted-foreground">
+                            <span>Starts: {formatNumber(quiz.starts)}</span>
+                            <span>Shares: {formatNumber(quiz.shares)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <TabEmpty message="Пока нет данных по квизам" />
+                )}
+
+                {(topTestsQuery.data || []).length > 0 ? (
+                  <div className="tg-section p-4">
+                    <h4 className="text-sm font-medium text-foreground mb-3">Топ тесты (по прохождениям)</h4>
+                    <div className="space-y-2">
+                      {(topTestsQuery.data || []).slice(0, 5).map((test, index) => (
+                        <div key={test.test_id || `${test.title}-${index}`} className="p-3 bg-secondary rounded-lg">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">{index + 1}. {test.title}</p>
+                            <span className="text-xs text-muted-foreground">{formatNumber(test.completes)}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-muted-foreground">
+                            <span>Starts: {formatNumber(test.starts)}</span>
+                            <span>Shares: {formatNumber(test.shares)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <TabEmpty message="Пока нет данных по тестам" />
+                )}
               </div>
             </>
           )}

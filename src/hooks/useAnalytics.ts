@@ -57,6 +57,8 @@ export interface AdminOverview {
   total_users: number;
   new_users: number;
   referrals: number;
+  published_quizzes: number;
+  published_tests: number;
   quiz_views: number;
   quiz_starts: number;
   quiz_completes: number;
@@ -66,6 +68,7 @@ export interface AdminOverview {
   test_completes: number;
   test_shares: number;
   avg_quiz_time_seconds: number;
+  avg_test_time_seconds: number;
   avg_quiz_score_pct: number;
   prediction_created: number;
   prediction_pending: number;
@@ -236,6 +239,8 @@ const normalizeOverview = (row: unknown): AdminOverview => {
     total_users: toNumber(record.total_users),
     new_users: toNumber(record.new_users),
     referrals: toNumber(record.referrals),
+    published_quizzes: toNumber(record.published_quizzes),
+    published_tests: toNumber(record.published_tests),
     quiz_views: toNumber(record.quiz_views),
     quiz_starts: toNumber(record.quiz_starts),
     quiz_completes: toNumber(record.quiz_completes),
@@ -245,6 +250,7 @@ const normalizeOverview = (row: unknown): AdminOverview => {
     test_completes: toNumber(record.test_completes),
     test_shares: toNumber(record.test_shares),
     avg_quiz_time_seconds: toNumber(record.avg_quiz_time_seconds),
+    avg_test_time_seconds: toNumber(record.avg_test_time_seconds),
     avg_quiz_score_pct: toNumber(record.avg_quiz_score_pct),
     prediction_created: toNumber(record.prediction_created),
     prediction_pending: toNumber(record.prediction_pending),
