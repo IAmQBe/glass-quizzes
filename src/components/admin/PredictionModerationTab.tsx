@@ -265,6 +265,11 @@ export const PredictionModerationTab = ({ onOpenPrediction }: PredictionModerati
     }
   };
 
+  const errorMessage = (error as any)?.message ? String((error as any).message) : "";
+  const isMissingPredictionTable =
+    errorMessage.includes("prediction_polls") &&
+    (errorMessage.includes("Could not find the table") || errorMessage.includes("schema cache"));
+
   return (
     <>
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -286,7 +291,16 @@ export const PredictionModerationTab = ({ onOpenPrediction }: PredictionModerati
 
       {error ? (
         <div className="tg-section p-4 text-sm text-destructive">
-          Ошибка загрузки событий: {(error as any)?.message || "unknown"}
+          <p className="font-medium">Ошибка загрузки событий</p>
+          <p className="mt-1 text-xs text-destructive/90 break-words">
+            {errorMessage || "unknown"}
+          </p>
+          {isMissingPredictionTable && (
+            <p className="mt-2 text-xs text-destructive/90">
+              Похоже, в Supabase еще не применены миграции для событий (таблица `prediction_polls` отсутствует).
+              Примени миграции из `supabase/migrations` и затем выполни `NOTIFY pgrst, 'reload schema';`.
+            </p>
+          )}
         </div>
       ) : null}
 
