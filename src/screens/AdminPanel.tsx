@@ -655,7 +655,7 @@ export const AdminPanel = ({ onBack, onOpenPrediction, onCreateTest, onCreatePre
             {tab === "analytics" && <><BarChart3 className="w-4 h-4" /> Stats</>}
             {tab === "predictions" && <>Predictions</>}
             {tab === "quizzes" && `Quizzes (${quizzes.length})`}
-            {tab === "tests" && <><Sparkles className="w-4 h-4" /> Tests</>}
+            {tab === "tests" && <><Sparkles className="w-4 h-4" /> Tests ({allTests.length})</>}
             {tab === "banners" && `Banners (${banners.length})`}
             {tab === "tasks" && <><Gift className="w-4 h-4" /> Tasks ({tasks.length})</>}
             {tab === "seasons" && <><Trophy className="w-4 h-4" /> Seasons</>}
