@@ -85,6 +85,27 @@ Original prompt: давай также сделаем возможность п�
   - `rel="shortcut icon"` ICO with `?v=20260206b`
 - Ran `npm run build`; `dist/favicon.ico` and `dist/index.html` are updated accordingly.
 
+## 2026-02-07 (admin predictions/events)
+- New request: in Admin Panel show current events (Predictions) with edit/delete, and add create buttons for tests/events like quizzes.
+- Added Supabase RPCs for admin edit/delete prediction polls:
+  - `public.prediction_admin_update_poll(...)`
+  - `public.prediction_admin_delete_poll(...)` (hard-delete only when no participants/pool; otherwise cancel + hide)
+  - Migration: `supabase/migrations/20260207003000_prediction_admin_edit_delete.sql`
+- Updated admin Predictions UI (`src/components/admin/PredictionModerationTab.tsx`):
+  - default filter switched to `Open`
+  - added `All` filter and status counts
+  - show load errors instead of silent empty state
+  - show creator name (profiles lookup)
+  - added inline edit form + Save/Cancel
+  - added Delete (with cancel+hide fallback) and kept moderation actions
+- Updated Admin Panel (`src/screens/AdminPanel.tsx`):
+  - added `Создать тест` button (opens create-test screen)
+  - added `Создать событие` button (opens create-event screen)
+  - wired callbacks from `src/pages/Index.tsx`
+- Verification:
+  - `npm test` passed
+  - `npm run build` passed
+
 ## 2026-02-06 (prediction UX refactor)
 - New request: simplify prediction UX into three focused screens and hide admin mechanics from regular users.
 - Removed overloaded home prediction block and replaced architecture with:
@@ -118,6 +139,24 @@ Original prompt: давай также сделаем возможность п�
 - Validate Telegram Mini App flows in-device:
   - `switchInlineQuery("poll:<id>")`
   - deep link `https://t.me/<bot>/app?startapp=poll=<id>`
+
+## 2026-02-06 (navigation back stack + scroll restore)
+- New request: fix "Back" behavior so it returns to the actual previous screen (not always Home), and ideally restores the previous list position/block.
+- Implemented navigation history stack in `/src/pages/Index.tsx`:
+  - Stores a snapshot on each screen transition (screen, active bottom tab, selected ids, home content type, profile tab, and `scrollY`).
+  - Telegram back button now uses the shared `handleBackNavigation()` (history pop) instead of hardcoded screen routing.
+  - Restores `scrollY` when navigating back (best-effort via a few delayed `window.scrollTo` attempts).
+- Made Profile tabs restorable by lifting profile-tab state:
+  - `/src/screens/ProfileScreen.tsx` now supports controlled `activeTab` + `onTabChange`.
+  - `/src/pages/Index.tsx` stores `profileTab` in navigation snapshots.
+- Follow-up fixes after user report ("still returns Home"):
+  - `/src/lib/telegram.ts`: prevent multiple Telegram `BackButton` handlers from accumulating by tracking the active handler and calling `offClick` on replace/hide.
+  - `/src/pages/Index.tsx`: if history stack is unexpectedly empty, fallback back-navigation now returns to the current bottom tab's screen (instead of always forcing `home`).
+  - `/src/pages/Index.tsx`: route all in-app back actions through `window.history` (`pushState` + `popstate`) so hardware/browser gestures also restore previous screens instead of reloading to Home.
+  - `/src/pages/Index.tsx`: debounce back *requests* (`350ms`) to avoid double-triggered back clicks, without breaking true browser `popstate` back sequences.
+- Verification:
+  - `npm run test` passed.
+  - `npm run build` passed.
 - Optional polish: extract shared prediction helpers (time-left, payout preview, status mapping) to reusable utility module.
 
 ## 2026-02-06 (leaderboard creators visibility fix)
@@ -402,3 +441,68 @@ Original prompt: давай также сделаем возможность п�
   - `useIsAdmin` now has safe fallback by Telegram allowlist (`VITE_ADMIN_TELEGRAM_IDS`).
   - `ProfileScreen` now shows admin entry when either DB admin check passes or allowlist confirms admin Telegram ID.
   - Re-verified: `npm run test` and `npm run build` pass.
+
+## 2026-02-06 (favorites emergency hotfix: quiz/test save failures)
+- User report: favorites still broken in production-like Telegram flow.
+  - Quiz save action showed destructive toast (`Не удалось обновить избранное`).
+  - Personality test save counter could jump by +2.
+  - Profile `Избранное` remained empty.
+- Implemented fallback-safe favorites behavior with schema-drift tolerance:
+  - `src/hooks/useFavorites.ts`
+    - added local storage fallback integration via `src/lib/favoritesStorage.ts` for quiz/test favorites.
+    - `useFavoriteIds` and `useTestFavoriteIds` now merge remote IDs with local IDs.
+    - `useToggleFavorite` and `useToggleTestFavorite` now fallback to local persistence when remote insert/delete fails, without throwing/toast in fallback-success case.
+    - `useFavorites` now merges remote + local favorites and loads quiz/test details through resilient multi-source readers (`*_public` -> legacy view columns -> base table).
+  - `src/hooks/usePersonalityTests.ts`
+    - `usePersonalityTestFavoriteIds` now merges remote IDs with local fallback IDs.
+    - `useTogglePersonalityTestFavorite` now has same local fallback behavior and no hard-fail when fallback succeeds.
+    - removed manual incremental `save_count +/- 1` writes; replaced with exact reconciliation from `personality_test_favorites` count to avoid trigger double-count (+2).
+- Existing prior auth/session hardening remains active (`initUser` + anonymous fallback in ensureAuthUserId).
+- Verification:
+  - `npm run build` passed.
+  - `npm run test -- --run` passed (12 tests).
+- Follow-up fix in favorites toggle flow:
+  - `src/hooks/useFavorites.ts`: removed stale early throw in `useToggleTestFavorite` mutation that made local fallback unreachable.
+  - `src/lib/favoritesStorage.ts`: added guest localStorage key fallback when Telegram user is temporarily unavailable, so local favorites fallback still works.
+- Re-verified after follow-up:
+  - `npm run build` passed.
+  - `npm run test -- --run` passed.
+
+## 2026-02-06 (post-create moderation routing + author notification)
+- New request: after creating quiz/test, route differently depending on manual moderation toggle.
+- Frontend flow update in progress:
+  - `CreateQuizScreen` now returns structured `onSuccess` payload with `quizId` + moderation state.
+  - `CreatePersonalityTestScreen` now returns structured `onSuccess` payload with `testId` + moderation state.
+  - `Index.tsx` now routes:
+    - auto-published content -> opens preview screen and shows immediate `Поделиться` CTA in toast;
+    - pending moderation -> routes to `Profile` (tab `Мои`).
+  - Added pending review submission for personality tests (previously quizzes-only).
+- Preview behavior update in progress:
+  - `QuizPreviewScreen` / `PersonalityTestPreviewScreen` now accept publish/status fields and display moderation badge (`На проверке`, etc.), hide share/like/save when unpublished, and disable start action while pending.
+  - `Index.tsx` test preview now resolves from `usePersonalityTestWithDetails` fallback, so unpublished tests can open from deep links.
+- Backend/API update in progress:
+  - `/api/quizzes/submit-for-review` generalized to accept quiz or personality test payload.
+  - Planned/implemented: notify admins about pending content and notify author that content is on moderation with inline button to open status screen.
+- Verification still pending: run frontend build/tests and server typecheck after final wiring.
+- Completed wiring for request:
+  - `src/hooks/useQuizzes.ts`: `useSubmitForReview` now supports both quiz and personality test payloads.
+  - `src/screens/CreateQuizScreen.tsx`: sends structured success payload; pending branch submits moderation notification via generic hook.
+  - `src/screens/CreatePersonalityTestScreen.tsx`: now also submits pending moderation notification and returns structured success payload.
+  - `src/pages/Index.tsx`: post-create routing now split by moderation state:
+    - published -> open preview screen + toast CTA `Поделиться`;
+    - pending -> redirect to `Profile` (`Мои`).
+    - test preview source now supports unpublished content via `usePersonalityTestWithDetails`.
+  - `src/screens/QuizPreviewScreen.tsx` and `src/screens/PersonalityTestPreviewScreen.tsx`:
+    - added moderation status badge (`На проверке` / `Отклонён` / `Черновик`),
+    - disabled start and hidden share/like/save when content is not published,
+    - keeps normal full behavior for published content.
+  - `src/screens/ProfileScreen.tsx`: status label updated to `На проверке` (instead of `На модерации`) for pending creator items.
+  - `server/src/api/index.ts`: generalized `/api/quizzes/submit-for-review` to handle quiz + personality test bodies.
+  - `server/src/bot/handlers/notifications.ts`: added `notifyAuthorContentPendingReview()` with inline `webApp` button to open content status.
+- Verification:
+  - `npm run build` ✅
+  - `npm run test -- --run` ✅
+  - `npm --prefix server run typecheck` ✅
+- Extra environment check for web-game Playwright loop:
+  - `npx` is available.
+  - `playwright` package is still missing in this environment (`PLAYWRIGHT_MISSING`), so scripted visual run remains blocked.

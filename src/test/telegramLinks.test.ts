@@ -51,7 +51,7 @@ describe("telegram link helpers", () => {
     expect(openLink).not.toHaveBeenCalled();
   });
 
-  it("opens invite links via openLink in Mini App", () => {
+  it("opens invite links via openTelegramLink in Mini App", () => {
     const openTelegramLink = vi.fn();
     const openLink = vi.fn();
     (window as any).Telegram = {
@@ -62,8 +62,29 @@ describe("telegram link helpers", () => {
     };
 
     expect(openTelegramTarget("https://t.me/+AbCdEf123")).toBe(true);
-    expect(openLink).toHaveBeenCalledOnce();
-    expect(openTelegramLink).not.toHaveBeenCalled();
+    expect(openTelegramLink).toHaveBeenCalledOnce();
+    expect(openTelegramLink).toHaveBeenCalledWith("https://t.me/+AbCdEf123");
+    expect(openLink).not.toHaveBeenCalled();
+  });
+
+  it("uses tg:// deep links on desktop platform", () => {
+    const openTelegramLink = vi.fn();
+    const openLink = vi.fn();
+    (window as any).Telegram = {
+      WebApp: {
+        platform: "tdesktop",
+        openTelegramLink,
+        openLink,
+      },
+    };
+
+    expect(openTelegramTarget("https://t.me/durov")).toBe(true);
+    expect(openTelegramLink).toHaveBeenCalledWith("tg://resolve?domain=durov");
+    expect(openLink).not.toHaveBeenCalled();
+
+    openTelegramLink.mockClear();
+    expect(openTelegramTarget("https://t.me/+AbCdEf123")).toBe(true);
+    expect(openTelegramLink).toHaveBeenCalledWith("tg://join?invite=AbCdEf123");
   });
 
   it("falls back to window.open outside Telegram", () => {

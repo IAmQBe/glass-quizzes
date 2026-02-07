@@ -480,10 +480,6 @@ export const useToggleTestFavorite = () => {
       }
 
       if (!applied) {
-        throw lastError || new Error("Не удалось обновить избранное теста");
-      }
-
-      if (!applied) {
         const localApplied = setLocalFavorite("test", testId, nextFavoriteState);
         if (localApplied) {
           console.warn("Using local fallback for test favorites toggle:", lastError);

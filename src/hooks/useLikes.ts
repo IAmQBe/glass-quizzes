@@ -143,16 +143,47 @@ export const useTotalPopcornsReceived = () => {
       const profileId = await getProfileId();
       if (!profileId) return 0;
 
-      const [quizzesRes, testsRes] = await Promise.all([
-        supabase
+      // Keep definition consistent with creators leaderboard:
+      // - quizzes: published OR is_published, and not anonymous
+      // - tests: is_published, and not anonymous
+      const fetchQuizzes = async () => {
+        const primary = await supabase
           .from("quizzes")
-          .select("id, like_count")
-          .eq("created_by", profileId),
-        supabase
+          .select("like_count")
+          .eq("created_by", profileId)
+          .eq("is_anonymous", false)
+          .or("is_published.eq.true,status.eq.published");
+
+        if (!primary.error) return primary;
+
+        // Legacy fallback if `status` isn't present.
+        return supabase
+          .from("quizzes")
+          .select("like_count")
+          .eq("created_by", profileId)
+          .eq("is_anonymous", false)
+          .eq("is_published", true);
+      };
+
+      const fetchTests = async () => {
+        const primary = await supabase
           .from("personality_tests")
-          .select("id, like_count")
-          .eq("created_by", profileId),
-      ]);
+          .select("like_count")
+          .eq("created_by", profileId)
+          .eq("is_anonymous", false)
+          .eq("is_published", true);
+
+        if (!primary.error) return primary;
+
+        // Legacy fallback if `is_anonymous` isn't present.
+        return supabase
+          .from("personality_tests")
+          .select("like_count")
+          .eq("created_by", profileId)
+          .eq("is_published", true);
+      };
+
+      const [quizzesRes, testsRes] = await Promise.all([fetchQuizzes(), fetchTests()]);
 
       if (quizzesRes.error) {
         console.error("Error fetching user quizzes:", quizzesRes.error);

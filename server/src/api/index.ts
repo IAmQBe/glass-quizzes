@@ -3,10 +3,13 @@ import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { validateInitData, parseStartParam, type InitData } from '../lib/telegram.js';
+import { generatePersonalityTestVariants, generateQuizVariants } from '../lib/openai.js';
 import {
+  supabase,
   getQuizById,
   getPublishedQuizzes,
   getDailyQuiz,
+  getPersonalityTestById,
   getProfileByTelegramId,
   getPredictionPollById,
   getSquadTitleById,
@@ -19,8 +22,12 @@ import {
 } from '../lib/supabase.js';
 import { bot } from '../bot/index.js';
 import { analytics } from './analytics.js';
-import { notifyAdminsNewQuiz } from '../bot/notifications.js';
-import { notifyAdminsPredictionPending, notifyAdminsPredictionUnderReview } from '../bot/handlers/notifications.js';
+import {
+  notifyAdminsNewContent,
+  notifyAuthorContentPendingReview,
+  notifyAdminsPredictionPending,
+  notifyAdminsPredictionUnderReview,
+} from '../bot/handlers/notifications.js';
 
 const app = new Hono();
 
@@ -66,6 +73,12 @@ const authMiddleware = async (c: any, next: any) => {
 };
 
 const VERIFIABLE_TASK_TYPES = new Set(['subscribe_channel', 'channel_boost', 'telegram_premium']);
+
+const AI_PRICE_STARS = (() => {
+  const raw = process.env.AI_GENERATION_PRICE_STARS || '100';
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+})();
 
 const parseTelegramChatId = (value: string | null): string | null => {
   if (!value) return null;
@@ -126,6 +139,20 @@ const callTelegramBotApi = async <T>(method: string, payload: Record<string, unk
   }
 
   return json.result ?? null;
+};
+
+const requireTelegramUserId = (c: any): number | null => {
+  const initData = c.get('initData') as InitData | undefined;
+  const tgUser = initData?.user;
+  return tgUser?.id ?? null;
+};
+
+const parseOptionalInt = (value: unknown): number | undefined => {
+  if (value === null || value === undefined) return undefined;
+  const raw = String(value).trim();
+  if (!raw) return undefined;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : undefined;
 };
 
 const verifyTaskEligibility = async (
@@ -316,43 +343,202 @@ app.post('/api/shares', authMiddleware, async (c) => {
 });
 
 /**
- * Submit quiz for review (notifies admins)
+ * Get AI generation quota (protected)
+ */
+app.get('/api/ai/quota', authMiddleware, async (c) => {
+  const telegramUserId = requireTelegramUserId(c);
+  if (!telegramUserId) {
+    return c.json({ error: 'User not found in initData' }, 400);
+  }
+
+  try {
+    const { data, error } = await (supabase as any).rpc('ai_get_quota', {
+      p_telegram_id: telegramUserId,
+    });
+
+    if (error) {
+      console.error('ai_get_quota error:', error);
+      return c.json({ error: 'Failed to load quota' }, 500);
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    return c.json({ quota: row || null });
+  } catch (err) {
+    console.error('AI quota route error:', err);
+    return c.json({ error: 'Failed to load quota' }, 500);
+  }
+});
+
+/**
+ * Generate AI variants (protected)
+ */
+app.post('/api/ai/generate', authMiddleware, async (c) => {
+  const telegramUserId = requireTelegramUserId(c);
+  if (!telegramUserId) {
+    return c.json({ error: 'User not found in initData' }, 400);
+  }
+
+  const body = await c.req.json().catch(() => null) as any;
+  const contentType = body?.contentType;
+  const prompt = typeof body?.prompt === 'string' ? body.prompt : '';
+  const options = body?.options || {};
+
+  if (contentType !== 'quiz' && contentType !== 'personality_test') {
+    return c.json({ error: 'Invalid contentType' }, 400);
+  }
+
+  if (!prompt.trim()) {
+    return c.json({ error: 'prompt is required' }, 400);
+  }
+
+  try {
+    const { data: consumeData, error: consumeError } = await (supabase as any).rpc('ai_consume_generation', {
+      p_telegram_id: telegramUserId,
+      p_content_type: contentType,
+    });
+
+    if (consumeError) {
+      console.error('ai_consume_generation error:', consumeError);
+      return c.json({ error: 'Failed to consume quota' }, 500);
+    }
+
+    const quotaRow = Array.isArray(consumeData) ? consumeData[0] : consumeData;
+    if (!quotaRow?.allowed) {
+      return c.json({
+        error_code: 'payment_required',
+        price_stars: AI_PRICE_STARS,
+        quota: quotaRow || null,
+      }, 402);
+    }
+
+    if (contentType === 'quiz') {
+      const questionCount = parseOptionalInt(options?.question_count);
+      const variants = await generateQuizVariants({ prompt, questionCount });
+      return c.json({ variants, quota: quotaRow || null });
+    }
+
+    const questionCount = parseOptionalInt(options?.question_count);
+    const resultsCount = parseOptionalInt(options?.results_count);
+    const variants = await generatePersonalityTestVariants({ prompt, questionCount, resultsCount });
+    return c.json({ variants, quota: quotaRow || null });
+  } catch (err: any) {
+    console.error('AI generate error:', err);
+    return c.json({ error: err?.message || 'AI generate failed' }, 500);
+  }
+});
+
+/**
+ * Create Telegram Stars invoice link for AI generation credit (protected)
+ */
+app.post('/api/payments/ai-generation-invoice', authMiddleware, async (c) => {
+  const telegramUserId = requireTelegramUserId(c);
+  if (!telegramUserId) {
+    return c.json({ error: 'User not found in initData' }, 400);
+  }
+
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'QuipoBot';
+  const payloadId = crypto.randomUUID();
+  const payload = `ai_gen_credit_v1:${payloadId}`;
+
+  try {
+    const title = 'AI generation credit';
+    const description = '1 credit = 1 generation (3 variants)';
+
+    const invoiceLink = await callTelegramBotApi<string>('createInvoiceLink', {
+      title,
+      description,
+      payload,
+      provider_token: '',
+      currency: 'XTR',
+      prices: [{ label: 'AI generation', amount: AI_PRICE_STARS }],
+      // Optional metadata fields:
+      // start_parameter is not required for createInvoiceLink.
+    });
+
+    if (!invoiceLink) {
+      return c.json({ error: 'Failed to create invoice link' }, 500);
+    }
+
+    return c.json({ invoiceLink, payload, bot: botUsername });
+  } catch (err) {
+    console.error('Create invoice link error:', err);
+    return c.json({ error: 'Failed to create invoice link' }, 500);
+  }
+});
+
+/**
+ * Submit content for review (notifies admins + author)
  */
 app.post('/api/quizzes/submit-for-review', authMiddleware, async (c) => {
   const initData = c.get('initData');
   const body = await c.req.json();
-  const { quizId } = body;
+  const rawContentId = body?.contentId || body?.quizId || body?.testId;
+  const rawContentType = body?.contentType;
+  const contentType = rawContentType === 'personality_test' || body?.testId ? 'personality_test' : 'quiz';
 
-  if (!quizId) {
-    return c.json({ error: 'quizId is required' }, 400);
+  if (!rawContentId || typeof rawContentId !== 'string') {
+    return c.json({ error: 'contentId is required' }, 400);
   }
 
   try {
-    // Get quiz details
-    const quiz = await getQuizById(quizId);
-    if (!quiz) {
-      return c.json({ error: 'Quiz not found' }, 404);
-    }
-
-    // Get author info
     const user = initData.user;
     if (!user) {
       return c.json({ error: 'User not found' }, 400);
     }
 
-    // Send notification to admins
-    await notifyAdminsNewQuiz({
-      quizId: quiz.id,
+    const authorName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || user.username || 'Автор';
+
+    if (contentType === 'personality_test') {
+      const test = await getPersonalityTestById(rawContentId);
+      if (!test) {
+        return c.json({ error: 'Personality test not found' }, 404);
+      }
+
+      await notifyAdminsNewContent('personality_test', {
+        id: test.id,
+        title: test.title,
+        authorName,
+        authorId: user.id,
+        questionCount: test.question_count || 0,
+        resultCount: test.result_count || 0,
+      });
+
+      await notifyAuthorContentPendingReview(user.id, {
+        id: test.id,
+        title: test.title,
+        type: 'personality_test',
+      });
+
+      console.log('Personality test submitted for review:', {
+        testId: test.id,
+        authorId: user.id,
+        timestamp: new Date().toISOString(),
+      });
+
+      return c.json({ success: true, message: 'Personality test submitted for review' });
+    }
+
+    const quiz = await getQuizById(rawContentId);
+    if (!quiz) {
+      return c.json({ error: 'Quiz not found' }, 404);
+    }
+
+    await notifyAdminsNewContent('quiz', {
+      id: quiz.id,
       title: quiz.title,
-      description: quiz.description || undefined,
-      questionCount: quiz.question_count || 0,
+      authorName,
       authorId: user.id,
-      authorName: user.first_name + (user.last_name ? ` ${user.last_name}` : ''),
-      authorUsername: user.username,
+      questionCount: quiz.question_count || 0,
+    });
+
+    await notifyAuthorContentPendingReview(user.id, {
+      id: quiz.id,
+      title: quiz.title,
+      type: 'quiz',
     });
 
     console.log('Quiz submitted for review:', {
-      quizId,
+      quizId: quiz.id,
       authorId: user.id,
       timestamp: new Date().toISOString(),
     });

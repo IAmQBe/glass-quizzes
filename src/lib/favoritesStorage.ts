@@ -8,10 +8,13 @@ interface LocalFavoritesState {
 }
 
 const LOCAL_FAVORITES_PREFIX = "favorites_local_v1";
+const LOCAL_FAVORITES_GUEST_KEY = `${LOCAL_FAVORITES_PREFIX}_guest`;
 
 const getLocalStorageKey = (): string | null => {
   const tgUser = getTelegramUser();
-  if (!tgUser?.id) return null;
+  if (!tgUser?.id) {
+    return LOCAL_FAVORITES_GUEST_KEY;
+  }
   return `${LOCAL_FAVORITES_PREFIX}_${tgUser.id}`;
 };
 

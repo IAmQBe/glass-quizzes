@@ -32,6 +32,8 @@ interface QuizPreviewScreenProps {
     save_count: number;
     is_anonymous?: boolean;
     creator?: CreatorInfo | null;
+    is_published?: boolean;
+    status?: string | null;
   };
   isLiked?: boolean;
   isSaved?: boolean;
@@ -50,6 +52,21 @@ export const QuizPreviewScreen = ({
   onToggleLike,
   onToggleSave,
 }: QuizPreviewScreenProps) => {
+  const moderationState = (() => {
+    if (quiz.is_published === true || quiz.status === "published") return "published";
+    if (quiz.status === "pending" || quiz.status === "reviewing") return "pending";
+    if (quiz.status === "rejected") return "rejected";
+    return "draft";
+  })();
+  const isPublished = moderationState === "published";
+  const moderationBadgeLabel = moderationState === "pending"
+    ? "На проверке"
+    : moderationState === "rejected"
+      ? "Отклонён"
+      : moderationState === "draft"
+        ? "Черновик"
+        : null;
+
   const handleSquadClick = () => {
     if (quiz.is_anonymous || !quiz.creator?.squad) return;
     haptic.impact('light');
@@ -107,13 +124,17 @@ export const QuizPreviewScreen = ({
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h1 className="text-lg font-semibold flex-1">Квиз</h1>
-          <button
-            onClick={handleShare}
-            className="p-2 -mr-2 rounded-full hover:bg-secondary"
-            aria-label="Поделиться квизом"
-          >
-            <Share2 className="w-5 h-5" />
-          </button>
+          {isPublished ? (
+            <button
+              onClick={handleShare}
+              className="p-2 -mr-2 rounded-full hover:bg-secondary"
+              aria-label="Поделиться квизом"
+            >
+              <Share2 className="w-5 h-5" />
+            </button>
+          ) : (
+            <div className="w-9" />
+          )}
         </div>
       </div>
 
@@ -146,9 +167,29 @@ export const QuizPreviewScreen = ({
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.05 }}
         >
-          <h2 className="text-2xl font-bold text-foreground mb-2">{quiz.title}</h2>
+          <div className="flex items-center gap-2 mb-2">
+            <h2 className="text-2xl font-bold text-foreground">{quiz.title}</h2>
+            {moderationBadgeLabel && (
+              <span
+                className={`text-xs px-2 py-1 rounded-full ${
+                  moderationState === "pending"
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                    : moderationState === "rejected"
+                      ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                      : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                {moderationBadgeLabel}
+              </span>
+            )}
+          </div>
           {quiz.description && (
             <p className="text-muted-foreground">{quiz.description}</p>
+          )}
+          {!isPublished && moderationState === "pending" && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Квиз проходит модерацию. После проверки он станет доступен всем.
+            </p>
           )}
         </motion.div>
 
@@ -209,7 +250,7 @@ export const QuizPreviewScreen = ({
             </div>
           </div>
           <div className="flex items-center gap-2 justify-self-end">
-            {onToggleLike && (
+            {isPublished && onToggleLike && (
               <button
                 onClick={handleLike}
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors shadow-sm ${
@@ -222,7 +263,7 @@ export const QuizPreviewScreen = ({
                 <span>{formatCount(quiz.like_count)}</span>
               </button>
             )}
-            {onToggleSave && (
+            {isPublished && onToggleSave && (
               <button
                 onClick={handleSave}
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors shadow-sm ${
@@ -265,20 +306,31 @@ export const QuizPreviewScreen = ({
 
       {/* Fixed Start Button */}
       <div className="fixed bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-background via-background to-transparent pb-safe">
-        <motion.button
-          onClick={() => {
-            haptic.impact('medium');
-            onStart();
-          }}
-          className="tg-button w-full flex items-center justify-center gap-2 text-lg py-4"
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <Play className="w-5 h-5" />
-          Начать квиз
-        </motion.button>
+        {isPublished ? (
+          <motion.button
+            onClick={() => {
+              haptic.impact('medium');
+              onStart();
+            }}
+            className="tg-button w-full flex items-center justify-center gap-2 text-lg py-4"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <Play className="w-5 h-5" />
+            Начать квиз
+          </motion.button>
+        ) : (
+          <motion.div
+            className="w-full rounded-2xl py-4 text-center text-sm font-medium bg-secondary text-muted-foreground"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            {moderationState === "pending" ? "Квиз на проверке модераторами" : "Квиз пока недоступен"}
+          </motion.div>
+        )}
       </div>
     </motion.div>
   );

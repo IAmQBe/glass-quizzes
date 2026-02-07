@@ -81,6 +81,7 @@ interface TelegramWebApp {
   showPopup: (params: { title?: string; message: string; buttons?: { type?: string; text: string; id?: string }[] }, callback?: (id: string) => void) => void;
   showAlert: (message: string, callback?: () => void) => void;
   showConfirm: (message: string, callback?: (confirmed: boolean) => void) => void;
+  openInvoice?: (url: string, callback?: (status: 'paid' | 'cancelled' | 'failed' | string) => void) => void;
   setHeaderColor: (color: string) => void;
   setBackgroundColor: (color: string) => void;
 }
@@ -93,6 +94,17 @@ export const getTelegram = (): TelegramWebApp | null => {
     return window.Telegram.WebApp;
   }
   return null;
+};
+
+export const openInvoiceAsync = async (invoiceLink: string): Promise<'paid' | 'cancelled' | 'failed' | string> => {
+  const tg = getTelegram();
+  if (!tg?.openInvoice) {
+    throw new Error('openInvoice is unavailable (must be opened inside Telegram)');
+  }
+
+  return await new Promise((resolve) => {
+    tg.openInvoice?.(invoiceLink, (status) => resolve(status));
+  });
 };
 
 // Check if running inside Telegram
@@ -142,6 +154,46 @@ const detectTelegramLinkKind = (url: string): TelegramLinkKind => {
     return 'other';
   } catch {
     return 'other';
+  }
+};
+
+const isDesktopTelegramPlatform = (platform: string | null | undefined): boolean => {
+  const value = (platform || '').toLowerCase();
+  return value === 'tdesktop' || value === 'macos';
+};
+
+const toTelegramDeepLink = (url: string): string | null => {
+  if (url.toLowerCase().startsWith('tg://')) {
+    return url;
+  }
+
+  try {
+    const parsed = new URL(url);
+    if (!TELEGRAM_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+
+    const segments = splitTelegramPath(parsed.pathname);
+    const [first = '', second = ''] = segments;
+    if (!first) return null;
+
+    // Chat invite links:
+    // - https://t.me/+<hash>
+    // - https://t.me/joinchat/<hash>
+    if (first.startsWith('+')) {
+      const hash = first.slice(1);
+      return hash ? `tg://join?invite=${encodeURIComponent(hash)}` : null;
+    }
+    if (first.toLowerCase() === 'joinchat' && second) {
+      return `tg://join?invite=${encodeURIComponent(second)}`;
+    }
+
+    // Public username links:
+    if (isTelegramUsername(first)) {
+      return `tg://resolve?domain=${encodeURIComponent(first)}`;
+    }
+
+    return null;
+  } catch {
+    return null;
   }
 };
 
@@ -262,14 +314,39 @@ export const openTelegramTarget = (url: string | null | undefined): boolean => {
   const tg = getTelegram();
   try {
     const linkKind = detectTelegramLinkKind(url);
+    const desktopPlatform = isDesktopTelegramPlatform(tg?.platform);
+
+    // Telegram Desktop can be picky: try native tg:// deep links first.
+    if (desktopPlatform && (linkKind === 'username' || linkKind === 'invite')) {
+      const deepLink = toTelegramDeepLink(url);
+      if (deepLink) {
+        if (tg?.openTelegramLink) {
+          try {
+            // WebApp docs say https://t.me/, but Desktop handles tg:// links well in practice.
+            tg.openTelegramLink(deepLink);
+            return true;
+          } catch {
+            // Fallback below.
+          }
+        }
+        if (tg?.openLink) {
+          tg.openLink(deepLink);
+          return true;
+        }
+        if (typeof window !== 'undefined') {
+          window.open(deepLink, '_blank', 'noopener,noreferrer');
+          return true;
+        }
+      }
+    }
 
     if (linkKind === 'username' && tg?.openTelegramLink) {
       tg.openTelegramLink(url);
       return true;
     }
 
-    if (linkKind === 'invite' && tg?.openLink) {
-      tg.openLink(url);
+    if (linkKind === 'invite' && tg?.openTelegramLink) {
+      tg.openTelegramLink(url);
       return true;
     }
 
@@ -482,9 +559,16 @@ const buildContentShareUrl = (type: 'test' | 'quiz', id: string, title?: string,
 };
 
 const openShareDialog = (text: string, url: string) => {
-  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
   const tg = getTelegram();
   if (tg) {
+    // Telegram Desktop WebApp has known issues with opening `t.me/share/url` via SDK methods.
+    // Prefer inline mode there (user picks chat, then sends text+link).
+    if (isDesktopTelegramPlatform(tg.platform) && tg.switchInlineQuery) {
+      tg.switchInlineQuery(`${text}\n\n${url}`, ['users', 'groups', 'channels']);
+      return;
+    }
+
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
     if (!openTelegramTarget(shareUrl)) {
       tg.switchInlineQuery(`${text}\n\n${url}`, ['users', 'groups', 'channels']);
     }
@@ -508,6 +592,18 @@ const buildInviteText = (type: 'test' | 'quiz', title: string, description?: str
 export const shareQuizInvite = (quizId: string, title: string, description?: string | null) => {
   const tg = getTelegram();
   const userId = tg?.initDataUnsafe?.user?.id;
+  const inlineQuery = userId ? `quiz_invite:${quizId}:${userId}` : `quiz_invite:${quizId}`;
+
+  if (tg?.switchInlineQuery) {
+    try {
+      tg.switchInlineQuery(inlineQuery, ['users', 'groups', 'channels']);
+      return;
+    } catch (err) {
+      console.error('[Share Quiz Invite] switchInlineQuery failed:', err);
+    }
+  }
+
+  // Fallback: plain text + deep link
   const text = buildInviteText('quiz', title, description);
   const url = buildContentShareUrl('quiz', quizId, undefined, userId);
   openShareDialog(text, url);
@@ -516,6 +612,18 @@ export const shareQuizInvite = (quizId: string, title: string, description?: str
 export const sharePersonalityTestInvite = (testId: string, title: string, description?: string | null) => {
   const tg = getTelegram();
   const userId = tg?.initDataUnsafe?.user?.id;
+  const inlineQuery = userId ? `test_invite:${testId}:${userId}` : `test_invite:${testId}`;
+
+  if (tg?.switchInlineQuery) {
+    try {
+      tg.switchInlineQuery(inlineQuery, ['users', 'groups', 'channels']);
+      return;
+    } catch (err) {
+      console.error('[Share Test Invite] switchInlineQuery failed:', err);
+    }
+  }
+
+  // Fallback: plain text + deep link
   const text = buildInviteText('test', title, description);
   const url = buildContentShareUrl('test', testId, title, userId);
   openShareDialog(text, url);
@@ -534,6 +642,12 @@ export const shareReferralLink = (referralCodeOrTelegramId: string | number, bot
   const shareText = `🧠 Присоединяйся к Quipo!\n\nПроходи тесты, соревнуйся с друзьями и узнай себя лучше!`;
 
   if (tg) {
+    // Telegram Desktop WebApp: prefer inline mode instead of `t.me/share/url`.
+    if (isDesktopTelegramPlatform(tg.platform) && tg.switchInlineQuery) {
+      tg.switchInlineQuery(`${shareText}\n\n${referralUrl}`, ['users', 'groups', 'channels']);
+      return;
+    }
+
     // Use share URL which opens Telegram's share dialog
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralUrl)}&text=${encodeURIComponent(shareText)}`;
 
@@ -611,15 +725,38 @@ export const mainButton = {
 };
 
 // Back Button helpers
+let activeBackButtonHandler: (() => void) | null = null;
+
 export const backButton = {
   show: (onClick: () => void) => {
     const tg = getTelegram();
     if (tg) {
+      // Telegram's onClick can add multiple handlers. Always replace the previous one.
+      if (activeBackButtonHandler) {
+        try {
+          tg.BackButton.offClick(activeBackButtonHandler);
+        } catch {
+          // Ignore SDK oddities; worst case we still show back button.
+        }
+      }
+      activeBackButtonHandler = onClick;
       tg.BackButton.onClick(onClick);
       tg.BackButton.show();
     }
   },
   hide: () => {
-    getTelegram()?.BackButton?.hide();
+    const tg = getTelegram();
+    if (!tg) return;
+
+    if (activeBackButtonHandler) {
+      try {
+        tg.BackButton.offClick(activeBackButtonHandler);
+      } catch {
+        // Best-effort cleanup.
+      } finally {
+        activeBackButtonHandler = null;
+      }
+    }
+    tg.BackButton.hide();
   },
 };

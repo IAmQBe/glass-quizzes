@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { UserStats } from "@/types/quiz";
-import { ArrowLeft, Trophy, Target, Globe, Bell, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Sun, Moon, Sparkles, History, Pencil, Lock, ExternalLink } from "lucide-react";
+import { ArrowLeft, Trophy, Target, Globe, Bell, ChevronRight, Settings, Clock, Share2, Copy, Check, Users, Plus, Sun, Moon, Sparkles, History, Pencil, Lock, ExternalLink } from "lucide-react";
 import { haptic, getTelegramUser, shareReferralLink, sharePersonalityTestResult, buildReferralUrl, resolveSquadTelegramUrl, openTelegramTarget } from "@/lib/telegram";
 import { useIsAdmin } from "@/hooks/useAuth";
 import { useRolePreview } from "@/hooks/useRolePreview";
@@ -42,16 +42,33 @@ const normalizeMediaUrl = (value: unknown): string | null => {
 interface ProfileScreenProps {
   stats: UserStats;
   onBack: () => void;
+  activeTab?: ProfileTabType;
+  onTabChange?: (tab: ProfileTabType) => void;
   onOpenAdmin?: () => void;
   onQuizSelect?: (quizId: string) => void;
+  onTestSelect?: (testId: string) => void;
   onEditQuiz?: (quizId: string) => void;
   onEditTest?: (testId: string) => void;
+  onOpenSquadList?: () => void;
+  onOpenCreateSquad?: () => void;
 }
 
 type FilterType = "date" | "popularity";
-type TabType = "my" | "saved" | "history";
+export type ProfileTabType = "my" | "saved" | "history";
 
-export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEditQuiz, onEditTest }: ProfileScreenProps) => {
+export const ProfileScreen = ({
+  stats,
+  onBack,
+  activeTab: controlledActiveTab,
+  onTabChange,
+  onOpenAdmin,
+  onQuizSelect,
+  onTestSelect,
+  onEditQuiz,
+  onEditTest,
+  onOpenSquadList,
+  onOpenCreateSquad,
+}: ProfileScreenProps) => {
   const user = getTelegramUser();
   const { data: isAdmin } = useIsAdmin();
   const { data: isRealAdmin } = useIsAdmin({ respectRolePreview: false });
@@ -74,9 +91,23 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
   const mySquadRank = mySquad ? squadLeaderboard.findIndex(s => s.id === mySquad.id) + 1 : 0;
   const canOpenAdminPanel = Boolean(onOpenAdmin && (isRealAdmin || isCurrentUserAdmin()));
 
-  const [activeTab, setActiveTab] = useState<TabType>("my");
+  const [localActiveTab, setLocalActiveTab] = useState<ProfileTabType>(controlledActiveTab ?? "my");
+  const activeTab = controlledActiveTab ?? localActiveTab;
   const [sortBy, setSortBy] = useState<FilterType>("date");
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (controlledActiveTab !== undefined) {
+      setLocalActiveTab(controlledActiveTab);
+    }
+  }, [controlledActiveTab]);
+
+  const handleActiveTabChange = (tab: ProfileTabType) => {
+    if (controlledActiveTab === undefined) {
+      setLocalActiveTab(tab);
+    }
+    onTabChange?.(tab);
+  };
 
   const handleBack = () => {
     haptic.selection();
@@ -258,6 +289,57 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
           ))}
         </motion.div>
 
+        {/* Squad CTA */}
+        <motion.div
+          className="tg-section p-4"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.23 }}
+        >
+          <div className="flex items-center justify-between mb-3 gap-3">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <PopcornIcon className="w-5 h-5 text-orange-500" />
+              Создай команду
+            </h3>
+            {mySquad && (
+              <span className="text-xs text-muted-foreground truncate">
+                Ты в: {mySquad.title}
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-muted-foreground mb-3">
+            Объедини своё сообщество и соревнуйтесь с другими командами
+          </p>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                haptic.impact('medium');
+                onOpenCreateSquad?.();
+              }}
+              className="h-10 rounded-xl text-sm font-semibold bg-primary text-primary-foreground flex items-center justify-center gap-2 cta-join cta-join-btn"
+            >
+              <span className="cta-join-shine" aria-hidden />
+              <span className="cta-join-content">
+                <Plus className="w-4 h-4" />
+                Создать
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                haptic.impact('medium');
+                onOpenSquadList?.();
+              }}
+              className="h-10 rounded-xl text-sm font-semibold bg-secondary text-primary flex items-center justify-center gap-2 active:scale-[0.98]"
+            >
+              <Users className="w-4 h-4" />
+              {mySquad ? "Сменить" : "Вступить"}
+            </button>
+          </div>
+        </motion.div>
+
         {/* Referral Section */}
         <motion.div
           className="tg-section p-4 space-y-3"
@@ -419,7 +501,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
               }`}
             onClick={() => {
               haptic.selection();
-              setActiveTab("my");
+              handleActiveTabChange("my");
             }}
           >
             <Target className="w-3.5 h-3.5" />
@@ -432,7 +514,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
               }`}
             onClick={() => {
               haptic.selection();
-              setActiveTab("history");
+              handleActiveTabChange("history");
             }}
           >
             <History className="w-3.5 h-3.5" />
@@ -445,7 +527,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
               }`}
             onClick={() => {
               haptic.selection();
-              setActiveTab("saved");
+              handleActiveTabChange("saved");
             }}
           >
             <BookmarkIcon className="w-3.5 h-3.5" />
@@ -520,7 +602,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                   {/* My Tests */}
                   {myTests.map((test: any) => {
                     const isDraft = !test.is_published;
-                    const isPending = test.status === 'pending';
+                    const isPending = test.status === "pending" || test.status === "reviewing";
                     const canEdit = isDraft && !isPending && onEditTest;
 
                     return (
@@ -561,7 +643,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                                 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
                                 : 'bg-secondary text-muted-foreground'
                               }`}>
-                              {test.is_published ? 'Live' : isPending ? 'На модерации' : 'Draft'}
+                              {test.is_published ? "Опубликован" : isPending ? "На проверке" : "Черновик"}
                             </span>
                           </div>
                         </div>
@@ -587,6 +669,22 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                 </div>
               ) : (
                 allSaved.map((item: any) => {
+                  const canOpenCard = item.type === "quiz" ? Boolean(onQuizSelect) : Boolean(onTestSelect);
+                  const openSavedCard = () => {
+                    if (!canOpenCard) return;
+                    haptic.impact('light');
+                    if (item.type === "quiz") {
+                      onQuizSelect?.(item.id);
+                    } else {
+                      onTestSelect?.(item.id);
+                    }
+                  };
+                  const handleSavedCardKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openSavedCard();
+                    }
+                  };
                   const isAnonymous = item.is_anonymous === true;
                   const creatorName = isAnonymous
                     ? 'Анонимный автор'
@@ -594,7 +692,14 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
                   const squadTitle = !isAnonymous ? item.creator?.squad?.title || null : null;
 
                   return (
-                    <div key={item.id} className="tg-section p-4">
+                    <div
+                      key={item.id}
+                      className={`tg-section p-4 ${canOpenCard ? "cursor-pointer active:scale-[0.995]" : ""}`}
+                      onClick={openSavedCard}
+                      onKeyDown={handleSavedCardKeyDown}
+                      role={canOpenCard ? "button" : undefined}
+                      tabIndex={canOpenCard ? 0 : undefined}
+                    >
                       <div className="flex items-center gap-3">
                         {item.image_url ? (
                           <GifImage src={item.image_url} alt={item.title} className="w-14 h-14 rounded-xl object-cover" />
@@ -721,7 +826,7 @@ export const ProfileScreen = ({ stats, onBack, onOpenAdmin, onQuizSelect, onEdit
 // Quiz List Item Component
 const QuizListItem = ({ quiz, onClick, onEdit }: { quiz: any; onClick: () => void; onEdit?: () => void }) => {
   const isDraft = !quiz.is_published;
-  const isPending = quiz.status === 'pending';
+  const isPending = quiz.status === "pending" || quiz.status === "reviewing";
   const canEdit = isDraft && !isPending && onEdit;
 
   return (
@@ -777,7 +882,7 @@ const QuizListItem = ({ quiz, onClick, onEdit }: { quiz: any; onClick: () => voi
                 : "bg-secondary text-muted-foreground"
               }`}
           >
-            {quiz.is_published ? "Live" : isPending ? "На модерации" : "Draft"}
+            {quiz.is_published ? "Опубликован" : isPending ? "На проверке" : "Черновик"}
           </span>
         </div>
       </div>

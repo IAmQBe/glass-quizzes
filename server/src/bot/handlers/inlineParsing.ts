@@ -12,8 +12,33 @@ export interface ParsedTestResultInlineQuery {
   refUserId?: number;
 }
 
-const parseOptionalRefUserId = (parts: string[]): { refUserId?: number; payloadParts: string[] } => {
-  if (parts.length <= 1) {
+export interface ParsedQuizInviteInlineQuery {
+  quizId: string;
+  refUserId?: number;
+}
+
+export interface ParsedTestInviteInlineQuery {
+  testId: string;
+  refUserId?: number;
+}
+
+export interface ParsedPollInlineQuery {
+  pollId: string;
+  refUserId?: number;
+}
+
+const parseOptionalRefUserId = (
+  parts: string[],
+  opts?: { allowSinglePartRef?: boolean }
+): { refUserId?: number; payloadParts: string[] } => {
+  if (parts.length === 0) {
+    return { payloadParts: parts };
+  }
+
+  // For payload-bearing queries (quiz_result/test_result) we don't want to interpret the only payload
+  // segment as a ref id, otherwise we'd lose the title. For invite/poll queries, the ref can be the
+  // only trailing segment.
+  if (parts.length === 1 && !opts?.allowSinglePartRef) {
     return { payloadParts: parts };
   }
 
@@ -64,6 +89,48 @@ export const parseTestResultInlineQuery = (rawQuery: string): ParsedTestResultIn
   if (!resultTitle) return null;
 
   return { testId, resultTitle, refUserId };
+};
+
+export const parseQuizInviteInlineQuery = (rawQuery: string): ParsedQuizInviteInlineQuery | null => {
+  if (!rawQuery.startsWith('quiz_invite:')) return null;
+
+  const parts = rawQuery.split(':');
+  if (parts.length < 2) return null;
+
+  const quizId = parts[1]?.trim();
+  if (!quizId) return null;
+
+  const restParts = parts.slice(2);
+  const { refUserId } = parseOptionalRefUserId(restParts, { allowSinglePartRef: true });
+  return { quizId, refUserId };
+};
+
+export const parseTestInviteInlineQuery = (rawQuery: string): ParsedTestInviteInlineQuery | null => {
+  if (!rawQuery.startsWith('test_invite:')) return null;
+
+  const parts = rawQuery.split(':');
+  if (parts.length < 2) return null;
+
+  const testId = parts[1]?.trim();
+  if (!testId) return null;
+
+  const restParts = parts.slice(2);
+  const { refUserId } = parseOptionalRefUserId(restParts, { allowSinglePartRef: true });
+  return { testId, refUserId };
+};
+
+export const parsePollInlineQuery = (rawQuery: string): ParsedPollInlineQuery | null => {
+  if (!rawQuery.startsWith('poll:')) return null;
+
+  const parts = rawQuery.split(':');
+  if (parts.length < 2) return null;
+
+  const pollId = parts[1]?.trim();
+  if (!pollId) return null;
+
+  const restParts = parts.slice(2);
+  const { refUserId } = parseOptionalRefUserId(restParts, { allowSinglePartRef: true });
+  return { pollId, refUserId };
 };
 
 export const resolveInlineRefUserId = (parsedRefUserId: number | undefined, senderUserId: number): number => {

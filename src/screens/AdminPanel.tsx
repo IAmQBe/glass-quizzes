@@ -23,6 +23,8 @@ import {
 interface AdminPanelProps {
   onBack: () => void;
   onOpenPrediction?: (predictionId: string) => void;
+  onCreateTest?: () => void;
+  onCreatePrediction?: () => void;
   rolePreviewMode: RolePreviewMode;
   onRolePreviewChange: (mode: RolePreviewMode) => void;
 }
@@ -69,7 +71,7 @@ const ROLE_PREVIEW_OPTIONS: Array<{ mode: RolePreviewMode; label: string }> = [
   { mode: "user", label: "Как user" },
 ];
 
-export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePreviewChange }: AdminPanelProps) => {
+export const AdminPanel = ({ onBack, onOpenPrediction, onCreateTest, onCreatePrediction, rolePreviewMode, onRolePreviewChange }: AdminPanelProps) => {
   const [activeTab, setActiveTab] = useState<Tab>("analytics");
   const [showNewTask, setShowNewTask] = useState(false);
   const [showNewQuiz, setShowNewQuiz] = useState(false);
@@ -902,7 +904,23 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
         )}
 
         {activeTab === "predictions" && (
-          <PredictionModerationTab onOpenPrediction={onOpenPrediction} />
+          <>
+            <button
+              className="w-full tg-section p-4 flex items-center justify-center gap-2 text-primary font-medium"
+              onClick={() => {
+                haptic.selection();
+                if (onCreatePrediction) {
+                  onCreatePrediction();
+                  return;
+                }
+                toast({ title: "Создание события пока недоступно", variant: "destructive" });
+              }}
+            >
+              <Plus className="w-5 h-5" />
+              Создать событие
+            </button>
+            <PredictionModerationTab onOpenPrediction={onOpenPrediction} />
+          </>
         )}
 
         {activeTab === "quizzes" && (
@@ -1094,6 +1112,20 @@ export const AdminPanel = ({ onBack, onOpenPrediction, rolePreviewMode, onRolePr
 
         {activeTab === "tests" && (
           <>
+            <button
+              className="w-full tg-section p-4 flex items-center justify-center gap-2 text-primary font-medium"
+              onClick={() => {
+                haptic.selection();
+                if (onCreateTest) {
+                  onCreateTest();
+                  return;
+                }
+                toast({ title: "Создание теста пока недоступно", variant: "destructive" });
+              }}
+            >
+              <Plus className="w-5 h-5" />
+              Создать тест
+            </button>
             {testsLoading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />

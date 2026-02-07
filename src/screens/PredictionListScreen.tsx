@@ -116,7 +116,7 @@ export const PredictionListScreen = ({
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
-          <h1 className="text-lg font-semibold text-foreground flex-1 text-center">Все прогнозы</h1>
+          <h1 className="text-lg font-semibold text-foreground flex-1 text-center">Все события</h1>
           <div className="flex items-center gap-2">
             {createQuotaBadge ? (
               <span className="text-[10px] px-2 py-1 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">
@@ -129,7 +129,7 @@ export const PredictionListScreen = ({
                 onCreatePrediction();
               }}
               className="p-2 text-primary"
-              aria-label="Создать прогноз"
+              aria-label="Создать событие"
             >
               <Plus className="w-5 h-5" />
             </button>
@@ -143,7 +143,7 @@ export const PredictionListScreen = ({
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Поиск прогноза..."
+            placeholder="Поиск события..."
             className="pl-9 bg-secondary border-0"
           />
         </div>
@@ -225,7 +225,7 @@ export const PredictionListScreen = ({
         <div className="space-y-2">
           {filteredPredictions.length === 0 ? (
             <div className="tg-section p-6 text-center">
-              <p className="font-medium text-foreground">Прогнозы не найдены</p>
+              <p className="font-medium text-foreground">События не найдены</p>
               <p className="text-sm text-muted-foreground mt-1">
                 Попробуй сменить фильтры или поисковый запрос.
               </p>

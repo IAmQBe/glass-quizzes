@@ -15,6 +15,101 @@ let botStarted = false;
 // Mini App URL
 const MINI_APP_URL = process.env.VITE_MINI_APP_URL || 'https://t.me/YourBotUsername/app';
 
+const AI_PRICE_STARS = (() => {
+  const raw = process.env.AI_GENERATION_PRICE_STARS || '100';
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+})();
+
+const isValidAiInvoicePayload = (payload: unknown): payload is string => {
+  return typeof payload === 'string' && payload.startsWith('ai_gen_credit_v1:') && payload.length > 'ai_gen_credit_v1:'.length;
+};
+
+/**
+ * Telegram Stars payments for AI generation credits.
+ *
+ * Flow:
+ * 1) Mini App gets invoice link via server API and calls WebApp.openInvoice()
+ * 2) Telegram sends pre_checkout_query -> we approve/deny
+ * 3) Telegram sends successful_payment message -> we record + add credit (idempotent)
+ */
+bot.on('pre_checkout_query', async (ctx) => {
+  try {
+    const q = ctx.preCheckoutQuery;
+    const ok =
+      q.currency === 'XTR' &&
+      q.total_amount === AI_PRICE_STARS &&
+      isValidAiInvoicePayload(q.invoice_payload);
+
+    if (!ok) {
+      await ctx.answerPreCheckoutQuery(false, 'Invalid invoice payload');
+      return;
+    }
+
+    await ctx.answerPreCheckoutQuery(true);
+  } catch (err) {
+    console.error('pre_checkout_query handler error:', err);
+    try {
+      await ctx.answerPreCheckoutQuery(false, 'Server error');
+    } catch {
+      // ignore
+    }
+  }
+});
+
+bot.on('message:successful_payment', async (ctx) => {
+  const sp = ctx.message?.successful_payment;
+  if (!sp) return;
+
+  try {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+
+    const ok =
+      sp.currency === 'XTR' &&
+      sp.total_amount === AI_PRICE_STARS &&
+      isValidAiInvoicePayload(sp.invoice_payload) &&
+      typeof sp.telegram_payment_charge_id === 'string' &&
+      sp.telegram_payment_charge_id.length > 0;
+
+    if (!ok) {
+      await ctx.reply('Платёж получен, но не удалось распознать покупку. Напишите в поддержку.');
+      return;
+    }
+
+    const { data, error } = await (supabase as any).rpc('ai_apply_payment', {
+      p_telegram_id: telegramId,
+      p_invoice_payload: sp.invoice_payload,
+      p_currency: sp.currency,
+      p_total_amount: sp.total_amount,
+      p_telegram_payment_charge_id: sp.telegram_payment_charge_id,
+      p_provider_payment_charge_id: sp.provider_payment_charge_id || null,
+      p_credit_delta: 1,
+    });
+
+    if (error) {
+      console.error('ai_apply_payment rpc error:', error);
+      await ctx.reply('✅ Платёж получен. Если кредит не появился, напишите в поддержку.');
+      return;
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.applied) {
+      await ctx.reply(`✅ Оплата получена! Начислен 1 кредит для AI генерации.\n\nОсталось кредитов: ${row?.paid_credits ?? '—'}`);
+    } else {
+      // Idempotency: payment already processed.
+      await ctx.reply(`✅ Оплата уже обработана ранее.\n\nОсталось кредитов: ${row?.paid_credits ?? '—'}`);
+    }
+  } catch (err) {
+    console.error('successful_payment handler error:', err);
+    try {
+      await ctx.reply('✅ Платёж получен. Если кредит не появился, напишите в поддержку.');
+    } catch {
+      // ignore
+    }
+  }
+});
+
 /**
  * /start command - opens Mini App or shows share button
  */

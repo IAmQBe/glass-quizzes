@@ -148,3 +148,30 @@ export interface ReportPredictionResult {
   error_message: string | null;
   updated_poll_patch: Partial<PredictionPoll>;
 }
+
+export interface AdminUpdatePredictionPollPayload {
+  poll_id: string;
+  title?: string | null;
+  option_a_label?: string | null;
+  option_b_label?: string | null;
+  cover_image_url?: string | null;
+  deadline_at?: string | null;
+  stake_enabled?: boolean | null;
+  vote_enabled?: boolean | null;
+}
+
+export interface AdminUpdatePredictionPollResult {
+  success: boolean;
+  poll_id: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  updated_poll_patch: Partial<PredictionPoll>;
+}
+
+export interface AdminDeletePredictionPollResult {
+  success: boolean;
+  poll_id: string | null;
+  operation: string | null;
+  error_code: string | null;
+  error_message: string | null;
+}

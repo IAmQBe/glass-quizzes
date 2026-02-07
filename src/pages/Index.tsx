@@ -59,7 +59,7 @@ import {
 } from "@/lib/telegram";
 import { initUser } from "@/lib/user";
 import { calculateResult, getVerdict } from "@/data/quizData";
-import { TrendingUp, Sparkles, Search, X, Swords, Users, Plus, ArrowDown, ArrowUp } from "lucide-react";
+import { TrendingUp, Sparkles, Search, X, Swords, Users, ArrowDown, ArrowUp } from "lucide-react";
 import { PopcornIcon } from "@/components/icons/PopcornIcon";
 import { BookmarkIcon } from "@/components/icons/BookmarkIcon";
 import { Input } from "@/components/ui/input";
@@ -92,8 +92,9 @@ type ContentType = "quizzes" | "tests";
 type SortType = "completed" | "newest" | "popular" | "saves";
 type SortDirection = "desc" | "asc";
 type PredictionBackTarget = "home" | "prediction_list" | "admin";
-type PredictionCreateEntry = "home" | "prediction_list";
+type PredictionCreateEntry = "home" | "prediction_list" | "admin";
 const HOME_CONTENT_TYPE_STORAGE_KEY = "home_content_type";
+const PREDICTION_WARMUP_DONE_KEY = "prediction_warmup_done";
 
 type NavigationSnapshot = {
   screen: AppScreen;
@@ -185,6 +186,8 @@ const Index = () => {
   const navigationStackRef = useRef<NavigationSnapshot[]>([]);
   const previousSnapshotRef = useRef<NavigationSnapshot | null>(null);
   const isNavigatingBackRef = useRef(false);
+  const historyIndexRef = useRef(0);
+  const lastBackRequestAtRef = useRef(0);
 
   const { data: quizData } = useQuizWithQuestions(selectedQuizId);
   const { data: selectedTestDetails } = usePersonalityTestWithDetails(selectedTestId);
@@ -436,18 +439,46 @@ const Index = () => {
     const previousSnapshot = navigationStackRef.current.pop();
 
     if (!previousSnapshot) {
-      setCurrentScreen("home");
-      setActiveTab("home");
-      setSelectedQuizId(null);
-      setSelectedTestId(null);
+      // If history is missing (for example, first screen), fall back to the current bottom tab.
+      // This prevents "Back" from always dumping the user on Home.
+      const fallbackScreen: AppScreen = activeTab === "profile"
+        ? "profile"
+        : activeTab === "leaderboard"
+          ? "leaderboard"
+          : activeTab === "gallery"
+            ? "gallery"
+            : activeTab === "create"
+              ? "create_select"
+              : "home";
+
+      setCurrentScreen(fallbackScreen);
+      setActiveTab(activeTab);
       setShouldScrollToContentBlock(false);
-      restoreScrollPosition(0);
+      restoreScrollPosition(currentScrollYRef.current);
       return;
     }
 
     isNavigatingBackRef.current = true;
     restoreNavigationSnapshot(previousSnapshot);
-  }, [currentScreen, restoreNavigationSnapshot, restoreScrollPosition, trackQuizAbandon]);
+  }, [activeTab, currentScreen, restoreNavigationSnapshot, restoreScrollPosition, trackQuizAbandon]);
+
+  const requestBack = useCallback(() => {
+    const now = Date.now();
+    if (now - lastBackRequestAtRef.current < 350) return;
+    lastBackRequestAtRef.current = now;
+
+    if (typeof window === "undefined") {
+      handleBackNavigation();
+      return;
+    }
+
+    if (historyIndexRef.current > 0) {
+      window.history.back();
+      return;
+    }
+
+    handleBackNavigation();
+  }, [handleBackNavigation]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -468,6 +499,38 @@ const Index = () => {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Initialize history state for reliable hardware/browser back handling.
+    try {
+      const state = window.history.state as any;
+      if (state && state.__glass_quizzes_nav === true && typeof state.idx === "number") {
+        historyIndexRef.current = Math.max(0, state.idx);
+      } else {
+        historyIndexRef.current = 0;
+        window.history.replaceState({ __glass_quizzes_nav: true, idx: 0 }, "");
+      }
+    } catch {
+      // Ignore history errors; app will still work with the internal stack.
+    }
+
+    const onPopState = (event: PopStateEvent) => {
+      const state = event.state as any;
+      if (state && state.__glass_quizzes_nav === true) {
+        historyIndexRef.current = typeof state.idx === "number"
+          ? Math.max(0, state.idx)
+          : Math.max(0, historyIndexRef.current - 1);
+        handleBackNavigation();
+      }
+    };
+
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, [handleBackNavigation]);
+
+  useEffect(() => {
     const snapshot = buildNavigationSnapshot();
     const previousSnapshot = previousSnapshotRef.current;
 
@@ -484,6 +547,17 @@ const Index = () => {
         if (navigationStackRef.current.length > 80) {
           navigationStackRef.current.shift();
         }
+
+        // Mirror forward navigation in browser history so hardware/back gestures work.
+        if (typeof window !== "undefined") {
+          try {
+            const nextIdx = historyIndexRef.current + 1;
+            historyIndexRef.current = nextIdx;
+            window.history.pushState({ __glass_quizzes_nav: true, idx: nextIdx }, "");
+          } catch {
+            // Best-effort; internal stack still provides back navigation.
+          }
+        }
       }
     }
 
@@ -495,7 +569,7 @@ const Index = () => {
 
     if (currentScreen !== "home") {
       backButton.show(() => {
-        handleBackNavigation();
+        requestBack();
       });
     } else {
       backButton.hide();
@@ -504,7 +578,7 @@ const Index = () => {
     return () => {
       backButton.hide();
     };
-  }, [currentScreen, handleBackNavigation]);
+  }, [currentScreen, requestBack]);
 
   const handleTabChange = (tab: TabId) => {
     if (currentScreen === "quiz") {
@@ -592,6 +666,11 @@ const Index = () => {
         setResult(quizResult);
         setCurrentScreen("result");
         persistQuizCompletion(selectedQuizId, quizResult, newAnswers);
+        try {
+          window.localStorage.setItem(PREDICTION_WARMUP_DONE_KEY, "true");
+        } catch {
+          // ignore
+        }
 
         // Track quiz completion
         const totalTimeMs = Date.now() - quizStartTime.current;
@@ -660,6 +739,11 @@ const Index = () => {
     setTestResultTitle(testTitle);
     setTestResultTestId(testId);
     setCurrentScreen("personality_result");
+    try {
+      window.localStorage.setItem(PREDICTION_WARMUP_DONE_KEY, "true");
+    } catch {
+      // ignore
+    }
   };
 
   const handleToggleTestLike = (testId: string) => {
@@ -807,7 +891,14 @@ const Index = () => {
   }, [rawEligibility, localCompletedCount, forcedRole, isAllowlistedPredictionAdmin, mySquad?.id, mySquad?.title]);
   const selectedPrediction = predictions.find((prediction) => prediction.id === selectedPredictionId) || null;
   const canManageSelectedPrediction = Boolean(selectedPrediction && uiEligibilityForView.is_admin);
-  const hasPredictionAccess = (fetchedStats?.testsCompleted ?? 0) > 0 || (fetchedStats?.bestScore ?? 0) > 0;
+  const hasPredictionWarmupFlag = (() => {
+    try {
+      return window.localStorage.getItem(PREDICTION_WARMUP_DONE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  })();
+  const hasPredictionAccess = localCompletedCount > 0 || hasPredictionWarmupFlag;
   const homeCreateHint = isPredictionEligibilityLoading
     ? "Проверяем доступ..."
     : uiEligibilityForView.eligible
@@ -1153,52 +1244,6 @@ const Index = () => {
                 <TasksBlock />
               </motion.div>
 
-              {/* Squad Block */}
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.13 }}
-                className="tg-section p-4"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-foreground flex items-center gap-2">
-                    <PopcornIcon className="w-5 h-5 text-orange-500" />
-                    Попкорн-команды
-                  </h3>
-                  {mySquad && (
-                    <span className="text-xs text-muted-foreground">
-                      Ты в: {mySquad.title}
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => {
-                      haptic.impact('medium');
-                      setCurrentScreen("squad_list");
-                    }}
-                    className="h-10 rounded-xl text-sm font-semibold bg-primary text-primary-foreground flex items-center justify-center gap-2 cta-join cta-join-btn"
-                  >
-                    <span className="cta-join-shine" aria-hidden />
-                    <span className="cta-join-content">
-                      <Users className="w-4 h-4" />
-                      {mySquad ? "Сменить" : "Вступить"}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      haptic.impact('medium');
-                      setCurrentScreen("create_squad");
-                    }}
-                    className="h-10 rounded-xl text-sm font-semibold bg-secondary text-primary flex items-center justify-center gap-2 active:scale-[0.98]"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Создать
-                  </button>
-                </div>
-              </motion.div>
-
               <PredictionTopBlock
                 predictions={topPredictions}
                 createHint={homeCreateHint}
@@ -1447,7 +1492,7 @@ const Index = () => {
               onCreatePrediction={() => {
                 void openCreatePrediction("prediction_list");
               }}
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onOpenPrediction={(predictionId) => openPredictionDetails(predictionId, "prediction_list")}
             />
           )}
@@ -1456,7 +1501,7 @@ const Index = () => {
             <CreatePredictionScreen
               key="create_prediction"
               eligibility={uiEligibilityForView}
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onCreated={(pollId) => {
                 void handlePredictionCreated(pollId);
               }}
@@ -1469,8 +1514,9 @@ const Index = () => {
               prediction={selectedPrediction}
               canManage={canManageSelectedPrediction}
               hasPredictionAccess={hasPredictionAccess}
+              onRequirePredictionAccess={handleGateGoToTests}
               onPredictionChange={handlePredictionChange}
-              onBack={handleBackNavigation}
+              onBack={requestBack}
             />
           )}
 
@@ -1482,9 +1528,9 @@ const Index = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <h2 className="text-lg font-semibold text-foreground">Прогноз не найден</h2>
+              <h2 className="text-lg font-semibold text-foreground">Событие не найдено</h2>
               <p className="text-sm text-muted-foreground">
-                Возможно, ссылка устарела или прогноз был скрыт.
+                Возможно, ссылка устарела или событие было скрыто.
               </p>
               <button
                 onClick={() => {
@@ -1492,7 +1538,7 @@ const Index = () => {
                 }}
                 className="tg-button"
               >
-                К списку прогнозов
+                К списку событий
               </button>
             </motion.div>
           )}
@@ -1500,7 +1546,7 @@ const Index = () => {
           {currentScreen === "pvp" && (
             <PvpLobbyScreen
               key="pvp"
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onStartGame={(roomId, quizId) => {
                 console.log("Starting PvP game:", roomId, quizId);
               }}
@@ -1510,7 +1556,7 @@ const Index = () => {
           {currentScreen === "gallery" && (
             <CreatorsScreen
               key="gallery"
-              onBack={handleBackNavigation}
+              onBack={requestBack}
             />
           )}
 
@@ -1534,7 +1580,7 @@ const Index = () => {
               }}
               isLiked={likeIds.has(selectedQuizId)}
               isSaved={saveIds.has(selectedQuizId)}
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onStart={handleStartQuiz}
               onToggleLike={selectedQuizIsPublished
                 ? () => toggleLike.mutate({ quizId: selectedQuizId, isLiked: likeIds.has(selectedQuizId) })
@@ -1561,6 +1607,11 @@ const Index = () => {
                   verdictEmoji: "⏰",
                 });
                 persistQuizCompletion(selectedQuizId, quizResult, answers);
+                try {
+                  window.localStorage.setItem(PREDICTION_WARMUP_DONE_KEY, "true");
+                } catch {
+                  // ignore
+                }
                 track(
                   "quiz_complete",
                   {
@@ -1596,7 +1647,7 @@ const Index = () => {
               }}
               isLiked={testLikeIds.has(selectedTestId)}
               isSaved={testSaveIds.has(selectedTestId)}
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onStart={handleStartTest}
               onToggleLike={selectedTestIsPublished
                 ? () => toggleTestLike.mutate({ testId: selectedTestId, isLiked: testLikeIds.has(selectedTestId) })
@@ -1626,7 +1677,7 @@ const Index = () => {
             <PersonalityTestScreen
               key="personality_test"
               testId={selectedTestId}
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onComplete={handleTestComplete}
             />
           )}
@@ -1654,7 +1705,7 @@ const Index = () => {
           {currentScreen === "create_test" && (
             <CreatePersonalityTestScreen
               key="create_test"
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onSuccess={handlePersonalityTestCreated}
             />
           )}
@@ -1685,7 +1736,7 @@ const Index = () => {
               userResult={result}
               onInvite={() => toast({ title: "Invite sent!" })}
               onPostComparison={() => toast({ title: "Posted!" })}
-              onBack={handleBackNavigation}
+              onBack={requestBack}
             />
           )}
 
@@ -1695,18 +1746,24 @@ const Index = () => {
               stats={userStats}
               activeTab={profileTab}
               onTabChange={setProfileTab}
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onOpenAdmin={() => setCurrentScreen("admin")}
               onQuizSelect={handleQuizSelect}
               onTestSelect={handleTestSelect}
+              onOpenSquadList={() => setCurrentScreen("squad_list")}
+              onOpenCreateSquad={() => setCurrentScreen("create_squad")}
             />
           )}
 
           {currentScreen === "admin" && (
             <AdminPanel
               key="admin"
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onOpenPrediction={(predictionId) => openPredictionDetails(predictionId, "admin")}
+              onCreateTest={() => setCurrentScreen("create_test")}
+              onCreatePrediction={() => {
+                void openCreatePrediction("admin");
+              }}
               rolePreviewMode={rolePreviewMode}
               onRolePreviewChange={setRolePreviewMode}
             />
@@ -1715,7 +1772,7 @@ const Index = () => {
           {currentScreen === "leaderboard" && (
             <LeaderboardScreen
               key="leaderboard"
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onSquadSelect={(squad) => {
                 setSelectedSquad(squad);
                 setCurrentScreen("squad_detail");
@@ -1726,7 +1783,7 @@ const Index = () => {
           {currentScreen === "squad_list" && (
             <SquadListScreen
               key="squad_list"
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onSquadSelect={(squad) => {
                 setSelectedSquad(squad);
                 setCurrentScreen("squad_detail");
@@ -1741,14 +1798,14 @@ const Index = () => {
             <SquadScreen
               key="squad_detail"
               squad={selectedSquad}
-              onBack={handleBackNavigation}
+              onBack={requestBack}
             />
           )}
 
           {currentScreen === "create_squad" && (
             <CreateSquadGuide
               key="create_squad"
-              onBack={handleBackNavigation}
+              onBack={requestBack}
             />
           )}
 
@@ -1767,7 +1824,7 @@ const Index = () => {
                     className="p-2 -ml-2 text-primary"
                     onClick={() => {
                       haptic.selection();
-                      handleBackNavigation();
+                      requestBack();
                     }}
                   >
                     <X className="w-6 h-6" />
@@ -1829,7 +1886,7 @@ const Index = () => {
           {currentScreen === "create" && (
             <CreateQuizScreen
               key="create"
-              onBack={handleBackNavigation}
+              onBack={requestBack}
               onSuccess={handleQuizCreated}
             />
           )}

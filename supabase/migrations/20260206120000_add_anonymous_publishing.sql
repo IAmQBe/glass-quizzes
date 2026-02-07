@@ -14,7 +14,9 @@ SELECT
   q.image_url,
   CASE
     WHEN q.is_anonymous = true
-      AND NOT (q.created_by = auth.uid() OR public.is_admin(auth.uid()))
+      -- Important: auth.uid() can be NULL for anon viewers.
+      -- Use COALESCE to avoid three-valued logic leaking created_by.
+      AND NOT (COALESCE(q.created_by = auth.uid(), false) OR public.is_admin(auth.uid()))
       THEN NULL
     ELSE q.created_by
   END AS created_by,
@@ -44,7 +46,9 @@ SELECT
   pt.image_url,
   CASE
     WHEN pt.is_anonymous = true
-      AND NOT (pt.created_by = auth.uid() OR public.is_admin(auth.uid()))
+      -- Important: auth.uid() can be NULL for anon viewers.
+      -- Use COALESCE to avoid three-valued logic leaking created_by.
+      AND NOT (COALESCE(pt.created_by = auth.uid(), false) OR public.is_admin(auth.uid()))
       THEN NULL
     ELSE pt.created_by
   END AS created_by,
@@ -125,3 +129,6 @@ RETURNS TABLE (
 $$ LANGUAGE sql STABLE;
 
 GRANT EXECUTE ON FUNCTION public.get_leaderboard_by_popcorns TO authenticated, anon;
+
+-- Ensure PostgREST refreshes schema cache (prevents "schema cache" errors after DDL).
+NOTIFY pgrst, 'reload schema';

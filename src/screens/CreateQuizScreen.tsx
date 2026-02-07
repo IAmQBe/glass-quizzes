@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Plus, Trash2, Image, Clock, X, Upload, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Image, Clock, X, Upload, Loader2, Pencil, Sparkles } from "lucide-react";
 import { useCreateQuiz, useSubmitForReview } from "@/hooks/useQuizzes";
 import { useImageUpload, resizeImage } from "@/hooks/useImageUpload";
 import { haptic } from "@/lib/telegram";
@@ -8,10 +8,21 @@ import { formatQuestionCount } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { GifImage } from "@/components/GifImage";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { AiGenerateDialog } from "@/components/ai/AiGenerateDialog";
+import type { AiQuizVariant } from "@/hooks/useAiGeneration";
 
 interface CreateQuizScreenProps {
   onBack: () => void;
-  onSuccess: () => void;
+  onSuccess: (payload: CreateQuizSuccessPayload) => void;
+}
+
+export interface CreateQuizSuccessPayload {
+  quizId: string;
+  title: string;
+  description?: string | null;
+  isPendingModeration: boolean;
 }
 
 interface QuestionDraft {
@@ -27,6 +38,9 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
   const [duration, setDuration] = useState(60);
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [questions, setQuestions] = useState<QuestionDraft[]>([]);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [editQuestionIndex, setEditQuestionIndex] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState<QuestionDraft | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<QuestionDraft>({
     text: "",
     options: ["", "", "", ""],
@@ -138,6 +152,54 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
     setQuestions(questions.filter((_, i) => i !== index));
   };
 
+  const openEditQuestion = (index: number) => {
+    const q = questions[index];
+    if (!q) return;
+
+    const padded = [...(q.options || [])];
+    while (padded.length < 4) padded.push("");
+
+    setEditQuestionIndex(index);
+    setEditDraft({
+      text: q.text,
+      options: padded.slice(0, 4),
+      correctAnswer: Math.max(0, Math.min(q.correctAnswer, Math.max(0, (q.options?.length || 1) - 1))),
+    });
+  };
+
+  const saveEditedQuestion = () => {
+    if (editQuestionIndex === null || !editDraft) return;
+
+    const text = editDraft.text.trim();
+    if (!text) {
+      toast({ title: "Введите текст вопроса" });
+      return;
+    }
+
+    const rawOptions = (editDraft.options || []).map((o) => o.trim());
+    const validOptions = rawOptions.filter(Boolean);
+    if (validOptions.length < 2) {
+      toast({ title: "Добавьте минимум 2 варианта ответа" });
+      return;
+    }
+
+    const correctText = (rawOptions[editDraft.correctAnswer] || "").trim();
+    let newCorrect = validOptions.findIndex((o) => o === correctText);
+    if (newCorrect < 0) newCorrect = 0;
+    newCorrect = Math.max(0, Math.min(newCorrect, validOptions.length - 1));
+
+    const updated = [...questions];
+    updated[editQuestionIndex] = {
+      text,
+      options: validOptions,
+      correctAnswer: newCorrect,
+    };
+    setQuestions(updated);
+    setEditQuestionIndex(null);
+    setEditDraft(null);
+    toast({ title: "Вопрос обновлён" });
+  };
+
   const handleSubmit = async () => {
     if (!title.trim()) {
       toast({ title: "Введите название" });
@@ -201,7 +263,10 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
       // Step 3: Submit for review (notify admins) only for pending content
       if (isPendingModeration) {
         try {
-          await submitForReview.mutateAsync(quiz.id);
+          await submitForReview.mutateAsync({
+            contentId: quiz.id,
+            contentType: "quiz",
+          });
         } catch (reviewError) {
           console.error("Submit for review error:", reviewError);
           // Quiz created, but notification failed - not critical
@@ -215,7 +280,12 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
           ? "Отправлен на модерацию. Мы уведомим когда опубликуем."
           : "Сразу опубликован в прод."
       });
-      onSuccess();
+      onSuccess({
+        quizId: quiz.id,
+        title,
+        description,
+        isPendingModeration,
+      });
     } catch (error: any) {
       console.error("Create quiz error:", error);
       haptic.notification("error");
@@ -269,6 +339,24 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
             initial={{ x: 20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
           >
+            {/* AI generation */}
+            <div className="tg-section p-4">
+              <button
+                type="button"
+                className="w-full py-3 rounded-xl bg-secondary text-foreground font-medium flex items-center justify-center gap-2 hover:bg-secondary/80"
+                onClick={() => {
+                  haptic.selection();
+                  setAiOpen(true);
+                }}
+              >
+                <Sparkles className="w-4 h-4 text-purple-500" />
+                Создать с AI (3 варианта)
+              </button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Опиши тему и стиль. AI заполнит название, описание и вопросы. Картинки добавишь вручную.
+              </p>
+            </div>
+
             {/* Title */}
             <div className="tg-section p-4">
               <label className="text-sm font-medium text-foreground block mb-2">
@@ -470,6 +558,13 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
                       </p>
                     </div>
                     <button
+                      onClick={() => openEditQuestion(index)}
+                      className="p-1 text-primary"
+                      title="Редактировать"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => handleRemoveQuestion(index)}
                       className="p-1 text-destructive"
                     >
@@ -664,6 +759,114 @@ export const CreateQuizScreen = ({ onBack, onSuccess }: CreateQuizScreenProps) =
           </motion.div>
         )}
       </div>
+
+      {/* AI dialog */}
+      <AiGenerateDialog
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        contentType="quiz"
+        onApply={(variant) => {
+          const v = variant as AiQuizVariant;
+          haptic.impact("light");
+          setTitle(v.title || "");
+          setDescription(v.description || "");
+          setQuestions((v.questions || []).map((q) => ({
+            text: q.text,
+            options: q.options,
+            correctAnswer: q.correctAnswer,
+          })));
+          setCurrentQuestion({ text: "", options: ["", "", "", ""], correctAnswer: 0 });
+          setStep("questions");
+          toast({ title: "Вариант применён", description: "Проверь вопросы и опубликуй квиз." });
+        }}
+      />
+
+      {/* Edit question modal */}
+      <Dialog
+        open={editQuestionIndex !== null}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setEditQuestionIndex(null);
+            setEditDraft(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg rounded-2xl p-5">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-base">Редактировать вопрос</DialogTitle>
+          </DialogHeader>
+
+          {editDraft ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Текст вопроса</label>
+                <textarea
+                  value={editDraft.text}
+                  onChange={(e) => setEditDraft({ ...editDraft, text: e.target.value })}
+                  rows={2}
+                  className="w-full bg-secondary rounded-xl px-4 py-3 text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary resize-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Варианты ответа</label>
+                <div className="space-y-2">
+                  {(editDraft.options || []).map((option, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          haptic.selection();
+                          setEditDraft({ ...editDraft, correctAnswer: index });
+                        }}
+                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${editDraft.correctAnswer === index
+                          ? "border-green-500 bg-green-500"
+                          : "border-muted"
+                          }`}
+                        title="Правильный ответ"
+                      >
+                        {editDraft.correctAnswer === index ? (
+                          <span className="text-white text-xs">✓</span>
+                        ) : null}
+                      </button>
+                      <input
+                        type="text"
+                        value={option}
+                        onChange={(e) => {
+                          const next = [...(editDraft.options || [])];
+                          next[index] = e.target.value;
+                          setEditDraft({ ...editDraft, options: next });
+                        }}
+                        placeholder={`Option ${index + 1}`}
+                        className="flex-1 bg-secondary rounded-lg px-3 py-2 text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Нажми на кружок, чтобы выбрать правильный ответ.
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button className="flex-1" onClick={saveEditedQuestion}>
+                  Сохранить
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => {
+                    setEditQuestionIndex(null);
+                    setEditDraft(null);
+                  }}
+                >
+                  Отмена
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 };

@@ -86,16 +86,16 @@ export const CreatePredictionGateModal = ({
     helperText = `Лимит обновится ${resetDateText}`;
   } else if ((eligibility?.blocking_reason_code ?? null) === "cooldown") {
     ctaLabel = "Понятно";
-    helperText = `Новый прогноз через ${cooldownHoursLeft}ч`;
+    helperText = `Новое событие через ${cooldownHoursLeft}ч`;
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md rounded-2xl p-5">
         <DialogHeader className="text-left">
-          <DialogTitle className="text-base">Почти готово к созданию прогноза</DialogTitle>
+          <DialogTitle className="text-base">Почти готово к созданию события</DialogTitle>
           <DialogDescription>
-            Вам нужно: пройти {requiredCount} квеста/теста, создать свою команду и публиковать прогнозы от лица
+            Вам нужно: пройти {requiredCount} квеста/теста, создать свою команду и публиковать события от лица
             команды.
           </DialogDescription>
         </DialogHeader>

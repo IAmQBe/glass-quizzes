@@ -2,16 +2,28 @@ import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Plus, Trash2, Image, X, Upload, Loader2, Pencil, Sparkles, ChevronRight, ChevronLeft } from "lucide-react";
 import { useCreatePersonalityTest } from "@/hooks/usePersonalityTests";
+import { useSubmitForReview } from "@/hooks/useQuizzes";
 import { useImageUpload, resizeImage } from "@/hooks/useImageUpload";
 import { haptic } from "@/lib/telegram";
 import { formatQuestionCount } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { GifImage } from "@/components/GifImage";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { AiGenerateDialog } from "@/components/ai/AiGenerateDialog";
+import type { AiPersonalityTestVariant } from "@/hooks/useAiGeneration";
 
 interface CreatePersonalityTestScreenProps {
   onBack: () => void;
-  onSuccess: () => void;
+  onSuccess: (payload: CreatePersonalityTestSuccessPayload) => void;
+}
+
+export interface CreatePersonalityTestSuccessPayload {
+  testId: string;
+  title: string;
+  description?: string | null;
+  isPendingModeration: boolean;
 }
 
 interface ResultDraft {
@@ -51,6 +63,10 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
 
   // Questions
   const [questions, setQuestions] = useState<QuestionDraft[]>([]);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [editQuestionIndex, setEditQuestionIndex] = useState<number | null>(null);
+  const [editQuestionText, setEditQuestionText] = useState("");
+  const [editAnswerTexts, setEditAnswerTexts] = useState<string[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<QuestionDraft>({
     question_text: "",
     image_url: "",
@@ -59,6 +75,7 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const createTest = useCreatePersonalityTest();
+  const submitForReview = useSubmitForReview();
   const { uploadImage, isUploading } = useImageUpload();
 
   // ===== Handlers =====
@@ -183,6 +200,60 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
     setQuestions(questions.filter((_, i) => i !== index));
   };
 
+  const openEditQuestion = (index: number) => {
+    const q = questions[index];
+    if (!q) return;
+
+    const visibleResults = results.filter((r) => r.title.trim());
+    const findAnswerText = (resultKey: string) => {
+      const a = (q.answers || []).find((ans) => ans?.result_points && Object.prototype.hasOwnProperty.call(ans.result_points, resultKey));
+      return a?.answer_text || "";
+    };
+
+    setEditQuestionIndex(index);
+    setEditQuestionText(q.question_text || "");
+    setEditAnswerTexts(visibleResults.map((r) => findAnswerText(r.result_key)));
+  };
+
+  const saveEditedQuestion = () => {
+    if (editQuestionIndex === null) return;
+
+    const text = editQuestionText.trim();
+    if (!text) {
+      toast({ title: "Введите текст вопроса" });
+      return;
+    }
+
+    const visibleResults = results.filter((r) => r.title.trim());
+    const answers = visibleResults
+      .map((r, idx) => ({
+        answer_text: (editAnswerTexts[idx] || "").trim(),
+        result_points: { [r.result_key]: 1 },
+      }))
+      .filter((a) => a.answer_text.trim());
+
+    if (answers.length < 2) {
+      toast({ title: "Добавьте минимум 2 варианта ответа" });
+      return;
+    }
+
+    const updated = [...questions];
+    const prev = updated[editQuestionIndex];
+    if (!prev) return;
+
+    updated[editQuestionIndex] = {
+      ...prev,
+      question_text: text,
+      answers,
+    };
+
+    setQuestions(updated);
+    setEditQuestionIndex(null);
+    setEditQuestionText("");
+    setEditAnswerTexts([]);
+    toast({ title: "Вопрос обновлён" });
+  };
+
   const updateAnswerText = (answerIndex: number, text: string) => {
     const updated = { ...currentQuestion };
     updated.answers[answerIndex].answer_text = text;
@@ -228,12 +299,28 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
         ? testStatus === "pending"
         : (createdTest as any)?.is_published !== true;
 
+      if (isPendingModeration) {
+        try {
+          await submitForReview.mutateAsync({
+            contentId: createdTest.id,
+            contentType: "personality_test",
+          });
+        } catch (reviewError) {
+          console.error("Submit personality test for review error:", reviewError);
+        }
+      }
+
       haptic.notification('success');
       toast({
         title: "Тест создан!",
         description: isPendingModeration ? "Отправлен на модерацию" : "Сразу опубликован в прод.",
       });
-      onSuccess();
+      onSuccess({
+        testId: createdTest.id,
+        title,
+        description,
+        isPendingModeration,
+      });
     } catch (error: any) {
       console.error("Create test error:", error);
       toast({ title: "Ошибка", description: error.message || "Не удалось создать тест" });
@@ -247,6 +334,24 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
       <div className="flex items-center gap-2 mb-4">
         <Sparkles className="w-5 h-5 text-purple-500" />
         <h2 className="text-lg font-semibold">Основная информация</h2>
+      </div>
+
+      {/* AI generation */}
+      <div className="p-4 rounded-xl bg-card border border-border">
+        <button
+          type="button"
+          className="w-full py-3 rounded-xl bg-secondary text-foreground font-medium flex items-center justify-center gap-2 hover:bg-secondary/80"
+          onClick={() => {
+            haptic.selection();
+            setAiOpen(true);
+          }}
+        >
+          <Sparkles className="w-4 h-4 text-purple-500" />
+          Создать с AI (3 варианта)
+        </button>
+        <p className="text-xs text-muted-foreground mt-2">
+          Опиши тему и персонажей. AI заполнит результаты и вопросы. Картинки добавишь вручную.
+        </p>
       </div>
 
       {/* Cover Image */}
@@ -397,6 +502,9 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
           {questions.map((q, index) => (
             <div key={index} className="p-3 rounded-xl bg-card border border-border flex items-center justify-between">
               <span className="text-sm text-foreground line-clamp-1 flex-1">{q.question_text}</span>
+              <button onClick={() => openEditQuestion(index)} className="text-primary ml-2" title="Редактировать">
+                <Pencil className="w-4 h-4" />
+              </button>
               <button onClick={() => removeQuestion(index)} className="text-red-500 ml-2">
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -541,6 +649,116 @@ export const CreatePersonalityTestScreen = ({ onBack, onSuccess }: CreatePersona
           </button>
         )}
       </div>
+
+      {/* AI dialog */}
+      <AiGenerateDialog
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        contentType="personality_test"
+        onApply={(variant) => {
+          const v = variant as AiPersonalityTestVariant;
+          haptic.impact("light");
+
+          const mappedResults = (v.results || []).map((r) => ({
+            result_key: r.result_key,
+            title: r.title,
+            description: r.description,
+            image_url: "",
+            share_text: r.share_text || "",
+          }));
+
+          setTitle(v.title || "");
+          setDescription(v.description || "");
+          setResults(mappedResults);
+          setQuestions((v.questions || []).map((q) => ({
+            question_text: q.question_text,
+            image_url: "",
+            answers: (q.answers || []).map((a) => ({
+              answer_text: a.answer_text,
+              result_points: a.result_points,
+            })),
+          })));
+          setCurrentQuestion({
+            question_text: "",
+            image_url: "",
+            answers: mappedResults.map((r) => ({ answer_text: "", result_points: { [r.result_key]: 1 } })),
+          });
+          setStep("results");
+          toast({ title: "Вариант применён", description: "Проверь результаты и вопросы перед публикацией." });
+        }}
+      />
+
+      {/* Edit question modal */}
+      <Dialog
+        open={editQuestionIndex !== null}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setEditQuestionIndex(null);
+            setEditQuestionText("");
+            setEditAnswerTexts([]);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg rounded-2xl p-5">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-base">Редактировать вопрос</DialogTitle>
+          </DialogHeader>
+
+          {editQuestionIndex !== null ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Текст вопроса</label>
+                <input
+                  type="text"
+                  value={editQuestionText}
+                  onChange={(e) => setEditQuestionText(e.target.value)}
+                  className="w-full p-3 rounded-xl bg-muted border border-border text-foreground"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">Варианты ответов (1 ответ на 1 результат):</p>
+
+                {results.filter((r) => r.title.trim()).map((result, idx) => (
+                  <div key={result.result_key} className="space-y-2">
+                    <label className="text-xs text-purple-500 font-medium">
+                      → {result.title}
+                    </label>
+                    <input
+                      type="text"
+                      value={editAnswerTexts[idx] || ""}
+                      onChange={(e) => {
+                        const next = [...editAnswerTexts];
+                        next[idx] = e.target.value;
+                        setEditAnswerTexts(next);
+                      }}
+                      placeholder={`Ответ для "${result.title}"`}
+                      className="w-full p-2 rounded-lg bg-muted border border-border text-foreground text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <Button className="flex-1" onClick={saveEditedQuestion}>
+                  Сохранить
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => {
+                    setEditQuestionIndex(null);
+                    setEditQuestionText("");
+                    setEditAnswerTexts([]);
+                  }}
+                >
+                  Отмена
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 };

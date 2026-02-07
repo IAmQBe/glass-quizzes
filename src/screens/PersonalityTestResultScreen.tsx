@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Share2, Users, Home, RotateCcw, Sparkles } from "lucide-react";
 import { PersonalityTestResult } from "@/hooks/usePersonalityTests";
+import { useTrackEvent } from "@/hooks/useTrackEvent";
 import { haptic, sharePersonalityTestResult } from "@/lib/telegram";
 import { GifImage } from "@/components/GifImage";
 
@@ -21,7 +22,14 @@ export const PersonalityTestResultScreen = ({
   onRetry,
   onChallenge,
 }: PersonalityTestResultScreenProps) => {
+  const { track } = useTrackEvent();
+
   const handleShare = () => {
+    track("test_share", {
+      test_id: testId,
+      result_id: result.id,
+      share_type: "inline",
+    });
     haptic.notification('success');
     sharePersonalityTestResult(result.title, result.share_text || result.description, testId, testTitle, result.image_url);
   };

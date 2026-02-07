@@ -34,6 +34,7 @@ interface PredictionDetailsScreenProps {
   prediction: PredictionPoll;
   canManage: boolean;
   hasPredictionAccess: boolean;
+  onRequirePredictionAccess: () => void;
   onBack: () => void;
   onPredictionChange: (nextPrediction: PredictionPoll) => void;
 }
@@ -83,6 +84,7 @@ export const PredictionDetailsScreen = ({
   prediction,
   canManage,
   hasPredictionAccess,
+  onRequirePredictionAccess,
   onBack,
   onPredictionChange,
 }: PredictionDetailsScreenProps) => {
@@ -147,11 +149,13 @@ export const PredictionDetailsScreen = ({
   const handleShare = () => {
     haptic.selection();
     const tg = getTelegram();
+    const userId = tg?.initDataUnsafe?.user?.id;
+    const inlineQuery = userId ? `poll:${prediction.id}:${userId}` : `poll:${prediction.id}`;
     if (tg?.switchInlineQuery) {
-      tg.switchInlineQuery(`poll:${prediction.id}`, ["users", "groups", "channels"]);
+      tg.switchInlineQuery(inlineQuery, ["users", "groups", "channels"]);
       return;
     }
-    navigator.clipboard.writeText(`poll:${prediction.id}`);
+    navigator.clipboard.writeText(inlineQuery);
     toast({ title: "Скопировано", description: "Inline query скопирован в буфер." });
   };
 
@@ -167,7 +171,7 @@ export const PredictionDetailsScreen = ({
     if (!modeAvailability.stake) {
       toast({
         title: "Режим недоступен",
-        description: "В этом прогнозе отключены ставки.",
+        description: "В этом событии отключены ставки.",
       });
       return;
     }
@@ -175,15 +179,16 @@ export const PredictionDetailsScreen = ({
     if (!hasPredictionAccess) {
       toast({
         title: "Доступ ограничен",
-        description: "Нужно пройти минимум 1 квиз для участия в ставках.",
+        description: "Нужно пройти минимум 1 квест или тест для участия.",
       });
+      onRequirePredictionAccess();
       return;
     }
 
     if (prediction.status !== "open") {
       toast({
         title: "Ставки закрыты",
-        description: "Этот прогноз уже не принимает новые ставки.",
+        description: "Это событие уже не принимает новые ставки.",
       });
       return;
     }
@@ -191,7 +196,7 @@ export const PredictionDetailsScreen = ({
     if (participation) {
       toast({
         title: "Ты уже участвуешь",
-        description: "В одном прогнозе можно выбрать только один формат участия.",
+        description: "В одном событии можно выбрать только один формат участия.",
       });
       return;
     }
@@ -204,7 +209,7 @@ export const PredictionDetailsScreen = ({
     if (stake > STAKE_CAP_PER_PREDICTION) {
       toast({
         title: "Превышен лимит",
-        description: `Максимум ${STAKE_CAP_PER_PREDICTION} 🍿 на один прогноз.`,
+        description: `Максимум ${STAKE_CAP_PER_PREDICTION} 🍿 на одно событие.`,
       });
       return;
     }
@@ -242,7 +247,7 @@ export const PredictionDetailsScreen = ({
     if (!modeAvailability.vote) {
       toast({
         title: "Режим недоступен",
-        description: "В этом прогнозе отключены голоса за репутацию.",
+        description: "В этом событии отключены голоса за репутацию.",
       });
       return;
     }
@@ -250,15 +255,16 @@ export const PredictionDetailsScreen = ({
     if (!hasPredictionAccess) {
       toast({
         title: "Доступ ограничен",
-        description: "Нужно пройти минимум 1 квиз для участия.",
+        description: "Нужно пройти минимум 1 квест или тест для участия.",
       });
+      onRequirePredictionAccess();
       return;
     }
 
     if (prediction.status !== "open") {
       toast({
         title: "Голосование закрыто",
-        description: "Прогноз уже закрыт для новых участников.",
+        description: "Событие уже закрыто для новых участников.",
       });
       return;
     }
@@ -313,7 +319,7 @@ export const PredictionDetailsScreen = ({
 
   const handleApprove = () => {
     if (!["pending", "rejected"].includes(prediction.status)) return;
-    void runModerationAction("approve", undefined, "Прогноз опубликован");
+    void runModerationAction("approve", undefined, "Событие опубликовано");
   };
 
   const handleReject = () => {
@@ -329,7 +335,7 @@ export const PredictionDetailsScreen = ({
     void runModerationAction(
       "reject",
       { rejection_reason: reason },
-      "Прогноз отклонен",
+      "Событие отклонено",
       "Автор увидит причину отклонения."
     );
   };
@@ -348,7 +354,7 @@ export const PredictionDetailsScreen = ({
     if (!["locked", "pending_resolution", "under_review"].includes(prediction.status)) {
       toast({
         title: "Сейчас резолв недоступен",
-        description: "Сначала переведи прогноз в locked/pending_resolution.",
+        description: "Сначала переведи событие в locked/pending_resolution.",
       });
       return;
     }
@@ -372,34 +378,35 @@ export const PredictionDetailsScreen = ({
   };
 
   const handleCancel = () => {
-    const shouldCancel = window.confirm("Отменить прогноз?");
+    const shouldCancel = window.confirm("Отменить событие?");
     if (!shouldCancel) return;
 
-    void runModerationAction("cancel", undefined, "Прогноз отменен");
+    void runModerationAction("cancel", undefined, "Событие отменено");
   };
 
   const handleToggleHidden = () => {
     void runModerationAction(
       "toggle_hidden",
       undefined,
-      prediction.is_hidden ? "Прогноз снова виден" : "Прогноз скрыт"
+      prediction.is_hidden ? "Событие снова видно" : "Событие скрыто"
     );
   };
 
   const handleReport = async () => {
     try {
+      haptic.impact("light");
       const result = await reportPrediction.mutateAsync({ pollId: prediction.id });
       patchPrediction(result.updated_poll_patch);
       toast({
         title: "Репорт отправлен",
         description: result.transitioned_to_under_review
-          ? "Прогноз автоматически отправлен на проверку."
+          ? "Событие автоматически отправлено на проверку."
           : "Спасибо, жалоба зафиксирована.",
       });
     } catch (error: any) {
       const code = error?.code;
       if (code === "already_reported") {
-        toast({ title: "Уже отправлено", description: "Ты уже жаловался на этот прогноз." });
+        toast({ title: "Уже отправлено", description: "Ты уже жаловался на это событие." });
         return;
       }
       toast({
@@ -428,7 +435,7 @@ export const PredictionDetailsScreen = ({
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
-          <h1 className="text-lg font-semibold text-foreground">Прогноз</h1>
+          <h1 className="text-lg font-semibold text-foreground">Событие</h1>
           <div className="w-10" />
         </div>
       </div>
@@ -514,9 +521,9 @@ export const PredictionDetailsScreen = ({
                     <Info className="w-3.5 h-3.5" /> Игровые попкорны, без вывода
                   </button>
                 </SheetTrigger>
-                <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
-                  <SheetHeader>
-                    <SheetTitle>Правила прогнозов</SheetTitle>
+                  <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
+                    <SheetHeader>
+                    <SheetTitle>Правила событий</SheetTitle>
                     <SheetDescription>Коротко о механике, лимитах и модерации.</SheetDescription>
                   </SheetHeader>
                   <div className="mt-4 space-y-3 text-sm">
@@ -529,15 +536,15 @@ export const PredictionDetailsScreen = ({
                     </div>
                     <div className="rounded-xl bg-secondary p-3">
                       <p className="font-medium text-foreground">Лимиты и анти-абуз</p>
-                      <p className="text-muted-foreground mt-1">
-                        Лимит ставки на один прогноз: {STAKE_CAP_PER_PREDICTION} 🍿. Для участия нужен прогрев
-                        аккаунта (минимум 1 квиз или другой валидный сигнал).
-                      </p>
-                    </div>
+	                      <p className="text-muted-foreground mt-1">
+	                        Лимит ставки на одно событие: {STAKE_CAP_PER_PREDICTION} 🍿. Для участия нужен прогрев
+	                        аккаунта (минимум 1 квест или тест).
+	                      </p>
+	                    </div>
                     <div className="rounded-xl bg-secondary p-3">
                       <p className="font-medium text-foreground">Модерация</p>
                       <p className="text-muted-foreground mt-1">
-                        Прогнозы с большим числом репортов отправляются на проверку. Резолв возможен только с
+                        События с большим числом репортов отправляются на проверку. Резолв возможен только с
                         proof URL.
                       </p>
                     </div>
@@ -553,7 +560,7 @@ export const PredictionDetailsScreen = ({
             <div className="rounded-xl border border-border px-3 py-2 text-xs inline-flex items-center gap-2">
               <ShieldCheck className={`w-3.5 h-3.5 ${hasPredictionAccess ? "text-green-500" : "text-amber-500"}`} />
               <span className="text-muted-foreground">
-                {hasPredictionAccess ? "Доступ разрешен" : "Нужно пройти 1 квиз"}
+                {hasPredictionAccess ? "Доступ разрешен" : "Нужно пройти 1 квест или тест"}
               </span>
             </div>
 
@@ -692,9 +699,9 @@ export const PredictionDetailsScreen = ({
           </div>
         )}
 
-        {canManage && activeTab === "admin" && (
-          <div className="tg-section p-4 space-y-3">
-            <h3 className="font-semibold text-foreground">Управление прогнозом</h3>
+	        {canManage && activeTab === "admin" && (
+	          <div className="tg-section p-4 space-y-3">
+	            <h3 className="font-semibold text-foreground">Управление событием</h3>
 
             <div className="text-xs text-muted-foreground">
               Статус: <span className="text-foreground">{predictionStatusLabel[prediction.status]}</span>

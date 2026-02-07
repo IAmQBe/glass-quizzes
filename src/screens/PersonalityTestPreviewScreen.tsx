@@ -32,6 +32,8 @@ interface PersonalityTestPreviewScreenProps {
     save_count: number;
     is_anonymous?: boolean;
     creator?: CreatorInfo | null;
+    is_published?: boolean;
+    status?: string | null;
   };
   isLiked?: boolean;
   isSaved?: boolean;
@@ -50,6 +52,21 @@ export const PersonalityTestPreviewScreen = ({
   onToggleLike,
   onToggleSave,
 }: PersonalityTestPreviewScreenProps) => {
+  const moderationState = (() => {
+    if (test.is_published === true || test.status === "published") return "published";
+    if (test.status === "pending" || test.status === "reviewing") return "pending";
+    if (test.status === "rejected") return "rejected";
+    return "draft";
+  })();
+  const isPublished = moderationState === "published";
+  const moderationBadgeLabel = moderationState === "pending"
+    ? "На проверке"
+    : moderationState === "rejected"
+      ? "Отклонён"
+      : moderationState === "draft"
+        ? "Черновик"
+        : null;
+
   const handleSquadClick = () => {
     if (test.is_anonymous || !test.creator?.squad) return;
     haptic.impact('light');
@@ -104,13 +121,17 @@ export const PersonalityTestPreviewScreen = ({
             <Sparkles className="w-5 h-5 text-purple-500" />
             Тест личности
           </h1>
-          <button
-            onClick={handleShare}
-            className="p-2 -mr-2 rounded-full hover:bg-secondary"
-            aria-label="Поделиться тестом"
-          >
-            <Share2 className="w-5 h-5" />
-          </button>
+          {isPublished ? (
+            <button
+              onClick={handleShare}
+              className="p-2 -mr-2 rounded-full hover:bg-secondary"
+              aria-label="Поделиться тестом"
+            >
+              <Share2 className="w-5 h-5" />
+            </button>
+          ) : (
+            <div className="w-9" />
+          )}
         </div>
       </div>
 
@@ -143,9 +164,29 @@ export const PersonalityTestPreviewScreen = ({
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.05 }}
         >
-          <h2 className="text-2xl font-bold text-foreground mb-2">{test.title}</h2>
+          <div className="flex items-center gap-2 mb-2">
+            <h2 className="text-2xl font-bold text-foreground">{test.title}</h2>
+            {moderationBadgeLabel && (
+              <span
+                className={`text-xs px-2 py-1 rounded-full ${
+                  moderationState === "pending"
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                    : moderationState === "rejected"
+                      ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                      : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                {moderationBadgeLabel}
+              </span>
+            )}
+          </div>
           {test.description && (
             <p className="text-muted-foreground">{test.description}</p>
+          )}
+          {!isPublished && moderationState === "pending" && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Тест проходит модерацию. После проверки он станет доступен всем.
+            </p>
           )}
         </motion.div>
 
@@ -206,7 +247,7 @@ export const PersonalityTestPreviewScreen = ({
             </div>
           </div>
           <div className="flex items-center gap-2 justify-self-end">
-            {onToggleLike && (
+            {isPublished && onToggleLike && (
               <button
                 onClick={handleLike}
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors shadow-sm ${
@@ -219,7 +260,7 @@ export const PersonalityTestPreviewScreen = ({
                 <span>{formatCount(test.like_count)}</span>
               </button>
             )}
-            {onToggleSave && (
+            {isPublished && onToggleSave && (
               <button
                 onClick={handleSave}
                 className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors shadow-sm ${
@@ -262,20 +303,31 @@ export const PersonalityTestPreviewScreen = ({
 
       {/* Fixed Start Button */}
       <div className="fixed bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-background via-background to-transparent pb-safe">
-        <motion.button
-          onClick={() => {
-            haptic.impact('medium');
-            onStart();
-          }}
-          className="w-full flex items-center justify-center gap-2 text-lg py-4 rounded-2xl font-semibold bg-purple-500 text-white"
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.25 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <Sparkles className="w-5 h-5" />
-          Узнать кто я
-        </motion.button>
+        {isPublished ? (
+          <motion.button
+            onClick={() => {
+              haptic.impact('medium');
+              onStart();
+            }}
+            className="w-full flex items-center justify-center gap-2 text-lg py-4 rounded-2xl font-semibold bg-purple-500 text-white"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.25 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <Sparkles className="w-5 h-5" />
+            Узнать кто я
+          </motion.button>
+        ) : (
+          <motion.div
+            className="w-full rounded-2xl py-4 text-center text-sm font-medium bg-secondary text-muted-foreground"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.25 }}
+          >
+            {moderationState === "pending" ? "Тест на проверке модераторами" : "Тест пока недоступен"}
+          </motion.div>
+        )}
       </div>
     </motion.div>
   );

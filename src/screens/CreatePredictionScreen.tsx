@@ -89,7 +89,7 @@ export const CreatePredictionScreen = ({ onBack, onCreated, eligibility }: Creat
     if (!(eligibility?.eligible ?? false)) {
       toast({
         title: "Доступ ограничен",
-        description: "Сначала выполните требования создания прогноза.",
+        description: "Сначала выполните требования создания события.",
       });
       return;
     }
@@ -97,7 +97,7 @@ export const CreatePredictionScreen = ({ onBack, onCreated, eligibility }: Creat
     if (!effectiveSquadId) {
       toast({
         title: "Выбери сквад",
-        description: "Для создания прогноза нужно выбрать команду.",
+        description: "Для создания события нужно выбрать команду.",
       });
       return;
     }
@@ -135,14 +135,14 @@ export const CreatePredictionScreen = ({ onBack, onCreated, eligibility }: Creat
 
       const isPendingModeration = result.next_status === "pending";
       toast({
-        title: isPendingModeration ? "Отправлено на модерацию" : "Прогноз опубликован",
+        title: isPendingModeration ? "Отправлено на модерацию" : "Событие опубликовано",
         description: isPendingModeration
-          ? "После одобрения администратором прогноз появится в ленте."
+          ? "После одобрения администратором событие появится в ленте."
           : "Событие сразу доступно в прод.",
       });
       onCreated(result.poll_id || "");
     } catch (error: any) {
-      const message = error?.message || "Не удалось создать прогноз";
+      const message = error?.message || "Не удалось создать событие";
       toast({
         title: "Ошибка",
         description: message,
@@ -168,7 +168,7 @@ export const CreatePredictionScreen = ({ onBack, onCreated, eligibility }: Creat
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
-          <h1 className="text-lg font-semibold text-foreground">Создать прогноз</h1>
+          <h1 className="text-lg font-semibold text-foreground">Создать событие</h1>
           <div className="w-10" />
         </div>
       </div>
@@ -266,7 +266,7 @@ export const CreatePredictionScreen = ({ onBack, onCreated, eligibility }: Creat
           </div>
 
           <button onClick={handleSubmit} disabled={!canSubmit} className="tg-button disabled:opacity-60">
-            {createPrediction.isPending ? "Создаём..." : "Создать прогноз"}
+            {createPrediction.isPending ? "Создаём..." : "Создать событие"}
           </button>
         </div>
       </div>

@@ -2,7 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { trackEvent } from "@/hooks/useTrackEvent";
+import { initUser } from "@/lib/user";
 import {
+  AdminDeletePredictionPollResult,
+  AdminUpdatePredictionPollPayload,
+  AdminUpdatePredictionPollResult,
   CreatePredictionPayload,
   CreatePredictionResult,
   ModeratePredictionPayload,
@@ -137,6 +141,22 @@ const normalizeUpdatedPollPatch = (row: any): Partial<PredictionPoll> => {
 
   const patch: Partial<PredictionPoll> = {};
 
+  if (hasOwn(updated, "title")) {
+    patch.title = toNullableString(updated.title) || "Без названия";
+  }
+  if (hasOwn(updated, "option_a_label")) {
+    patch.option_a_label = toNullableString(updated.option_a_label) || "Вариант A";
+  }
+  if (hasOwn(updated, "option_b_label")) {
+    patch.option_b_label = toNullableString(updated.option_b_label) || "Вариант B";
+  }
+  if (hasOwn(updated, "cover_image_url")) {
+    patch.cover_image_url = toNullableString(updated.cover_image_url) || "/placeholder.svg";
+  }
+  if (hasOwn(updated, "deadline_at")) {
+    patch.deadline_at = toNullableString(updated.deadline_at) || new Date().toISOString();
+  }
+
   if (hasOwn(updated, "status")) {
     patch.status = (toNullableString(updated.status) as PredictionStatus) || "open";
   }
@@ -210,6 +230,22 @@ const normalizeReportResult = (row: any): ReportPredictionResult => ({
   error_code: toNullableString(row?.error_code),
   error_message: toNullableString(row?.error_message),
   updated_poll_patch: normalizeUpdatedPollPatch(row),
+});
+
+const normalizeAdminUpdateResult = (row: any): AdminUpdatePredictionPollResult => ({
+  success: toBoolean(row?.success),
+  poll_id: toNullableString(row?.poll_id),
+  error_code: toNullableString(row?.error_code),
+  error_message: toNullableString(row?.error_message),
+  updated_poll_patch: normalizeUpdatedPollPatch(row),
+});
+
+const normalizeAdminDeleteResult = (row: any): AdminDeletePredictionPollResult => ({
+  success: toBoolean(row?.success),
+  poll_id: toNullableString(row?.poll_id),
+  operation: toNullableString(row?.operation),
+  error_code: toNullableString(row?.error_code),
+  error_message: toNullableString(row?.error_message),
 });
 
 const normalizePoll = (row: any, squadTitleMap: Map<string, string>): PredictionPoll => {
@@ -400,7 +436,7 @@ export const useCreatePredictionPoll = () => {
       const result = normalizeCreateResult(row);
 
       if (!result.success) {
-        buildPredictionError(result.error_message || "Не удалось создать прогноз", result.error_code);
+        buildPredictionError(result.error_message || "Не удалось создать событие", result.error_code);
       }
 
       if (result.poll_id && !result.next_status) {
@@ -478,6 +514,24 @@ export const useReportPredictionPoll = () => {
 
   return useMutation({
     mutationFn: async ({ pollId, reason }: { pollId: string; reason?: string }): Promise<ReportPredictionResult> => {
+      // Report RPC relies on auth.uid(); ensure we have a session before calling it.
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        const initialized = await initUser();
+        if (!initialized) {
+          buildPredictionError("Нужна авторизация", "auth_required");
+        }
+
+        const {
+          data: { user: userAfterInit },
+        } = await supabase.auth.getUser();
+        if (!userAfterInit) {
+          buildPredictionError("Нужна авторизация", "auth_required");
+        }
+      }
+
       const { data, error } = await (supabase as any).rpc("prediction_report_poll", {
         p_poll_id: pollId,
         p_reason: reason || null,
@@ -509,6 +563,69 @@ export const useReportPredictionPoll = () => {
       if (result.poll_id && result.transitioned_to_under_review) {
         void notifyPredictionModerationEvent(result.poll_id, "under_review");
       }
+    },
+  });
+};
+
+export const useAdminUpdatePredictionPoll = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: AdminUpdatePredictionPollPayload): Promise<AdminUpdatePredictionPollResult> => {
+      const { data, error } = await (supabase as any).rpc("prediction_admin_update_poll", {
+        p_poll_id: payload.poll_id,
+        p_title: payload.title ?? null,
+        p_option_a_label: payload.option_a_label ?? null,
+        p_option_b_label: payload.option_b_label ?? null,
+        p_cover_image_url: payload.cover_image_url ?? null,
+        p_deadline_at: payload.deadline_at ?? null,
+        p_stake_enabled: payload.stake_enabled ?? null,
+        p_vote_enabled: payload.vote_enabled ?? null,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const row = Array.isArray(data) ? data[0] : data;
+      const result = normalizeAdminUpdateResult(row);
+
+      if (!result.success) {
+        buildPredictionError(result.error_message || "Не удалось обновить событие", result.error_code);
+      }
+
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["predictionPolls"] });
+    },
+  });
+};
+
+export const useAdminDeletePredictionPoll = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (pollId: string): Promise<AdminDeletePredictionPollResult> => {
+      const { data, error } = await (supabase as any).rpc("prediction_admin_delete_poll", {
+        p_poll_id: pollId,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const row = Array.isArray(data) ? data[0] : data;
+      const result = normalizeAdminDeleteResult(row);
+
+      if (!result.success) {
+        buildPredictionError(result.error_message || "Не удалось удалить событие", result.error_code);
+      }
+
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["predictionPolls"] });
     },
   });
 };

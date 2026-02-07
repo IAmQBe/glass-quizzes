@@ -1,20 +1,79 @@
 import { Context, InlineKeyboard, InlineQueryResultBuilder } from 'grammy';
 import type { InlineQueryResultArticle, InlineQueryResult } from 'grammy/types';
-import { getPublishedQuizzes, getRandomQuiz, getDailyQuiz, Quiz, getPublishedPersonalityTests, PersonalityTest } from '../../lib/supabase.js';
+import {
+  getDailyQuiz,
+  getPersonalityTestById,
+  getPublishedPersonalityTests,
+  getPublishedQuizzes,
+  getQuizById,
+  getRandomQuiz,
+  PersonalityTest,
+  Quiz,
+} from '../../lib/supabase.js';
 import { buildStartParam } from '../../lib/telegram.js';
 import { supabase } from '../../lib/supabase.js';
 import {
   escapeTelegramMarkdown,
+  parsePollInlineQuery,
+  parseQuizInviteInlineQuery,
   parseQuizResultInlineQuery,
+  parseTestInviteInlineQuery,
   parseTestResultInlineQuery,
   resolveInlineRefUserId,
 } from './inlineParsing.js';
 
 const BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'QuipoBot';
+const CAPTION_LIMIT = 1024;
+const INLINE_BUTTON_TEXT_LIMIT = 64;
 
 // Build URL for inline buttons - direct Mini App link with Short Name
 function buildDeepLink(startParam: string): string {
   return `https://t.me/${BOT_USERNAME}/app?startapp=${startParam}`;
+}
+
+function truncateText(value: string, maxLength: number): string {
+  const raw = value.trim();
+  if (raw.length <= maxLength) return raw;
+  if (maxLength <= 3) return raw.slice(0, maxLength);
+  return `${raw.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
+function sanitizeInlineButtonText(value: string | null | undefined, fallback: string): string {
+  const text = (value || '').trim() || fallback;
+  return truncateText(text, INLINE_BUTTON_TEXT_LIMIT);
+}
+
+function stripTrailingBackslashes(value: string): string {
+  return value.replace(/\\+$/, '');
+}
+
+function buildInlineCaption(params: {
+  titleLine: string; // already escaped for Markdown if needed
+  description?: string; // already escaped for Markdown if needed
+  ctaLine?: string; // already escaped for Markdown if needed
+}): string {
+  const titleLine = params.titleLine.trim();
+  const description = (params.description || '').trim();
+  const ctaLine = (params.ctaLine || '').trim();
+
+  const ctaBlock = ctaLine ? `\n\n${ctaLine}` : '';
+  if (!description) {
+    return `${titleLine}${ctaBlock}`.slice(0, CAPTION_LIMIT);
+  }
+
+  // Always keep title + CTA; truncate the description to fit into caption limit.
+  const availableDescriptionLength = CAPTION_LIMIT - (titleLine.length + 2 + ctaBlock.length); // 2 for \n\n
+  if (availableDescriptionLength <= 0) {
+    return `${titleLine}${ctaBlock}`.slice(0, CAPTION_LIMIT);
+  }
+
+  let finalDescription = description;
+  if (finalDescription.length > availableDescriptionLength) {
+    finalDescription = truncateText(finalDescription, availableDescriptionLength);
+    finalDescription = stripTrailingBackslashes(finalDescription);
+  }
+
+  return `${titleLine}\n\n${finalDescription}${ctaBlock}`.slice(0, CAPTION_LIMIT);
 }
 
 // Check if URL is a valid http(s) URL (not data URL, not empty)
@@ -31,7 +90,7 @@ function buildQuizResult(
   userId: number,
   resultId: string,
   options?: { isDaily?: boolean; isRandom?: boolean }
-): InlineQueryResultArticle {
+): InlineQueryResult {
   const startParam = buildStartParam({
     questId: quiz.id,
     refUserId: userId,
@@ -39,39 +98,37 @@ function buildQuizResult(
   });
 
   const emoji = options?.isDaily ? '📅' : options?.isRandom ? '🎲' : '🧠';
-  const label = options?.isDaily ? 'Daily Quiz' : options?.isRandom ? 'Random Quiz' : '';
+  const minutes = Math.max(1, Math.round((quiz.duration_seconds || 0) / 60));
+  const descriptionText = (quiz.description || '').trim() || `⏱ ${minutes} мин • ${quiz.question_count} вопросов`;
 
-  return {
-    type: 'article',
-    id: resultId,
-    title: `${emoji} ${label ? label + ': ' : ''}${quiz.title}`,
-    description: quiz.description || `${quiz.question_count} questions • ${Math.floor(quiz.duration_seconds / 60)}min`,
-    thumbnail_url: quiz.image_url || 'https://via.placeholder.com/100x100.png?text=Quiz',
-    input_message_content: {
-      message_text:
-        `${emoji} *${quiz.title}*\n\n` +
-        `${quiz.description || 'Test your knowledge!'}\n\n` +
-        `📊 ${quiz.participant_count.toLocaleString()} played • ❤️ ${quiz.like_count} likes\n` +
-        `⏱ ${quiz.question_count} questions`,
+  const caption = buildInlineCaption({
+    titleLine: `${emoji} *${escapeTelegramMarkdown(quiz.title)}*`,
+    description: escapeTelegramMarkdown(descriptionText),
+    ctaLine: '👉 Пройди квиз 👇',
+  });
+
+  const buttonText = sanitizeInlineButtonText(quiz.title, '🎯 Пройти квиз');
+  const keyboard = new InlineKeyboard().url(buttonText, buildDeepLink(startParam));
+
+  const finalImageUrl = quiz.image_url && isValidImageUrl(quiz.image_url) ? quiz.image_url : null;
+  if (finalImageUrl) {
+    return InlineQueryResultBuilder.photo(resultId, finalImageUrl, {
+      thumbnail_url: finalImageUrl,
+      photo_width: 640,
+      photo_height: 640,
+      title: `${emoji} ${quiz.title}`,
+      description: truncateText(descriptionText, 100),
+      caption,
       parse_mode: 'Markdown',
-    },
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: '🎯 Take the Quiz',
-            url: buildDeepLink(startParam),
-          },
-        ],
-        [
-          {
-            text: '📤 Challenge a Friend',
-            switch_inline_query: quiz.title,
-          },
-        ],
-      ],
-    },
-  };
+      reply_markup: keyboard,
+    });
+  }
+
+  return InlineQueryResultBuilder.article(resultId, `${emoji} ${quiz.title}`, {
+    description: truncateText(descriptionText, 100),
+    thumbnail_url: 'https://via.placeholder.com/100x100.png?text=Quiz',
+    reply_markup: keyboard,
+  }).text(caption, { parse_mode: 'Markdown' });
 }
 
 /**
@@ -81,44 +138,44 @@ function buildPersonalityTestResult(
   test: PersonalityTest,
   userId: number,
   resultId: string
-): InlineQueryResultArticle {
+): InlineQueryResult {
   const startParam = buildStartParam({
     testId: test.id,
     refUserId: userId,
     source: 'inline_test',
   });
 
-  return {
-    type: 'article',
-    id: resultId,
-    title: `🎭 ${test.title}`,
-    description: test.description || `${test.question_count} вопросов • ${test.result_count} результатов`,
-    thumbnail_url: test.image_url || 'https://via.placeholder.com/100x100.png?text=Test',
-    input_message_content: {
-      message_text:
-        `🎭 *${test.title}*\n\n` +
-        `${test.description || 'Узнай кто ты!'}\n\n` +
-        `📊 ${test.participant_count.toLocaleString()} прошли • ${test.result_count} результатов\n` +
-        `⏱ ${test.question_count} вопросов`,
+  const descriptionText =
+    (test.description || '').trim() || `${test.question_count} вопросов • ${test.result_count} результатов`;
+
+  const caption = buildInlineCaption({
+    titleLine: `🎭 *${escapeTelegramMarkdown(test.title)}*`,
+    description: escapeTelegramMarkdown(descriptionText),
+    ctaLine: '👉 А ты кто? Пройди тест 👇',
+  });
+
+  const buttonText = sanitizeInlineButtonText(test.title, '🧪 Пройти тест');
+  const keyboard = new InlineKeyboard().url(buttonText, buildDeepLink(startParam));
+
+  const finalImageUrl = test.image_url && isValidImageUrl(test.image_url) ? test.image_url : null;
+  if (finalImageUrl) {
+    return InlineQueryResultBuilder.photo(resultId, finalImageUrl, {
+      thumbnail_url: finalImageUrl,
+      photo_width: 640,
+      photo_height: 640,
+      title: `🎭 ${test.title}`,
+      description: truncateText(descriptionText, 100),
+      caption,
       parse_mode: 'Markdown',
-    },
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: '🧪 Пройти тест',
-            url: buildDeepLink(startParam),
-          },
-        ],
-        [
-          {
-            text: '📤 Отправить другу',
-            switch_inline_query: test.title,
-          },
-        ],
-      ],
-    },
-  };
+      reply_markup: keyboard,
+    });
+  }
+
+  return InlineQueryResultBuilder.article(resultId, `🎭 ${test.title}`, {
+    description: truncateText(descriptionText, 100),
+    thumbnail_url: 'https://via.placeholder.com/100x100.png?text=Test',
+    reply_markup: keyboard,
+  }).text(caption, { parse_mode: 'Markdown' });
 }
 
 /**
@@ -215,7 +272,120 @@ export async function handleInlineQuery(ctx: Context) {
   const userId = ctx.from?.id || 0;
 
   try {
-    const results: InlineQueryResultArticle[] = [];
+    const results: InlineQueryResult[] = [];
+
+    // Share invite card for a specific quiz: quiz_invite:<quizId>[:refUserId]
+    if (rawQuery.startsWith('quiz_invite:')) {
+      const parsed = parseQuizInviteInlineQuery(rawQuery);
+      if (parsed) {
+        const finalRefUserId = resolveInlineRefUserId(parsed.refUserId, userId);
+        const quiz = await getQuizById(parsed.quizId);
+        if (quiz) {
+          const safeId = `qi${parsed.quizId.replace(/-/g, '').slice(0, 16)}${Date.now().toString(36)}`.slice(0, 64);
+          const result = buildQuizResult(quiz, finalRefUserId, safeId, { isRandom: false, isDaily: false });
+          await ctx.answerInlineQuery([result], { cache_time: 0, is_personal: true });
+          return;
+        }
+      }
+
+      await ctx.answerInlineQuery([], { cache_time: 0, is_personal: true });
+      return;
+    }
+
+    // Share invite card for a specific personality test: test_invite:<testId>[:refUserId]
+    if (rawQuery.startsWith('test_invite:')) {
+      const parsed = parseTestInviteInlineQuery(rawQuery);
+      if (parsed) {
+        const finalRefUserId = resolveInlineRefUserId(parsed.refUserId, userId);
+        const test = await getPersonalityTestById(parsed.testId);
+        if (test) {
+          const safeId = `ti${parsed.testId.replace(/-/g, '').slice(0, 16)}${Date.now().toString(36)}`.slice(0, 64);
+          const result = buildPersonalityTestResult(test, finalRefUserId, safeId);
+          await ctx.answerInlineQuery([result], { cache_time: 0, is_personal: true });
+          return;
+        }
+      }
+
+      await ctx.answerInlineQuery([], { cache_time: 0, is_personal: true });
+      return;
+    }
+
+    // Share invite card for a prediction poll: poll:<pollId>[:refUserId]
+    if (rawQuery.startsWith('poll:')) {
+      const parsed = parsePollInlineQuery(rawQuery);
+      if (parsed) {
+        const finalRefUserId = resolveInlineRefUserId(parsed.refUserId, userId);
+        const safeId = `pl${parsed.pollId.replace(/-/g, '').slice(0, 16)}${Date.now().toString(36)}`.slice(0, 64);
+
+        let title = 'Голосование';
+        let optionA = '';
+        let optionB = '';
+        let coverImageUrl: string | null = null;
+
+        try {
+          const { data } = await Promise.race([
+            supabase
+              .from('prediction_polls')
+              .select('title,option_a_label,option_b_label,cover_image_url')
+              .eq('id', parsed.pollId)
+              .maybeSingle(),
+            new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 5000)),
+          ]) as any;
+
+          if (data) {
+            title = data.title || title;
+            optionA = data.option_a_label || '';
+            optionB = data.option_b_label || '';
+            if (data.cover_image_url && isValidImageUrl(data.cover_image_url)) {
+              coverImageUrl = data.cover_image_url;
+            }
+          }
+        } catch {
+          // Ignore DB lookup errors; we'll just send a minimal card.
+        }
+
+        const optionLineA = optionA ? `A: ${truncateText(optionA, 40)}` : '';
+        const optionLineB = optionB ? `B: ${truncateText(optionB, 40)}` : '';
+        const optionsBlock = [optionLineA, optionLineB].filter(Boolean).join('\n');
+        const descriptionText = optionsBlock || 'Выбери вариант и поучаствуй.';
+
+        const startParam = `poll=${parsed.pollId}_ref_${finalRefUserId}_src_poll_inline`;
+        const buttonUrl = buildDeepLink(startParam);
+        const keyboard = new InlineKeyboard().url('🗳 Проголосовать', buttonUrl);
+
+        const caption = buildInlineCaption({
+          titleLine: `🗳 *${escapeTelegramMarkdown(title)}*`,
+          description: escapeTelegramMarkdown(descriptionText),
+          ctaLine: '👉 Прими участие в голосовании 👇',
+        });
+
+        let result: InlineQueryResult;
+        if (coverImageUrl) {
+          result = InlineQueryResultBuilder.photo(safeId, coverImageUrl, {
+            thumbnail_url: coverImageUrl,
+            photo_width: 640,
+            photo_height: 640,
+            title: `🗳 ${title}`,
+            description: truncateText(descriptionText, 100),
+            caption,
+            parse_mode: 'Markdown',
+            reply_markup: keyboard,
+          });
+        } else {
+          result = InlineQueryResultBuilder.article(safeId, `🗳 ${title}`, {
+            description: truncateText(descriptionText, 100),
+            thumbnail_url: 'https://via.placeholder.com/100x100.png?text=Vote',
+            reply_markup: keyboard,
+          }).text(caption, { parse_mode: 'Markdown' });
+        }
+
+        await ctx.answerInlineQuery([result], { cache_time: 0, is_personal: true });
+        return;
+      }
+
+      await ctx.answerInlineQuery([], { cache_time: 0, is_personal: true });
+      return;
+    }
 
     // Check for quiz result share format: quiz_result:quizId:score:total:title
     // INSTANT RESPONSE - NO DATABASE CALLS!
@@ -302,7 +472,7 @@ export async function handleInlineQuery(ctx: Context) {
         const descriptionText = resultDescription || 'Пройди тест и узнай кто ты!';
         const safeResultTitle = escapeTelegramMarkdown(resultTitle);
         const safeDescriptionText = escapeTelegramMarkdown(descriptionText);
-        const caption = `🎭 *Я — ${safeResultTitle}*\n\n${safeDescriptionText}\n\n👇 А ты кто?`;
+        const caption = `🎭 *Я — ${safeResultTitle}*\n\n${safeDescriptionText}\n\n👉 А ты кто? Пройди тест 👇`;
 
         // Build result using InlineQueryResultBuilder
         let result: InlineQueryResult;

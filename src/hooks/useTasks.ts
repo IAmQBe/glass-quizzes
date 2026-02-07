@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { getTelegram, getTelegramUser } from "@/lib/telegram";
-import { initUser } from "@/lib/user";
+import { getTelegram } from "@/lib/telegram";
+import { trackEvent } from "@/hooks/useTrackEvent";
 
 interface Task {
   id: string;
@@ -39,22 +39,25 @@ const getInitDataAuthHeader = () => {
   return `tma ${initData}`;
 };
 
-const getProfileId = async (): Promise<string | null> => {
-  const tgUser = getTelegramUser();
-  if (!tgUser?.id) return null;
-
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("telegram_id", tgUser.id)
-    .maybeSingle();
-
+const getSessionUserId = async (): Promise<string | null> => {
+  const { data, error } = await supabase.auth.getSession();
   if (error) {
-    console.error("Error resolving profile id for tasks:", error);
+    console.warn("Tasks: failed to read Supabase session:", error);
+  }
+  return data.session?.user?.id || null;
+};
+
+const ensureSessionUserId = async (): Promise<string | null> => {
+  const existing = await getSessionUserId();
+  if (existing) return existing;
+
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error) {
+    console.error("Tasks: anonymous sign-in failed:", error);
     return null;
   }
 
-  return data?.id || null;
+  return data.user?.id || null;
 };
 
 // Fetch active tasks
@@ -120,13 +123,13 @@ export const useCompletedTasks = () => {
         }
       }
 
-      const profileId = await getProfileId();
-      if (!profileId) return new Set<string>();
+      const userId = await getSessionUserId();
+      if (!userId) return new Set<string>();
 
       const { data, error } = await supabase
         .from("user_tasks")
         .select("task_id")
-        .eq("user_id", profileId);
+        .eq("user_id", userId);
 
       if (error) {
         console.error("Error fetching completed tasks directly:", error);
@@ -197,17 +200,14 @@ export const useCompleteTask = () => {
         throw new Error("Для этого задания нужна проверка Telegram. Открой приложение в Telegram.");
       }
 
-      const authReady = await initUser();
-      if (!authReady) {
+      const userId = await ensureSessionUserId();
+      if (!userId) {
         throw new Error("Не удалось авторизовать пользователя");
       }
 
-      const profileId = await getProfileId();
-      if (!profileId) throw new Error("Профиль не найден");
-
       const { error } = await supabase
         .from("user_tasks")
-        .insert({ user_id: profileId, task_id: taskId });
+        .insert({ user_id: userId, task_id: taskId });
 
       if (error) {
         if (error.code === "23505") {
@@ -218,8 +218,16 @@ export const useCompleteTask = () => {
 
       return { alreadyCompleted: false };
     },
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["completedTasks"] });
+
+      if (!result.alreadyCompleted) {
+        void trackEvent("task_complete", {
+          task_id: variables.taskId,
+          task_type: variables.taskType || null,
+        });
+      }
+
       toast({
         title: result.alreadyCompleted ? "Уже выполнено" : "Задание выполнено! 🎉",
         description: result.alreadyCompleted ? "Это задание уже засчитано" : undefined,

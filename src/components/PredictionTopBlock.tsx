@@ -54,14 +54,14 @@ export const PredictionTopBlock = ({
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground flex items-center gap-2">
             <Flame className="w-4 h-4 text-orange-500" />
-            Топ-3 прогнозов
+            Топ-3 событий
           </h3>
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-1">
           {predictions.length === 0 && (
             <div className="rounded-xl border border-border p-3 text-sm text-muted-foreground w-full">
-              Сейчас нет открытых прогнозов. Загляни в витрину позже.
+              Сейчас нет открытых событий. Загляни в витрину позже.
             </div>
           )}
 

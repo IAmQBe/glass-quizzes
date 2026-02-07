@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildStartParam } from "../../server/src/lib/telegram";
 import {
+  parsePollInlineQuery,
+  parseQuizInviteInlineQuery,
   parseQuizResultInlineQuery,
+  parseTestInviteInlineQuery,
   parseTestResultInlineQuery,
   resolveInlineRefUserId,
 } from "../../server/src/bot/handlers/inlineParsing";
@@ -50,5 +53,25 @@ describe("inline query parser", () => {
 
     expect(startParam).toContain("ref_99000111");
     expect(deepLink).toContain("startapp=test_test-abc_ref_99000111_src_result_share");
+  });
+
+  it("parses quiz_invite/test_invite/poll queries with optional ref id", () => {
+    expect(parseQuizInviteInlineQuery("quiz_invite:quiz-abc:70000123")).toEqual({
+      quizId: "quiz-abc",
+      refUserId: 70000123,
+    });
+
+    expect(parseTestInviteInlineQuery("test_invite:test-abc")).toEqual({
+      testId: "test-abc",
+      refUserId: undefined,
+    });
+
+    expect(parsePollInlineQuery("poll:poll-123:70000123")).toEqual({
+      pollId: "poll-123",
+      refUserId: 70000123,
+    });
+
+    const finalRef = resolveInlineRefUserId(parsePollInlineQuery("poll:poll-123")?.refUserId, 99000111);
+    expect(finalRef).toBe(99000111);
   });
 });

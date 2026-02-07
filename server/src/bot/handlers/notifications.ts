@@ -1,5 +1,6 @@
 import { InlineKeyboard } from 'grammy';
 import { bot } from '../index.js';
+import { buildStartParam } from '../../lib/telegram.js';
 
 const ADMIN_TELEGRAM_IDS = (process.env.ADMIN_TELEGRAM_IDS || '')
   .split(',')
@@ -24,6 +25,12 @@ interface PredictionModerationPayload {
   title: string;
   squadTitle?: string | null;
   reportCount?: number;
+}
+
+interface AuthorPendingModerationPayload {
+  id: string;
+  title: string;
+  type: ContentType;
 }
 
 /**
@@ -113,6 +120,42 @@ ${statusEmoji} <b>Ваш контент ${statusText}!</b>
   }
 }
 
+export async function notifyAuthorContentPendingReview(
+  authorTelegramId: number,
+  content: AuthorPendingModerationPayload
+): Promise<void> {
+  const typeLabel = content.type === 'quiz' ? 'квиз' : 'тест';
+  const statusLabel = 'На проверке';
+  const startParam = buildStartParam(
+    content.type === 'quiz'
+      ? { questId: content.id, source: 'moderation' }
+      : { testId: content.id, source: 'moderation' }
+  );
+  const deepLink = `${MINI_APP_URL}?startapp=${encodeURIComponent(startParam)}`;
+
+  const message = `
+⏳ <b>Ваш ${typeLabel} отправлен на модерацию</b>
+
+<b>${escapeHtml(content.title)}</b>
+Статус: <b>${statusLabel}</b>
+
+Мы пришлём новое уведомление после решения модератора.
+  `.trim();
+
+  const keyboard = new InlineKeyboard()
+    .webApp('🔎 Открыть статус', deepLink);
+
+  try {
+    await bot.api.sendMessage(authorTelegramId, message, {
+      parse_mode: 'HTML',
+      reply_markup: keyboard,
+    });
+    console.log(`Sent pending moderation status to author ${authorTelegramId}`);
+  } catch (error) {
+    console.error(`Failed to send pending moderation status to author ${authorTelegramId}:`, error);
+  }
+}
+
 /**
  * Notify admins about important events (low-priority, informational)
  */
@@ -145,7 +188,7 @@ export async function notifyAdminsPredictionPending(
   }
 
   const message = `
-🆕 <b>Новый прогноз на модерации</b>
+🆕 <b>Новое событие на модерации</b>
 
 <b>${prediction.title}</b>
 ${prediction.squadTitle ? `👥 Сквад: ${prediction.squadTitle}` : ''}
@@ -155,7 +198,7 @@ ${prediction.squadTitle ? `👥 Сквад: ${prediction.squadTitle}` : ''}
 
   const deepLink = `${MINI_APP_URL}?startapp=poll=${encodeURIComponent(prediction.id)}`;
   const keyboard = new InlineKeyboard()
-    .webApp('👁️ Открыть прогноз', deepLink);
+    .webApp('👁️ Открыть событие', deepLink);
 
   for (const adminId of ADMIN_TELEGRAM_IDS) {
     try {
@@ -178,7 +221,7 @@ export async function notifyAdminsPredictionUnderReview(
   }
 
   const message = `
-🚨 <b>Прогноз отправлен на проверку</b>
+🚨 <b>Событие отправлено на проверку</b>
 
 <b>${prediction.title}</b>
 ${prediction.squadTitle ? `👥 Сквад: ${prediction.squadTitle}` : ''}
@@ -189,7 +232,7 @@ ${typeof prediction.reportCount === 'number' ? `⚠️ Репортов: ${predi
 
   const deepLink = `${MINI_APP_URL}?startapp=poll=${encodeURIComponent(prediction.id)}`;
   const keyboard = new InlineKeyboard()
-    .webApp('🔎 Открыть прогноз', deepLink);
+    .webApp('🔎 Открыть событие', deepLink);
 
   for (const adminId of ADMIN_TELEGRAM_IDS) {
     try {
@@ -201,4 +244,11 @@ ${typeof prediction.reportCount === 'number' ? `⚠️ Репортов: ${predi
       console.error(`Failed to notify admin ${adminId} about under_review prediction:`, error);
     }
   }
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
